@@ -189,9 +189,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const isOnTerminalRoute = pathname.startsWith('/terminal')
   const isOnPlaygroundRoute = pathname === '/playground' || pathname.startsWith('/playground/')
   const isOnHermesWorldLandingRoute = pathname === '/hermes-world' || pathname.startsWith('/hermes-world/') || pathname === '/world' || pathname.startsWith('/world/')
+  const isOnPublicPlayRoute = pathname === '/play' || pathname.startsWith('/play/')
   const isEmbeddedSurface =
     search?.embed === '1' || search?.embed === 'true' || search?.mode === 'embed'
-  const isChromeFreeSurface = isEmbeddedSurface || isOnHermesWorldLandingRoute
+  const isChromeFreeSurface = isEmbeddedSurface || isOnPlaygroundRoute || isOnHermesWorldLandingRoute || isOnPublicPlayRoute
   const hideChatSidebar = isOnChatRoute && chatFocusMode
   const showDesktopSidebarBackdrop =
     !isChromeFreeSurface && !isMobile && !isOnChatRoute && !sidebarCollapsed
