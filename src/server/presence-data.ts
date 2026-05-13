@@ -39,7 +39,7 @@ type TeamsPresence = {
 type WordPool = {
   id: string
   name: string
-  words: string[]
+  words: Array<string>
   active: boolean
 }
 
@@ -86,13 +86,13 @@ function writeJsonFile(path: string, value: unknown) {
   writeFileSync(path, JSON.stringify(value, null, 2), 'utf8')
 }
 
-function queryDb<T>(dbPath: string, sql: string): T[] {
+function queryDb<T>(dbPath: string, sql: string): Array<T> {
   if (!existsSync(dbPath)) return []
   const output = execFileSync('sqlite3', ['-json', dbPath, sql], {
     encoding: 'utf8',
     maxBuffer: 8 * 1024 * 1024,
   }).trim()
-  return output ? (JSON.parse(output) as T[]) : []
+  return output ? (JSON.parse(output) as Array<T>) : []
 }
 
 function execSql(dbPath: string, sql: string) {
@@ -290,8 +290,8 @@ function ensureM5Schema() {
   )
 }
 
-function readIotConfigs(): IotConfigEntry[] {
-  const entries = readJsonFile<IotConfigEntry[]>(IOT_CONFIG, [])
+function readIotConfigs(): Array<IotConfigEntry> {
+  const entries = readJsonFile<Array<unknown>>(IOT_CONFIG, [])
   return Array.isArray(entries)
     ? entries.filter(
         (entry): entry is IotConfigEntry =>
@@ -304,7 +304,7 @@ function readIotConfigs(): IotConfigEntry[] {
     : []
 }
 
-function writeIotConfigs(configs: IotConfigEntry[]) {
+function writeIotConfigs(configs: Array<IotConfigEntry>) {
   writeJsonFile(IOT_CONFIG, configs)
 }
 
@@ -432,7 +432,7 @@ export function recordLegacyIotTelemetry(body: Record<string, unknown>) {
 export function getLegacyIotConfig(searchParams: URLSearchParams) {
   ensureM5Schema()
   const configs = readIotConfigs()
-  let deviceId =
+  const deviceId =
     searchParams.get('device') ||
     searchParams.get('deviceId') ||
     searchParams.get('device_id') ||
@@ -593,7 +593,7 @@ export function getM5Devices() {
 
 export function updateDeviceConfig(deviceId: string, brightness?: number, fetchInterval?: number) {
   ensureM5Schema()
-  const sets: string[] = []
+  const sets: Array<string> = []
   if (typeof brightness === 'number') sets.push(`brightness = ${Math.round(brightness)}`)
   if (typeof fetchInterval === 'number') sets.push(`fetch_interval = ${Math.round(fetchInterval)}`)
   if (!sets.length) return
@@ -608,16 +608,16 @@ export function updateDeviceLabel(deviceId: string, status: string, word: string
   )
 }
 
-export function getWordPools(): WordPool[] {
-  const defaults: WordPool[] = [
+export function getWordPools(): Array<WordPool> {
+  const defaults: Array<WordPool> = [
     { id: 'default', name: 'Default', words: ['HELLO', 'WORLD', 'CODING', 'MAGIC'], active: true },
   ]
-  const pools = readJsonFile<WordPool[]>(M5_WORDS, defaults)
+  const pools = readJsonFile<Array<WordPool>>(M5_WORDS, defaults)
   if (!existsSync(M5_WORDS)) writeJsonFile(M5_WORDS, pools)
   return Array.isArray(pools) ? pools : defaults
 }
 
-function saveWordPools(pools: WordPool[]) {
+function saveWordPools(pools: Array<WordPool>) {
   writeJsonFile(M5_WORDS, pools)
 }
 
@@ -652,20 +652,42 @@ function getActiveMeetingTitle() {
 }
 
 function buildSyncDiagnostics(presence: TeamsPresence, devices: ReturnType<typeof getM5Devices>) {
-  const freshestDevice = [...devices].sort(
+  const sortedDevices = [...devices].sort(
     (left, right) =>
-      (left.lastSeenMinutesAgo ?? Number.POSITIVE_INFINITY) -
-      (right.lastSeenMinutesAgo ?? Number.POSITIVE_INFINITY),
-  )[0]
+      left.lastSeenMinutesAgo -
+      right.lastSeenMinutesAgo,
+  )
+  const freshestDevice = sortedDevices.length > 0 ? sortedDevices[0] : null
+  if (!freshestDevice) {
+    return {
+      teamsAvailability: presence.availability || 'Unknown',
+      teamsActivity: presence.activity || '',
+      presenceSource: presence.error
+        ? 'error'
+        : presence.authRequired
+          ? 'auth-required'
+          : presence.stale
+            ? 'stale'
+            : presence.source || (presence.inferred || presence.fallback ? 'inferred' : 'graph'),
+      teamsError: presence.error || null,
+      deviceName: null,
+      deviceStatus: '',
+      deviceWord: '',
+      deviceFreshness: null,
+      expectedLabel: null,
+      inSync: false,
+      driftReason: 'device_missing',
+    }
+  }
   const teamsAvailability = presence.availability || 'Unknown'
   const normalizedTeams = normalizePresence(teamsAvailability)
-  const deviceStatus = freshestDevice?.teamsStatus || freshestDevice?.status || ''
+  const deviceStatus = freshestDevice.teamsStatus || freshestDevice.status || ''
   const normalizedDeviceStatus = normalizePresence(deviceStatus)
-  const deviceWord = freshestDevice?.currentWord || ''
-  const lastSeenMinutesAgo = freshestDevice?.lastSeenMinutesAgo
+  const deviceWord = freshestDevice.currentWord || ''
+  const lastSeenMinutesAgo = freshestDevice.lastSeenMinutesAgo
   const expectedLabel =
-    freshestDevice?.config?.labels?.[normalizedTeams] ||
-    freshestDevice?.config?.labels?.[teamsAvailability] ||
+    freshestDevice.config.labels?.[normalizedTeams] ||
+    freshestDevice.config.labels?.[teamsAvailability] ||
     null
   const presenceSource = presence.error
     ? 'error'
@@ -680,7 +702,7 @@ function buildSyncDiagnostics(presence: TeamsPresence, devices: ReturnType<typeo
   if (presence.error) {
     inSync = false
     driftReason = 'teams_unavailable'
-  } else if ((lastSeenMinutesAgo ?? Number.POSITIVE_INFINITY) > 5) {
+  } else if (lastSeenMinutesAgo > 5) {
     inSync = false
     driftReason = 'device_stale'
   } else if (normalizedDeviceStatus !== normalizedTeams) {
@@ -696,10 +718,10 @@ function buildSyncDiagnostics(presence: TeamsPresence, devices: ReturnType<typeo
     teamsActivity: presence.activity || '',
     presenceSource,
     teamsError: presence.error || null,
-    deviceName: freshestDevice?.name || null,
+    deviceName: freshestDevice.name || null,
     deviceStatus,
     deviceWord,
-    deviceFreshness: lastSeenMinutesAgo ?? null,
+    deviceFreshness: lastSeenMinutesAgo,
     expectedLabel,
     inSync,
     driftReason,
