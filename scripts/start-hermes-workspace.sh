@@ -11,6 +11,8 @@ if [[ -f .env ]]; then
   set +a
 fi
 
+export NODE_ENV="${NODE_ENV:-production}"
+
 exec /opt/homebrew/bin/node \
   --localstorage-file=/Users/tylerlyon/hermes-workspace/.runtime/node-localstorage.json \
   /Users/tylerlyon/hermes-workspace/server-entry.js
