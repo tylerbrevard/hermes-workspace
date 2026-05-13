@@ -19,7 +19,7 @@ const port = parseInt(process.env.PORT || '3000', 10)
 const CLAWOS_PROXY_PREFIX =
   basePath === '/' ? '/legacy-clawos' : `${basePath}/legacy-clawos`
 const CLAWOS_PROXY_ORIGIN = (
-  process.env.CLAWOS_PROXY_ORIGIN || 'http://127.0.0.1:3000'
+  process.env.CLAWOS_PROXY_ORIGIN || ''
 ).replace(/\/$/, '')
 const SESSION_STORE_FILE = join(
   process.env.HERMES_HOME ??
@@ -279,6 +279,17 @@ async function maybeProxyClawos(req, res, incomingUrl) {
     )}`
     res.writeHead(302, { Location: redirectTarget })
     res.end()
+    return true
+  }
+
+  if (!CLAWOS_PROXY_ORIGIN) {
+    res.writeHead(410, { 'Content-Type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        error: 'legacy_clawos_proxy_disabled',
+        message: 'Set CLAWOS_PROXY_ORIGIN to enable the legacy ClawOS proxy.',
+      }),
+    )
     return true
   }
 
