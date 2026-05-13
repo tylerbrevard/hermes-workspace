@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { usePageTitle } from '@/hooks/use-page-title'
-import { ClawosEmbedScreen } from '@/components/legacy/clawos-embed-screen'
+import { LilyScreen } from '@/screens/ops/lily-screen'
 
 export const Route = createFileRoute('/lily')({
   ssr: false,
@@ -9,5 +9,5 @@ export const Route = createFileRoute('/lily')({
 
 function LilyRoute() {
   usePageTitle('Lily')
-  return <ClawosEmbedScreen path="/lily" title="Lily" />
+  return <LilyScreen />
 }
