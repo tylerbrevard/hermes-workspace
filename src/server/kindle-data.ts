@@ -265,9 +265,10 @@ export async function getKindleData() {
       connectwise: {
         openTicketCount: itOps.analytics.ticketStats.open,
         available: itOps.analytics.errors.length === 0,
-        configured: !itOps.analytics.errors.some((error) =>
-          error.toLowerCase().includes('not configured'),
-        ),
+        configured:
+          !itOps.analytics.errors.some((error) =>
+            error.toLowerCase().includes('not configured'),
+          ),
         detail: itOps.analytics.errors[0] || null,
       },
       cronHealth,

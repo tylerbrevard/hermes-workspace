@@ -1,13 +1,15 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { listMeetings } from './meetings-data'
 
 const HOME = process.env.HOME || '/Users/tylerlyon'
 const HERMES_WORKSPACE =
   process.env.HERMES_WORKSPACE || path.join(HOME, '.hermes', 'workspace')
 const IT_OPS_DB_PATH =
   process.env.HERMES_IT_OPS_DB || path.join(HERMES_WORKSPACE, '.it-ops.db')
+const CLAWOS_INTERNAL_ORIGIN = (
+  process.env.CLAWOS_INTERNAL_ORIGIN?.trim() || 'http://127.0.0.1:3000'
+).replace(/\/+$/, '')
 
 const DIRECT_REPORTS = [
   'Carlos Castillo',
@@ -106,6 +108,17 @@ function queryDb<T>(dbPath: string, sql: string): T[] {
 
 function execDb(dbPath: string, sql: string) {
   execFileSync('sqlite3', [dbPath, sql], { encoding: 'utf8' })
+}
+
+async function fetchClawosJson<T>(pathName: string): Promise<T> {
+  const response = await fetch(`${CLAWOS_INTERNAL_ORIGIN}${pathName}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!response.ok) {
+    throw new Error(`ClawOS API ${pathName} returned ${response.status}`)
+  }
+  return (await response.json()) as T
 }
 
 function parseParticipants(
@@ -240,11 +253,11 @@ function getEscalationCountSince(sinceISO: string) {
   return row?.cnt ?? 0
 }
 
-function getItOpsOverview() {
-  const meetings = listMeetings({
-    search: 'IT Ops Standup',
-    limit: 500,
-  }).meetings as MeetingRow[]
+async function getItOpsOverview() {
+  const response = await fetchClawosJson<{ meetings?: MeetingRow[] }>(
+    '/api/meetings?search=IT%20Ops%20Standup&limit=500',
+  )
+  const meetings = Array.isArray(response.meetings) ? response.meetings : []
 
   const hydratedStandups = [...meetings]
     .sort((left, right) => left.date.localeCompare(right.date))

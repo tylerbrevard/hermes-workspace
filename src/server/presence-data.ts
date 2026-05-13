@@ -16,6 +16,11 @@ const M5_WORDS = join(HERMES_WORKSPACE, '.m5_words.json')
 const MEETINGS_DB =
   process.env.HERMES_MEETINGS_DB ||
   join(HERMES_DB_DIR, '.meetings.db')
+const LEGACY_PRESENCE_ORIGIN = (
+  process.env.HERMES_LEGACY_PRESENCE_ORIGIN?.trim() ||
+  process.env.CLAWOS_INTERNAL_ORIGIN?.trim() ||
+  ''
+).replace(/\/+$/, '')
 
 type TeamsPresence = {
   availability?: string
@@ -28,6 +33,7 @@ type TeamsPresence = {
   fallback?: boolean
   timestamp?: string
   error?: string
+  source?: string
 }
 
 type WordPool = {
@@ -92,6 +98,20 @@ function queryDb<T>(dbPath: string, sql: string): T[] {
 function execSql(dbPath: string, sql: string) {
   mkdirSync(dirname(dbPath), { recursive: true })
   execFileSync('sqlite3', [dbPath, sql], { encoding: 'utf8' })
+}
+
+async function fetchLegacyPresenceJson<T>(pathName: string): Promise<T> {
+  if (!LEGACY_PRESENCE_ORIGIN) {
+    throw new Error('legacy presence origin disabled')
+  }
+  const response = await fetch(`${LEGACY_PRESENCE_ORIGIN}${pathName}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!response.ok) {
+    throw new Error(`legacy presence API ${pathName} returned ${response.status}`)
+  }
+  return (await response.json()) as T
 }
 
 function sqlString(value: unknown) {
@@ -191,7 +211,24 @@ function graphJson<T>(method: string, endpoint: string, body?: unknown): T {
   return output ? (JSON.parse(output) as T) : (null as T)
 }
 
-export function getTeamsPresence(): TeamsPresence {
+export async function getTeamsPresence(): Promise<TeamsPresence> {
+  try {
+    const presence = await fetchLegacyPresenceJson<TeamsPresence>('/api/teams-presence')
+    const availability = presence.availability || 'PresenceUnknown'
+    return {
+      ...presence,
+      availability,
+      activity: presence.activity || availability,
+      displayName:
+        presence.displayName || DISPLAY_NAMES[availability] || availability,
+      color: presence.color || PRESENCE_COLORS[availability] || 'gray',
+      timestamp: presence.timestamp || new Date().toISOString(),
+      source: presence.source || 'clawos',
+    }
+  } catch {
+    // Fall back to the direct Graph bridge for standalone Workspace operation.
+  }
+
   try {
     const presence = graphJson<{ availability?: string; activity?: string }>(
       'GET',
@@ -208,6 +245,7 @@ export function getTeamsPresence(): TeamsPresence {
       displayName: DISPLAY_NAMES[availability] || availability,
       color: PRESENCE_COLORS[availability] || 'gray',
       timestamp: new Date().toISOString(),
+      source: 'graph',
     }
   } catch (error) {
     const inferred = inferPresenceFromLocal()
@@ -341,8 +379,8 @@ function upsertM5Device(input: {
   )
 }
 
-export function getLegacyTeamsPresence() {
-  const presence = getTeamsPresence()
+export async function getLegacyTeamsPresence() {
+  const presence = await getTeamsPresence()
   return {
     ...presence,
     displayName: presence.displayName || DISPLAY_NAMES[presence.availability || ''] || presence.availability || 'Unknown',
@@ -595,8 +633,8 @@ export function rotateWords() {
   return { word: active.words[Math.floor(Math.random() * active.words.length)] }
 }
 
-export function getTeamsPreview() {
-  const presence = getTeamsPresence()
+export async function getTeamsPreview() {
+  const presence = await getTeamsPresence()
   return teamsStatusPayload(presence.availability || 'Unknown', presence.activity || '')
 }
 
@@ -635,9 +673,7 @@ function buildSyncDiagnostics(presence: TeamsPresence, devices: ReturnType<typeo
       ? 'auth-required'
       : presence.stale
         ? 'stale'
-        : presence.inferred || presence.fallback
-          ? 'inferred'
-          : 'graph'
+        : presence.source || (presence.inferred || presence.fallback ? 'inferred' : 'graph')
 
   let driftReason = 'in_sync'
   let inSync = true
@@ -670,13 +706,16 @@ function buildSyncDiagnostics(presence: TeamsPresence, devices: ReturnType<typeo
   }
 }
 
-export function getPresenceData() {
-  const presence = getTeamsPresence()
+export async function getPresenceData() {
+  const presence = await getTeamsPresence()
   const devices = getM5Devices()
   const pools = getWordPools()
   return {
     presence,
-    preview: getTeamsPreview(),
+    preview: teamsStatusPayload(
+      presence.availability || 'Unknown',
+      presence.activity || '',
+    ),
     devices,
     pools,
     syncDiagnostics: buildSyncDiagnostics(presence, devices),

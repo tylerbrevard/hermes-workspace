@@ -3,7 +3,10 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { getCronJobs } from '../../../server/claude-dashboard-api'
 import { parseLilyPrompt } from '../../../server/lily-services'
-import { getTodayMeetings } from '../../../server/meetings-data'
+
+const CLAWOS_INTERNAL_ORIGIN = (
+  process.env.CLAWOS_INTERNAL_ORIGIN?.trim() || 'http://127.0.0.1:3000'
+).replace(/\/+$/, '')
 
 type LilyContext = {
   summary?: {
@@ -111,10 +114,30 @@ function getMeetingStart(meeting: MeetingRow) {
   return meeting.start?.dateTime || meeting.startDateTime || meeting.date
 }
 
+async function fetchClawosJson<T>(pathName: string): Promise<T> {
+  const response = await fetch(`${CLAWOS_INTERNAL_ORIGIN}${pathName}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!response.ok) {
+    throw new Error(`ClawOS API ${pathName} returned ${response.status}`)
+  }
+  return (await response.json()) as T
+}
+
+async function getTodayMeetingsFromClawos() {
+  const dashboard = await fetchClawosJson<{
+    meetings?: { todayList?: MeetingRow[] }
+  }>('/api/dashboard-data?nocache=1')
+  return Array.isArray(dashboard.meetings?.todayList)
+    ? dashboard.meetings.todayList
+    : []
+}
+
 async function loadLilyContext(): Promise<LilyContext> {
   const [cronJobs, meetings] = await Promise.all([
     getCronJobs().catch(() => []),
-    Promise.resolve(getTodayMeetings(5) as MeetingRow[]),
+    getTodayMeetingsFromClawos().catch(() => []),
   ])
 
   const enabledJobs = cronJobs.filter((job) => job.enabled)

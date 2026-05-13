@@ -19,7 +19,7 @@ export const Route = createFileRoute('/api/ops/presence')({
         }
 
         try {
-          return json(getPresenceData())
+          return json(await getPresenceData())
         } catch (error) {
           return json(
             {
@@ -92,7 +92,7 @@ export const Route = createFileRoute('/api/ops/presence')({
           }
 
           if (kind === 'teams-status') {
-            return json(getTeamsPreview())
+            return json(await getTeamsPreview())
           }
 
           return json({ error: 'Unsupported operation' }, { status: 400 })

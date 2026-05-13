@@ -7,7 +7,7 @@ export const Route = createFileRoute('/api/teams-presence')({
     handlers: {
       GET: async () => {
         try {
-          return json(getLegacyTeamsPresence())
+          return json(await getLegacyTeamsPresence())
         } catch (error) {
           return json(
             {
