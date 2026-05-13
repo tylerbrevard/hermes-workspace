@@ -37,6 +37,8 @@ type WordPool = {
   active: boolean
 }
 
+type IotConfigEntry = [string, Record<string, unknown>]
+
 const PRESENCE_COLORS: Record<string, string> = {
   Available: 'green',
   Busy: 'red',
@@ -109,7 +111,7 @@ function normalizePresence(value?: string) {
   return normalized || 'unknown'
 }
 
-function normalizeTeamsStatus(status?: string): string {
+function normalizeLegacyTeamsStatus(status?: string): string {
   switch (status) {
     case 'Available':
       return 'available'
@@ -136,7 +138,7 @@ function teamsStatusPayload(status: string, activity = '') {
     status,
     activity,
     availability: status,
-    teamsStatus: normalizeTeamsStatus(status),
+    teamsStatus: normalizeLegacyTeamsStatus(status),
     label: status,
     word: status,
     currentWord: status,
@@ -234,10 +236,42 @@ function ensureM5Schema() {
     );
     `,
   )
+  execSql(
+    M5_DB,
+    `
+    CREATE TABLE IF NOT EXISTS m5_display_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      device_id TEXT NOT NULL UNIQUE,
+      display_mode TEXT DEFAULT 'teams',
+      custom_message TEXT,
+      rotation_enabled INTEGER DEFAULT 0,
+      rotation_interval_seconds INTEGER DEFAULT 30,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    `,
+  )
+}
+
+function readIotConfigs(): IotConfigEntry[] {
+  const entries = readJsonFile<IotConfigEntry[]>(IOT_CONFIG, [])
+  return Array.isArray(entries)
+    ? entries.filter(
+        (entry): entry is IotConfigEntry =>
+          Array.isArray(entry) &&
+          entry.length === 2 &&
+          typeof entry[0] === 'string' &&
+          entry[1] !== null &&
+          typeof entry[1] === 'object',
+      )
+    : []
+}
+
+function writeIotConfigs(configs: IotConfigEntry[]) {
+  writeJsonFile(IOT_CONFIG, configs)
 }
 
 function configLabels(deviceId: string) {
-  const entries = readJsonFile<Array<[string, Record<string, any>]>>(IOT_CONFIG, [])
+  const entries = readIotConfigs()
   const config = entries.find(([id]) => id === deviceId)?.[1] || {}
   const labels: Record<string, string> = {}
   for (const [key, value] of Object.entries(config)) {
@@ -249,6 +283,235 @@ function configLabels(deviceId: string) {
     labels,
     tunnelUrl: typeof config.tunnelUrl === 'string' ? config.tunnelUrl : undefined,
     updatedAt: typeof config.updatedAt === 'number' ? config.updatedAt : undefined,
+  }
+}
+
+function deriveCurrentLabel(config: Record<string, unknown>, fallback = 'Unknown'): string {
+  const candidate =
+    config.currentWord ||
+    config.word ||
+    config.label ||
+    config.labelAvailable ||
+    config.labelBusy ||
+    config.labelDND ||
+    config.labelBRB ||
+    config.labelAway ||
+    config.labelOffline ||
+    config.labelUnknown
+  return typeof candidate === 'string' && candidate.trim() ? candidate : fallback
+}
+
+function getDeviceRow(deviceId: string) {
+  return queryDb<any>(
+    M5_DB,
+    `SELECT * FROM m5_devices WHERE device_id = ${sqlString(deviceId)} LIMIT 1;`,
+  )[0] || null
+}
+
+function getDisplayConfig(deviceId: string) {
+  return queryDb<any>(
+    M5_DB,
+    `SELECT * FROM m5_display_config WHERE device_id = ${sqlString(deviceId)} LIMIT 1;`,
+  )[0] || null
+}
+
+function upsertM5Device(input: {
+  deviceId: string
+  status?: string
+  currentWord?: string
+  fetchInterval?: number
+}) {
+  ensureM5Schema()
+  const now = new Date().toISOString()
+  const existing = getDeviceRow(input.deviceId)
+  const fetchInterval =
+    typeof input.fetchInterval === 'number'
+      ? Math.round(input.fetchInterval)
+      : existing?.fetch_interval || 30
+  execSql(
+    M5_DB,
+    `INSERT INTO m5_devices (device_id, name, status, last_seen, current_word, fetch_interval)
+     VALUES (${sqlString(input.deviceId)}, ${sqlString(input.deviceId)}, ${sqlString(input.status || 'online')}, ${sqlString(now)}, ${sqlString(input.currentWord || '')}, ${fetchInterval})
+     ON CONFLICT(device_id) DO UPDATE SET
+       name = excluded.name,
+       status = excluded.status,
+       last_seen = excluded.last_seen,
+       current_word = COALESCE(NULLIF(excluded.current_word, ''), m5_devices.current_word),
+       fetch_interval = excluded.fetch_interval;`,
+  )
+}
+
+export function getLegacyTeamsPresence() {
+  const presence = getTeamsPresence()
+  return {
+    ...presence,
+    displayName: presence.displayName || DISPLAY_NAMES[presence.availability || ''] || presence.availability || 'Unknown',
+    color: presence.color || PRESENCE_COLORS[presence.availability || ''] || 'gray',
+  }
+}
+
+export function getLegacyIotDevices() {
+  ensureM5Schema()
+  return {
+    devices: queryDb<any>(M5_DB, 'SELECT * FROM m5_devices ORDER BY name;'),
+  }
+}
+
+export function recordLegacyIotTelemetry(body: Record<string, unknown>) {
+  const deviceId =
+    typeof body.device === 'string'
+      ? body.device
+      : typeof body.device_id === 'string'
+        ? body.device_id
+        : ''
+  if (!deviceId) throw new Error('device or device_id is required')
+  upsertM5Device({
+    deviceId,
+    status: typeof body.status === 'string' ? body.status : 'online',
+    currentWord: typeof body.word === 'string' ? body.word : undefined,
+  })
+  return {
+    ok: true,
+    device: deviceId,
+    received: {
+      temp: body.temp,
+      rssi: body.rssi,
+      uptime: body.uptime,
+      battery: body.battery,
+      buttons: body.buttons,
+    },
+    timestamp: new Date().toISOString(),
+  }
+}
+
+export function getLegacyIotConfig(searchParams: URLSearchParams) {
+  ensureM5Schema()
+  const configs = readIotConfigs()
+  let deviceId =
+    searchParams.get('device') ||
+    searchParams.get('deviceId') ||
+    searchParams.get('device_id') ||
+    configs[0]?.[0] ||
+    queryDb<{ device_id: string }>(
+      M5_DB,
+      'SELECT device_id FROM m5_devices ORDER BY last_seen DESC LIMIT 1;',
+    )[0]?.device_id ||
+    'peppy-waffle'
+
+  const config = configs.find(([id]) => id === deviceId)?.[1] || {}
+  const device = getDeviceRow(deviceId)
+  const displayConfig = getDisplayConfig(deviceId)
+  const statusLabel =
+    typeof device?.current_word === 'string' && device.current_word.trim()
+      ? device.current_word
+      : deriveCurrentLabel(config)
+  const availability =
+    typeof device?.status === 'string' && device.status.trim() ? device.status : 'Unknown'
+  const fetchInterval =
+    typeof config.fetchInterval === 'number'
+      ? config.fetchInterval
+      : typeof config.sensorInterval === 'number'
+        ? config.sensorInterval
+        : device?.fetch_interval || 30
+  const mergedConfig = {
+    ...config,
+    deviceId,
+    serverUrl: 'https://tylers-mac-mini-1.tail7b21e.ts.net',
+    displayMode: displayConfig?.display_mode || 'teams',
+    fetchInterval,
+    label: statusLabel,
+    word: statusLabel,
+    currentWord: statusLabel,
+    status: normalizeLegacyTeamsStatus(device?.status),
+    teamsStatus: normalizeLegacyTeamsStatus(device?.status),
+    availability,
+    version:
+      typeof config.version === 'number'
+        ? config.version
+        : typeof displayConfig?.id === 'number'
+          ? 1
+          : undefined,
+  }
+
+  upsertM5Device({
+    deviceId,
+    status: availability,
+    currentWord: statusLabel,
+    fetchInterval,
+  })
+
+  return {
+    device: deviceId,
+    ...mergedConfig,
+    config: mergedConfig,
+    timestamp: new Date().toISOString(),
+  }
+}
+
+export function updateLegacyIotConfig(body: Record<string, unknown>) {
+  const deviceId =
+    typeof body.device === 'string'
+      ? body.device
+      : typeof body.device_id === 'string'
+        ? body.device_id
+        : ''
+  if (!deviceId) throw new Error('device or device_id is required')
+
+  const { device: _device, device_id: _deviceId, ...configUpdates } = body
+  const configs = readIotConfigs()
+  const index = configs.findIndex(([id]) => id === deviceId)
+  const current = index >= 0 ? configs[index][1] : {}
+  const nextConfig = {
+    ...current,
+    ...configUpdates,
+    updatedAt: Date.now(),
+    version: (typeof current.version === 'number' ? current.version : 0) + 1,
+  }
+  if (index >= 0) {
+    configs[index] = [deviceId, nextConfig]
+  } else {
+    configs.push([deviceId, nextConfig])
+  }
+  writeIotConfigs(configs)
+
+  const currentLabel = deriveCurrentLabel(nextConfig)
+  const availability =
+    typeof nextConfig.availability === 'string' ? nextConfig.availability : currentLabel
+  const fetchInterval =
+    typeof nextConfig.fetchInterval === 'number'
+      ? nextConfig.fetchInterval
+      : typeof nextConfig.sensorInterval === 'number'
+        ? nextConfig.sensorInterval
+        : 30
+  upsertM5Device({
+    deviceId,
+    status: availability,
+    currentWord: currentLabel,
+    fetchInterval,
+  })
+  execSql(
+    M5_DB,
+    `INSERT INTO m5_display_config (device_id, display_mode, updated_at)
+     VALUES (${sqlString(deviceId)}, 'teams', ${sqlString(new Date().toISOString())})
+     ON CONFLICT(device_id) DO UPDATE SET display_mode = 'teams', updated_at = excluded.updated_at;`,
+  )
+
+  return {
+    ok: true,
+    device: deviceId,
+    config: {
+      ...nextConfig,
+      deviceId,
+      serverUrl: 'https://tylers-mac-mini-1.tail7b21e.ts.net',
+      displayMode: 'teams',
+      label: currentLabel,
+      word: currentLabel,
+      currentWord: currentLabel,
+      status: normalizeLegacyTeamsStatus(availability),
+      teamsStatus: normalizeLegacyTeamsStatus(availability),
+      availability,
+    },
+    timestamp: new Date().toISOString(),
   }
 }
 
