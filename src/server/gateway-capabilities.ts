@@ -257,6 +257,7 @@ let lastProbeAt = 0
 let lastLoggedSummary = ''
 let dashboardTokenPromise: Promise<string> | null = null
 let dashboardTokenCache = ''
+let loggedHtmlScrapeFallback = false
 
 /** Optional bearer token for authenticated gateway endpoints. */
 export const BEARER_TOKEN = process.env.HERMES_API_TOKEN || process.env.CLAUDE_API_TOKEN || ''
@@ -285,6 +286,14 @@ export async function fetchDashboardToken(options?: {
   if (!force && dashboardTokenPromise) return dashboardTokenPromise
 
   dashboardTokenPromise = (async () => {
+    if (!loggedHtmlScrapeFallback) {
+      loggedHtmlScrapeFallback = true
+      console.info(
+        '[gateway] Using dashboard-injected session token for dashboard API calls. ' +
+          'Set HERMES_DASHBOARD_TOKEN or CLAUDE_DASHBOARD_TOKEN only when you have ' +
+          'a real dashboard session token, not the Hermes gateway API token.',
+      )
+    }
     // Dashboard injects the session token inline on `/` (root), not on
     // `/index.html` which serves the raw Vite-built HTML without the token.
     const res = await fetch(`${CLAUDE_DASHBOARD_URL}/`, {
