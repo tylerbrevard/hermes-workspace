@@ -134,6 +134,7 @@ import { Route as ApiProfilesCreateRouteImport } from './routes/api/profiles/cre
 import { Route as ApiProfilesActivateRouteImport } from './routes/api/profiles/activate'
 import { Route as ApiOpsPresenceRouteImport } from './routes/api/ops/presence'
 import { Route as ApiOpsMeetingsRouteImport } from './routes/api/ops/meetings'
+import { Route as ApiOpsKindleRouteImport } from './routes/api/ops/kindle'
 import { Route as ApiOpsItOpsRouteImport } from './routes/api/ops/it-ops'
 import { Route as ApiOpsBarryRouteImport } from './routes/api/ops/barry'
 import { Route as ApiOauthPollTokenRouteImport } from './routes/api/oauth.poll-token'
@@ -795,6 +796,11 @@ const ApiOpsMeetingsRoute = ApiOpsMeetingsRouteImport.update({
   path: '/api/ops/meetings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOpsKindleRoute = ApiOpsKindleRouteImport.update({
+  id: '/api/ops/kindle',
+  path: '/api/ops/kindle',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOpsItOpsRoute = ApiOpsItOpsRouteImport.update({
   id: '/api/ops/it-ops',
   path: '/api/ops/it-ops',
@@ -1106,6 +1112,7 @@ export interface FileRoutesByFullPath {
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/ops/barry': typeof ApiOpsBarryRoute
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
+  '/api/ops/kindle': typeof ApiOpsKindleRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1266,6 +1273,7 @@ export interface FileRoutesByTo {
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/ops/barry': typeof ApiOpsBarryRoute
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
+  '/api/ops/kindle': typeof ApiOpsKindleRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1428,6 +1436,7 @@ export interface FileRoutesById {
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/ops/barry': typeof ApiOpsBarryRoute
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
+  '/api/ops/kindle': typeof ApiOpsKindleRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1591,6 +1600,7 @@ export interface FileRouteTypes {
     | '/api/oauth/poll-token'
     | '/api/ops/barry'
     | '/api/ops/it-ops'
+    | '/api/ops/kindle'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1751,6 +1761,7 @@ export interface FileRouteTypes {
     | '/api/oauth/poll-token'
     | '/api/ops/barry'
     | '/api/ops/it-ops'
+    | '/api/ops/kindle'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1912,6 +1923,7 @@ export interface FileRouteTypes {
     | '/api/oauth/poll-token'
     | '/api/ops/barry'
     | '/api/ops/it-ops'
+    | '/api/ops/kindle'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -2056,6 +2068,7 @@ export interface RootRouteChildren {
   ApiOauthPollTokenRoute: typeof ApiOauthPollTokenRoute
   ApiOpsBarryRoute: typeof ApiOpsBarryRoute
   ApiOpsItOpsRoute: typeof ApiOpsItOpsRoute
+  ApiOpsKindleRoute: typeof ApiOpsKindleRoute
   ApiOpsMeetingsRoute: typeof ApiOpsMeetingsRoute
   ApiOpsPresenceRoute: typeof ApiOpsPresenceRoute
   ApiProfilesActivateRoute: typeof ApiProfilesActivateRoute
@@ -2947,6 +2960,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOpsMeetingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ops/kindle': {
+      id: '/api/ops/kindle'
+      path: '/api/ops/kindle'
+      fullPath: '/api/ops/kindle'
+      preLoaderRoute: typeof ApiOpsKindleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/ops/it-ops': {
       id: '/api/ops/it-ops'
       path: '/api/ops/it-ops'
@@ -3516,6 +3536,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOauthPollTokenRoute: ApiOauthPollTokenRoute,
   ApiOpsBarryRoute: ApiOpsBarryRoute,
   ApiOpsItOpsRoute: ApiOpsItOpsRoute,
+  ApiOpsKindleRoute: ApiOpsKindleRoute,
   ApiOpsMeetingsRoute: ApiOpsMeetingsRoute,
   ApiOpsPresenceRoute: ApiOpsPresenceRoute,
   ApiProfilesActivateRoute: ApiProfilesActivateRoute,

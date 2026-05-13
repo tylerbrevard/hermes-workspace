@@ -909,16 +909,6 @@ function ChatSidebarComponent({
       label: 'Barry',
       active: pathname === '/barry',
     },
-  ]
-
-  const compatibilityItems: Array<NavItemDef> = [
-    {
-      kind: 'link',
-      to: '/lily',
-      icon: MessageMultiple01Icon,
-      label: 'Lily',
-      active: pathname === '/lily',
-    },
     {
       kind: 'link',
       to: '/kindle',
@@ -926,6 +916,16 @@ function ChatSidebarComponent({
       label: 'Kindle',
       active: pathname === '/kindle',
     },
+    {
+      kind: 'link',
+      to: '/lily',
+      icon: MessageMultiple01Icon,
+      label: 'Lily',
+      active: pathname === '/lily',
+    },
+  ]
+
+  const compatibilityItems: Array<NavItemDef> = [
   ]
 
   return (
