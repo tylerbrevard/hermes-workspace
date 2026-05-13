@@ -2,9 +2,11 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import {
-  fetchClawos,
-  fetchClawosJson,
-} from '../../../server/clawos-internal'
+  createBarryMeeting,
+  deleteBarryMeeting,
+  getBarryData,
+  updateBarryMeeting,
+} from '../../../server/barry-data'
 
 type BarryMeetingStatus = 'upcoming' | 'completed' | 'archived'
 
@@ -27,16 +29,6 @@ type BarryWin = {
   status?: string
 }
 
-async function proxyMutation(
-  request: Request,
-  path: string,
-  init: Parameters<typeof fetchClawos>[1],
-) {
-  const response = await fetchClawos(path, init)
-  const payload = await response.json().catch(() => ({}))
-  return json(payload, { status: response.status })
-}
-
 export const Route = createFileRoute('/api/ops/barry')({
   server: {
     handlers: {
@@ -46,26 +38,7 @@ export const Route = createFileRoute('/api/ops/barry')({
         }
 
         try {
-          const [meetingsData, winsData, settingsData] = await Promise.all([
-            fetchClawosJson<{ meetings?: BarryMeeting[] }>('/api/barry'),
-            fetchClawosJson<{ wins?: BarryWin[] }>('/api/wins'),
-            fetchClawosJson<{ profile?: { name?: string } }>('/api/settings'),
-          ])
-
-          const profileName = settingsData?.profile?.name?.trim()
-          const currentUser =
-            profileName && profileName.length > 0
-              ? profileName.split(/\s+/)[0]
-              : 'Tyler'
-
-          return json({
-            meetings: meetingsData.meetings || [],
-            wins: (winsData.wins || []).filter(
-              (win) => win.shareWithBarry && win.status === 'Active',
-            ),
-            currentUser,
-            refreshedAt: new Date().toISOString(),
-          })
+          return json(await getBarryData())
         } catch (error) {
           return json(
             {
@@ -83,24 +56,48 @@ export const Route = createFileRoute('/api/ops/barry')({
         if (!isAuthenticated(request)) {
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
-        const body = await request.text()
-        return proxyMutation(request, '/api/barry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        })
+        try {
+          const body = (await request.json()) as BarryMeeting
+          createBarryMeeting(body)
+          return json({ success: true })
+        } catch (error) {
+          return json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to create Barry meeting',
+            },
+            { status: 500 },
+          )
+        }
       },
 
       PATCH: async ({ request }) => {
         if (!isAuthenticated(request)) {
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
-        const body = await request.text()
-        return proxyMutation(request, '/api/barry', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        })
+        try {
+          const body = (await request.json()) as Partial<BarryMeeting> & {
+            id: string
+          }
+          updateBarryMeeting(body)
+          return json({ success: true })
+        } catch (error) {
+          const status =
+            typeof (error as { status?: unknown })?.status === 'number'
+              ? ((error as { status: number }).status)
+              : 500
+          return json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to update Barry meeting',
+            },
+            { status },
+          )
+        }
       },
 
       DELETE: async ({ request }) => {
@@ -109,10 +106,20 @@ export const Route = createFileRoute('/api/ops/barry')({
         }
         const url = new URL(request.url)
         const id = url.searchParams.get('id') || ''
-        return proxyMutation(request, '/api/barry', {
-          method: 'DELETE',
-          searchParams: { id },
-        })
+        try {
+          deleteBarryMeeting(id)
+          return json({ success: true })
+        } catch (error) {
+          return json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to delete Barry meeting',
+            },
+            { status: 500 },
+          )
+        }
       },
     },
   },
