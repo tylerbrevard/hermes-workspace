@@ -260,85 +260,116 @@ async function fetchConnectWiseTickets() {
 }
 
 export async function getKindleData() {
-  const [itOps, cwTickets] = await Promise.all([
+  const [itOps, cwTickets, dashboardData, executiveData] = await Promise.all([
     getItOpsData(),
     fetchConnectWiseTickets(),
+    fetchClawosJson<any>('/api/dashboard-data?nocache=1').catch(() => null),
+    fetchClawosJson<any>('/api/executive-it').catch(() => null),
   ])
-  const meetings = getTodayMeetings()
-  const planner = getPlannerSummary()
-  const presence = getPresenceSummary()
-  const cronHealth = getCronHealth()
-  const healthSummary = getHealthSummary(cronHealth, presence)
+  const meetings = Array.isArray(dashboardData?.meetings?.todayList)
+    ? dashboardData.meetings.todayList
+    : getTodayMeetings()
+  const planner = executiveData?.microsoft365?.planner || getPlannerSummary()
+  const presence = dashboardData?.teamsPresence || getPresenceSummary()
+  const cronHealth = dashboardData?.cronHealth || getCronHealth()
+  const healthSummary =
+    dashboardData?.healthSummary || getHealthSummary(cronHealth, presence)
   const nextMeeting =
+    executiveData?.microsoft365?.meetings?.nextMeeting ||
     meetings
       .filter((meeting) => !meeting.isPast)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null
+  const connectwiseSummary = executiveData?.connectwise?.summary
+  const connectwiseTickets = executiveData?.connectwise?.tickets
+  const connectwiseDashboard = dashboardData?.connectwise
 
   return {
     dashboard: {
       connectwise: {
-        openTicketCount: itOps.analytics.ticketStats.open,
-        available: itOps.analytics.errors.length === 0,
+        openTicketCount:
+          connectwiseDashboard?.openTicketCount ??
+          connectwiseSummary?.openTickets ??
+          itOps.analytics.ticketStats.open,
+        available:
+          connectwiseDashboard?.available ?? itOps.analytics.errors.length === 0,
         configured:
+          connectwiseDashboard?.configured ??
           !itOps.analytics.errors.some((error) =>
             error.toLowerCase().includes('not configured'),
           ),
-        detail: itOps.analytics.errors[0] || null,
+        detail: connectwiseDashboard?.detail ?? itOps.analytics.errors[0] ?? null,
       },
       cronHealth,
       healthSummary,
       teamsPresence: presence,
-      aiCost: getCostSummary(),
+      aiCost: dashboardData?.aiCost || getCostSummary(),
       meetings: {
-        todayCount: meetings.length,
+        todayCount: dashboardData?.meetings?.todayCount ?? meetings.length,
         todayList: meetings,
       },
       wins: {
-        thisWeek: getWinsThisWeek(),
+        thisWeek: dashboardData?.wins?.thisWeek ?? getWinsThisWeek(),
       },
       openclaw: {
-        hasUpdate: false,
-        latestName: null,
+        hasUpdate: dashboardData?.openclaw?.hasUpdate ?? false,
+        latestName: dashboardData?.openclaw?.latestName ?? null,
       },
     },
     executive: {
       connectwise: {
-        available: itOps.analytics.errors.length === 0,
+        available:
+          executiveData?.connectwise?.available ?? itOps.analytics.errors.length === 0,
         summary: {
-          openTickets: itOps.analytics.ticketStats.open,
+          openTickets: connectwiseSummary?.openTickets ?? itOps.analytics.ticketStats.open,
           slaAtRisk: Math.max(
             0,
-            Math.round(
-              itOps.analytics.ticketStats.open *
-                (1 - itOps.analytics.ticketStats.slaCompliancePct / 100),
-            ),
+            connectwiseSummary?.slaAtRisk ??
+              Math.round(
+                itOps.analytics.ticketStats.open *
+                  (1 - itOps.analytics.ticketStats.slaCompliancePct / 100),
+              ),
           ),
-          boardCount: itOps.analytics.queueBreakdown.length,
-          techCount: itOps.analytics.teamPerformance.length,
-          slaCompliance: itOps.analytics.ticketStats.slaCompliancePct,
-          avgResolutionTime: itOps.analytics.ticketStats.avgResolutionHours,
+          boardCount: connectwiseSummary?.boardCount ?? itOps.analytics.queueBreakdown.length,
+          techCount: connectwiseSummary?.techCount ?? itOps.analytics.teamPerformance.length,
+          slaCompliance:
+            connectwiseSummary?.slaCompliance ??
+            itOps.analytics.ticketStats.slaCompliancePct,
+          avgResolutionTime:
+            connectwiseSummary?.avgResolutionTime ??
+            itOps.analytics.ticketStats.avgResolutionHours,
         },
         tickets: {
-          byPriority: cwTickets.byPriority,
-          byTech: itOps.analytics.teamPerformance.map((member) => ({
+          byPriority: connectwiseTickets?.byPriority || cwTickets.byPriority,
+          byTech: connectwiseTickets?.byTech || itOps.analytics.teamPerformance.map((member) => ({
             tech: member.name,
             count: member.ticketsAssigned,
           })),
-          recent: cwTickets.recent,
+          recent: connectwiseTickets?.recent || cwTickets.recent,
         },
-        fetchedAt: itOps.analytics.fetchedAt,
-        error: cwTickets.error || itOps.analytics.errors[0] || null,
+        fetchedAt: executiveData?.connectwise?.fetchedAt || itOps.analytics.fetchedAt,
+        error:
+          executiveData?.connectwise?.error ||
+          cwTickets.error ||
+          itOps.analytics.errors[0] ||
+          null,
       },
       microsoft365: {
         planner,
         meetings: {
-          available: existsSync(MEETINGS_DB),
-          todayCount: meetings.length,
+          available:
+            executiveData?.microsoft365?.meetings?.available ??
+            dashboardData?.meetings?.available ??
+            existsSync(MEETINGS_DB),
+          todayCount:
+            executiveData?.microsoft365?.meetings?.todayCount ??
+            dashboardData?.meetings?.todayCount ??
+            meetings.length,
           nextMeeting,
-          meetings: meetings.slice(0, 8),
+          meetings:
+            executiveData?.microsoft365?.meetings?.meetings || meetings.slice(0, 8),
         },
       },
-      fetchedAt: new Date().toISOString(),
+      fetchedAt: executiveData?.fetchedAt || new Date().toISOString(),
     },
     refreshedAt: new Date().toISOString(),
   }
