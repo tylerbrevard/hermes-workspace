@@ -19,7 +19,7 @@ const MEETINGS_DB =
 const LEGACY_PRESENCE_ORIGIN = (
   process.env.HERMES_LEGACY_PRESENCE_ORIGIN?.trim() ||
   process.env.CLAWOS_INTERNAL_ORIGIN?.trim() ||
-  ''
+  'http://127.0.0.1:3000'
 ).replace(/\/+$/, '')
 
 type TeamsPresence = {
