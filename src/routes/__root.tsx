@@ -121,37 +121,16 @@ const requestBaseScript = `
   window.__HERMES_BASE_PATH__ = basePath
   if (!basePath || basePath === '/') return
 
-  const assetPrefixes = [
-    '/assets/',
-    '/avatars/',
-    '/providers/',
-    '/screenshots/',
-    '/ascii-portraits/',
-    '/claude-',
-    '/cover',
-    '/hermesworld-',
-    '/logo-',
-    '/social-preview',
-    '/apple-touch-icon',
-    '/favicon',
-  ]
-  const assetPattern = /\\.(png|webp|jpg|jpeg|svg|gif|ico|json|webmanifest|glb|mp3|wav|mp4|webm)$/i
-
   const shouldPrefix = (pathname) =>
-    pathname === '/api' ||
-    pathname.startsWith('/api/') ||
-    pathname.startsWith('/avatars-3d/')
-
-  const shouldPrefixAsset = (pathname) =>
-    assetPattern.test(pathname) ||
-    assetPrefixes.some((prefix) => pathname.startsWith(prefix))
+    pathname.startsWith('/') &&
+    pathname !== basePath &&
+    !pathname.startsWith(basePath + '/') &&
+    !pathname.startsWith('/.well-known/')
 
   const prefixPath = (pathname) => {
     if (!pathname.startsWith('/')) return pathname
     if (pathname === basePath || pathname.startsWith(basePath + '/')) return pathname
-    return shouldPrefix(pathname) || shouldPrefixAsset(pathname)
-      ? basePath + pathname
-      : pathname
+    return shouldPrefix(pathname) ? basePath + pathname : pathname
   }
 
   const rewriteUrl = (value) => {
