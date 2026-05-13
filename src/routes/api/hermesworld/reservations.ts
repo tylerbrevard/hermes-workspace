@@ -19,6 +19,19 @@ function requestBaseUrl(request: Request): string {
   return `${url.protocol}//${url.host}`
 }
 
+function reservationErrorStatus(error: unknown): number {
+  if (error instanceof ReservationValidationError) return error.status
+  const message = error instanceof Error ? error.message : String(error || '')
+  if (message.toLowerCase().includes('not configured')) return 503
+  return 500
+}
+
+function reservationErrorMessage(error: unknown): string {
+  return reservationErrorStatus(error) === 503
+    ? 'Reservations are not configured on this workspace.'
+    : safeErrorMessage(error)
+}
+
 export const Route = createFileRoute('/api/hermesworld/reservations')({
   server: {
     handlers: {
@@ -29,8 +42,8 @@ export const Route = createFileRoute('/api/hermesworld/reservations')({
           return Response.json({ ok: true, count })
         } catch (error) {
           return Response.json(
-            { ok: false, error: safeErrorMessage(error) },
-            { status: 500 },
+            { ok: false, error: reservationErrorMessage(error) },
+            { status: reservationErrorStatus(error) },
           )
         }
       },
@@ -69,8 +82,8 @@ export const Route = createFileRoute('/api/hermesworld/reservations')({
             )
           }
           return Response.json(
-            { ok: false, error: safeErrorMessage(error) },
-            { status: 500 },
+            { ok: false, error: reservationErrorMessage(error) },
+            { status: reservationErrorStatus(error) },
           )
         }
       },
