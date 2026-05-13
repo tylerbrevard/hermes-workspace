@@ -1,3 +1,5 @@
+import { apiPath } from '@/lib/base-path'
+
 export interface AuthStatus {
   authenticated: boolean
   authRequired: boolean
@@ -12,7 +14,7 @@ export async function fetchClaudeAuthStatus(
 
   let res: Response
   try {
-    res = await fetch('/api/auth-check', { signal: controller.signal })
+    res = await fetch(apiPath('/api/auth-check'), { signal: controller.signal })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('Request timed out after 5 seconds')

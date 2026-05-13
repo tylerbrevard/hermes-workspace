@@ -9,6 +9,7 @@
  * Refs #262 (Conductor not available on vanilla agent), #270.
  */
 import { useQuery } from '@tanstack/react-query'
+import { apiPath } from '@/lib/base-path'
 
 export type FeatureKey =
   | 'conductor'
@@ -39,7 +40,7 @@ type ConnectionStatusResponse = {
 }
 
 async function fetchStatus(): Promise<ConnectionStatusResponse> {
-  const r = await fetch('/api/connection-status', { cache: 'no-store' })
+  const r = await fetch(apiPath('/api/connection-status'), { cache: 'no-store' })
   if (!r.ok) throw new Error(`status ${r.status}`)
   return (await r.json()) as ConnectionStatusResponse
 }

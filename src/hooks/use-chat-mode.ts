@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiPath } from '@/lib/base-path'
 
 export type ChatMode = 'enhanced-claude' | 'portable' | 'disconnected'
 
@@ -17,7 +18,7 @@ export function useChatMode(): ChatMode {
   const { data } = useQuery({
     queryKey: ['gateway-status'],
     queryFn: async () => {
-      const res = await fetch('/api/gateway-status')
+      const res = await fetch(apiPath('/api/gateway-status'))
       if (!res.ok) return null
       return (await res.json()) as GatewayStatus
     },

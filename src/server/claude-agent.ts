@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 
 const CLAUDE_HEALTH_TIMEOUT_MS = 2_000
-const CLAUDE_START_PORT = 8642
+const DEFAULT_GATEWAY_PORT = 18789
 
 let startPromise: Promise<StartClaudeAgentResult> | null = null
 
@@ -79,8 +79,23 @@ export function resolveClaudeAgentDir(
 }
 
 /** Find the `claude` CLI binary installed by Nous's installer (or on PATH). */
+function resolveGatewayPort(env: Record<string, string | undefined> = process.env): number {
+  const rawUrl = env.HERMES_API_URL || env.CLAUDE_API_URL || ''
+  try {
+    const parsed = new URL(rawUrl)
+    const port = Number(parsed.port)
+    if (Number.isFinite(port) && port > 0) return port
+  } catch {
+    // fall through to default
+  }
+  return DEFAULT_GATEWAY_PORT
+}
+
+/** Find the `hermes` CLI binary installed by Nous's installer (or on PATH). */
 export function resolveClaudeBinary(): string | null {
   const candidates = [
+    resolve(homedir(), '.local', 'bin', 'hermes'),
+    resolve(homedir(), '.hermes', 'bin', 'hermes'),
     resolve(homedir(), '.claude', 'bin', 'claude'),
     resolve(homedir(), '.local', 'bin', 'claude'),
   ]
@@ -102,7 +117,7 @@ export function resolveClaudePython(agentDir: string): string {
 }
 
 export async function isClaudeAgentHealthy(
-  port = CLAUDE_START_PORT,
+  port = resolveGatewayPort(),
 ): Promise<boolean> {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/health`, {
@@ -115,7 +130,8 @@ export async function isClaudeAgentHealthy(
 }
 
 export async function startClaudeAgent(): Promise<StartClaudeAgentResult> {
-  if (await isClaudeAgentHealthy()) {
+  const gatewayPort = resolveGatewayPort()
+  if (await isClaudeAgentHealthy(gatewayPort)) {
     return { ok: true, message: 'already running' }
   }
 
@@ -149,7 +165,7 @@ export async function startClaudeAgent(): Promise<StartClaudeAgentResult> {
           '--host',
           '0.0.0.0',
           '--port',
-          String(CLAUDE_START_PORT),
+          String(gatewayPort),
         ]
         cwd = agentDir
       } else {
@@ -185,7 +201,7 @@ export async function startClaudeAgent(): Promise<StartClaudeAgentResult> {
 
       for (let attempt = 0; attempt < 10; attempt += 1) {
         await new Promise((resolveAttempt) => setTimeout(resolveAttempt, 1_000))
-        if (await isClaudeAgentHealthy()) {
+        if (await isClaudeAgentHealthy(gatewayPort)) {
           return {
             ok: true,
             pid: child.pid,

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { apiPath } from '@/lib/base-path'
 
 export function LoginScreen() {
   const [password, setPassword] = useState('')
@@ -12,7 +13,7 @@ export function LoginScreen() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth', {
+      const res = await fetch(apiPath('/api/auth'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),

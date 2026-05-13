@@ -5,6 +5,7 @@
  * true if available.
  */
 import { useQuery } from '@tanstack/react-query'
+import { apiPath } from '@/lib/base-path'
 
 interface GatewayStatus {
   capabilities: Record<string, boolean>
@@ -15,7 +16,7 @@ function useGatewayStatus() {
   return useQuery<GatewayStatus>({
     queryKey: ['gateway-status'],
     queryFn: async () => {
-      const res = await fetch('/api/gateway-status')
+      const res = await fetch(apiPath('/api/gateway-status'))
       if (!res.ok) throw new Error('gateway-status fetch failed')
       return res.json()
     },

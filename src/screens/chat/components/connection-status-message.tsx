@@ -55,11 +55,11 @@ function classifyConnectionError(
     }
   }
 
-  if (lower.includes('econnrefused') && lower.includes('8642')) {
+  if (lower.includes('econnrefused') && (lower.includes('18789') || lower.includes('8642'))) {
     return {
       title: 'Hermes Agent gateway not running',
-      description: 'The Hermes Agent gateway is not running on port 8642.',
-      action: 'Run the official Hermes installer, then start the gateway with: hermes gateway run',
+      description: 'Hermes Workspace cannot reach the configured Hermes Agent gateway.',
+      action: 'Check launchd/health for ai.hermes.gateway, then retry the workspace connection.',
     }
   }
 

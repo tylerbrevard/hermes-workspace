@@ -29,6 +29,13 @@ const STORE_FILE = join(
 )
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
+function getCookiePath(): string {
+  const raw = (process.env.VITE_APP_BASE_PATH || '').trim()
+  if (!raw || raw === '/') return '/'
+  const withLeading = raw.startsWith('/') ? raw : `/${raw}`
+  return withLeading.endsWith('/') ? withLeading.slice(0, -1) || '/' : withLeading
+}
+
 function loadStore(): SessionStore {
   try {
     if (existsSync(STORE_FILE)) {
@@ -303,6 +310,10 @@ function shouldSetSecureCookie(): boolean {
 export function createSessionCookie(token: string): string {
   const attrs = ['HttpOnly']
   if (shouldSetSecureCookie()) attrs.push('Secure')
-  attrs.push('SameSite=Strict', 'Path=/', `Max-Age=${30 * 24 * 60 * 60}`)
+  attrs.push(
+    'SameSite=Strict',
+    `Path=${getCookiePath()}`,
+    `Max-Age=${30 * 24 * 60 * 60}`,
+  )
   return `claude-auth=${token}; ${attrs.join('; ')}`
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { apiPath } from '@/lib/base-path'
 
 type ConnectionStatus = {
   status: 'connected' | 'enhanced' | 'partial' | 'disconnected'
@@ -16,7 +17,7 @@ type ConnectionStatus = {
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
-  const response = await fetch('/api/connection-status', {
+  const response = await fetch(apiPath('/api/connection-status'), {
     signal: AbortSignal.timeout(5000),
   })
   if (!response.ok) {

@@ -29,6 +29,7 @@ import { ErrorBoundary } from '@/components/error-boundary'
 import { LoginScreen } from '@/components/auth/login-screen'
 import { fetchClaudeAuthStatus, type AuthStatus } from '@/lib/claude-auth'
 import { getRootSurfaceState } from './-root-layout-state'
+import { APP_BASE_PATH, apiPath, withBasePath } from '@/lib/base-path'
 
 const APP_CSP = [
   "default-src 'self'",
@@ -114,6 +115,148 @@ const themeColorScript = `
 })()
 `
 
+const requestBaseScript = `
+(() => {
+  const basePath = ${JSON.stringify(APP_BASE_PATH)}
+  window.__HERMES_BASE_PATH__ = basePath
+  if (!basePath || basePath === '/') return
+
+  const assetPrefixes = [
+    '/assets/',
+    '/avatars/',
+    '/providers/',
+    '/screenshots/',
+    '/ascii-portraits/',
+    '/claude-',
+    '/cover',
+    '/hermesworld-',
+    '/logo-',
+    '/social-preview',
+    '/apple-touch-icon',
+    '/favicon',
+  ]
+  const assetPattern = /\\.(png|webp|jpg|jpeg|svg|gif|ico|json|webmanifest|glb|mp3|wav|mp4|webm)$/i
+
+  const shouldPrefix = (pathname) =>
+    pathname === '/api' ||
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/avatars-3d/')
+
+  const shouldPrefixAsset = (pathname) =>
+    assetPattern.test(pathname) ||
+    assetPrefixes.some((prefix) => pathname.startsWith(prefix))
+
+  const prefixPath = (pathname) => {
+    if (!pathname.startsWith('/')) return pathname
+    if (pathname === basePath || pathname.startsWith(basePath + '/')) return pathname
+    return shouldPrefix(pathname) || shouldPrefixAsset(pathname)
+      ? basePath + pathname
+      : pathname
+  }
+
+  const rewriteUrl = (value) => {
+    if (typeof value !== 'string') return value
+    try {
+      const url = new URL(value, window.location.origin)
+      if (url.origin !== window.location.origin) return value
+      const nextPath = prefixPath(url.pathname)
+      if (nextPath === url.pathname) return value
+      return nextPath + url.search + url.hash
+    } catch {
+      return value
+    }
+  }
+
+  const nativeFetch = window.fetch.bind(window)
+  window.fetch = (input, init) => {
+    if (typeof input === 'string') {
+      return nativeFetch(rewriteUrl(input), init)
+    }
+    if (input instanceof URL) {
+      return nativeFetch(rewriteUrl(input.toString()), init)
+    }
+    if (input instanceof Request) {
+      const rewritten = rewriteUrl(input.url)
+      if (rewritten !== input.url) {
+        return nativeFetch(new Request(rewritten, input), init)
+      }
+    }
+    return nativeFetch(input, init)
+  }
+
+  const NativeEventSource = window.EventSource
+  if (typeof NativeEventSource === 'function') {
+    window.EventSource = function(url, config) {
+      return new NativeEventSource(rewriteUrl(url), config)
+    }
+    window.EventSource.prototype = NativeEventSource.prototype
+  }
+
+  const rewriteNode = (node) => {
+    if (!(node instanceof Element)) return
+
+    const tag = node.tagName
+    if (node.hasAttribute('src') && ['IMG', 'SOURCE', 'VIDEO', 'AUDIO', 'IFRAME'].includes(tag)) {
+      const src = node.getAttribute('src')
+      const nextSrc = rewriteUrl(src)
+      if (nextSrc && nextSrc !== src) node.setAttribute('src', nextSrc)
+    }
+
+    if (node.hasAttribute('href') && ['LINK', 'A'].includes(tag)) {
+      const href = node.getAttribute('href')
+      const nextHref = rewriteUrl(href)
+      if (nextHref && nextHref !== href) node.setAttribute('href', nextHref)
+    }
+
+    if (tag === 'FORM' && node.hasAttribute('action')) {
+      const action = node.getAttribute('action')
+      const nextAction = rewriteUrl(action)
+      if (nextAction && nextAction !== action) node.setAttribute('action', nextAction)
+    }
+
+    if (node.hasAttribute('style')) {
+      const style = node.getAttribute('style')
+      if (style && style.includes("url('/")) {
+        node.setAttribute('style', style.replaceAll("url('/", "url('" + basePath + '/"))
+      }
+      if (style && style.includes('url("/')) {
+        node.setAttribute('style', style.replaceAll('url("/', 'url("' + basePath + '/'))
+      }
+    }
+
+    node.querySelectorAll?.('img[src^="/"],source[src^="/"],video[src^="/"],audio[src^="/"],iframe[src^="/"],link[href^="/"],a[href^="/"],form[action^="/"],[style*="url(\'/"],[style*="url(\\"/"]').forEach(rewriteNode)
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => rewriteNode(document.documentElement), { once: true })
+  } else {
+    rewriteNode(document.documentElement)
+  }
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      mutation.addedNodes.forEach(rewriteNode)
+      if (
+        mutation.type === 'attributes' &&
+        mutation.target instanceof Element &&
+        (mutation.attributeName === 'src' ||
+          mutation.attributeName === 'href' ||
+          mutation.attributeName === 'style')
+      ) {
+        rewriteNode(mutation.target)
+      }
+    }
+  })
+
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['src', 'href', 'style'],
+  })
+})()
+`
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -135,7 +278,7 @@ export const Route = createRootRoute({
       },
       {
         property: 'og:image',
-        content: '/cover.png',
+        content: withBasePath('/cover.png'),
       },
       {
         property: 'og:image:type',
@@ -147,7 +290,7 @@ export const Route = createRootRoute({
       },
       {
         name: 'twitter:image',
-        content: '/cover.png',
+        content: withBasePath('/cover.png'),
       },
       // PWA meta tags
       {
@@ -171,16 +314,16 @@ export const Route = createRootRoute({
       {
         rel: 'icon',
         type: 'image/png',
-        href: '/claude-avatar.png',
+        href: withBasePath('/claude-avatar.png'),
       },
       // PWA manifest and icons
       {
         rel: 'manifest',
-        href: '/manifest.json',
+        href: withBasePath('/manifest.json'),
       },
       {
         rel: 'apple-touch-icon',
-        href: '/apple-touch-icon.png',
+        href: withBasePath('/apple-touch-icon.png'),
         sizes: '180x180',
       },
     ],
@@ -198,7 +341,7 @@ export const Route = createRootRoute({
           {error instanceof Error ? error.message : String(error)}
         </pre>
         <button
-          onClick={() => (window.location.href = '/')}
+          onClick={() => (window.location.href = withBasePath('/'))}
           className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 transition-colors"
         >
           Return Home
@@ -284,7 +427,7 @@ function RootLayout() {
 
     syncOnboardingCompletion()
 
-    void fetch('/api/connection-status')
+    void fetch(apiPath('/api/connection-status'))
       .then((res) => (res.ok ? res.json() : null))
       .then(
         (
@@ -408,6 +551,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script
           dangerouslySetInnerHTML={{ __html: wrapInlineScript(themeScript) }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: wrapInlineScript(requestBaseScript),
+          }}
+        />
         <HeadContent />
         <script
           dangerouslySetInnerHTML={{
@@ -470,8 +618,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             var quip = quips[Math.floor(Math.random() * quips.length)];
 
             d.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';transition:opacity 0.5s ease;';
-            d.innerHTML = '<img src="/claude-avatar.webp" alt="Hermes Agent" style="width:80px;height:80px;margin-bottom:20px;border-radius:16px;filter:drop-shadow(0 8px 32px color-mix(in srgb,'+accent+' 45%, transparent))" />'
-              + '<img src="'+(isDark ? '/claude-banner.png' : '/claude-banner-light.png')+'" alt="Hermes Workspace" style="width:280px;height:auto;margin-bottom:8px;filter:drop-shadow(0 4px 16px '+(isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.1)')+')" />'
+            var basePath = (window.__HERMES_BASE_PATH__ && window.__HERMES_BASE_PATH__ !== '/') ? window.__HERMES_BASE_PATH__ : '';
+            d.innerHTML = '<img src="'+basePath+'/claude-avatar.webp" alt="Hermes Agent" style="width:80px;height:80px;margin-bottom:20px;border-radius:16px;filter:drop-shadow(0 8px 32px color-mix(in srgb,'+accent+' 45%, transparent))" />'
+              + '<img src="'+basePath+(isDark ? '/claude-banner.png' : '/claude-banner-light.png')+'" alt="Hermes Workspace" style="width:280px;height:auto;margin-bottom:8px;filter:drop-shadow(0 4px 16px '+(isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.1)')+')" />'
               + '<div style="font:400 14px/1 system-ui,-apple-system,sans-serif;letter-spacing:0.04em;color:'+muted+'">Workspace</div>'
               + '<div style="margin-top:28px;width:140px;height:3px;background:'+(isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)')+';border-radius:3px;overflow:hidden;position:relative"><div id=splash-bar style="width:0%;height:100%;background:'+accent+';border-radius:3px;transition:width 0.4s ease"></div></div>';
 

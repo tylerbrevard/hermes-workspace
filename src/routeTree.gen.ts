@@ -19,16 +19,22 @@ import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReserveRouteImport } from './routes/reserve'
 import { Route as ProfilesRouteImport } from './routes/profiles'
+import { Route as PresenceHubRouteImport } from './routes/presence-hub'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as MemoryRouteImport } from './routes/memory'
+import { Route as MeetingsRouteImport } from './routes/meetings'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as LilyRouteImport } from './routes/lily'
+import { Route as KindleRouteImport } from './routes/kindle'
 import { Route as JobsRouteImport } from './routes/jobs'
+import { Route as ItOpsRouteImport } from './routes/it-ops'
 import { Route as HermesWorldRouteImport } from './routes/hermes-world'
 import { Route as FilesRouteImport } from './routes/files'
 import { Route as EarlyAccessRouteImport } from './routes/early-access'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConductorRouteImport } from './routes/conductor'
+import { Route as BarryRouteImport } from './routes/barry'
 import { Route as AgoraRouteImport } from './routes/agora'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
@@ -126,6 +132,8 @@ import { Route as ApiProfilesListRouteImport } from './routes/api/profiles/list'
 import { Route as ApiProfilesDeleteRouteImport } from './routes/api/profiles/delete'
 import { Route as ApiProfilesCreateRouteImport } from './routes/api/profiles/create'
 import { Route as ApiProfilesActivateRouteImport } from './routes/api/profiles/activate'
+import { Route as ApiOpsPresenceRouteImport } from './routes/api/ops/presence'
+import { Route as ApiOpsMeetingsRouteImport } from './routes/api/ops/meetings'
 import { Route as ApiOauthPollTokenRouteImport } from './routes/api/oauth.poll-token'
 import { Route as ApiOauthDeviceCodeRouteImport } from './routes/api/oauth.device-code'
 import { Route as ApiModelInfoRouteImport } from './routes/api/model/info'
@@ -209,6 +217,11 @@ const ProfilesRoute = ProfilesRouteImport.update({
   path: '/profiles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PresenceHubRoute = PresenceHubRouteImport.update({
+  id: '/presence-hub',
+  path: '/presence-hub',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlaygroundRoute = PlaygroundRouteImport.update({
   id: '/playground',
   path: '/playground',
@@ -224,14 +237,34 @@ const MemoryRoute = MemoryRouteImport.update({
   path: '/memory',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MeetingsRoute = MeetingsRouteImport.update({
+  id: '/meetings',
+  path: '/meetings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LilyRoute = LilyRouteImport.update({
+  id: '/lily',
+  path: '/lily',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KindleRoute = KindleRouteImport.update({
+  id: '/kindle',
+  path: '/kindle',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const JobsRoute = JobsRouteImport.update({
   id: '/jobs',
   path: '/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ItOpsRoute = ItOpsRouteImport.update({
+  id: '/it-ops',
+  path: '/it-ops',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HermesWorldRoute = HermesWorldRouteImport.update({
@@ -257,6 +290,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const ConductorRoute = ConductorRouteImport.update({
   id: '/conductor',
   path: '/conductor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BarryRoute = BarryRouteImport.update({
+  id: '/barry',
+  path: '/barry',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgoraRoute = AgoraRouteImport.update({
@@ -745,6 +783,16 @@ const ApiProfilesActivateRoute = ApiProfilesActivateRouteImport.update({
   path: '/api/profiles/activate',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOpsPresenceRoute = ApiOpsPresenceRouteImport.update({
+  id: '/api/ops/presence',
+  path: '/api/ops/presence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpsMeetingsRoute = ApiOpsMeetingsRouteImport.update({
+  id: '/api/ops/meetings',
+  path: '/api/ops/meetings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOauthPollTokenRoute = ApiOauthPollTokenRouteImport.update({
   id: '/api/oauth/poll-token',
   path: '/api/oauth/poll-token',
@@ -914,16 +962,22 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/agora': typeof AgoraRoute
+  '/barry': typeof BarryRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
   '/files': typeof FilesRoute
   '/hermes-world': typeof HermesWorldRoute
+  '/it-ops': typeof ItOpsRoute
   '/jobs': typeof JobsRoute
+  '/kindle': typeof KindleRoute
+  '/lily': typeof LilyRoute
   '/mcp': typeof McpRoute
+  '/meetings': typeof MeetingsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
+  '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
@@ -1038,6 +1092,8 @@ export interface FileRoutesByFullPath {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/ops/meetings': typeof ApiOpsMeetingsRoute
+  '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
@@ -1065,16 +1121,22 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/agora': typeof AgoraRoute
+  '/barry': typeof BarryRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
   '/files': typeof FilesRoute
   '/hermes-world': typeof HermesWorldRoute
+  '/it-ops': typeof ItOpsRoute
   '/jobs': typeof JobsRoute
+  '/kindle': typeof KindleRoute
+  '/lily': typeof LilyRoute
   '/mcp': typeof McpRoute
+  '/meetings': typeof MeetingsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
+  '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
   '/skills': typeof SkillsRoute
@@ -1188,6 +1250,8 @@ export interface FileRoutesByTo {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/ops/meetings': typeof ApiOpsMeetingsRoute
+  '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
@@ -1216,16 +1280,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/agora': typeof AgoraRoute
+  '/barry': typeof BarryRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
   '/files': typeof FilesRoute
   '/hermes-world': typeof HermesWorldRoute
+  '/it-ops': typeof ItOpsRoute
   '/jobs': typeof JobsRoute
+  '/kindle': typeof KindleRoute
+  '/lily': typeof LilyRoute
   '/mcp': typeof McpRoute
+  '/meetings': typeof MeetingsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
+  '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
@@ -1340,6 +1410,8 @@ export interface FileRoutesById {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/ops/meetings': typeof ApiOpsMeetingsRoute
+  '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
@@ -1369,16 +1441,22 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/agora'
+    | '/barry'
     | '/conductor'
     | '/dashboard'
     | '/early-access'
     | '/files'
     | '/hermes-world'
+    | '/it-ops'
     | '/jobs'
+    | '/kindle'
+    | '/lily'
     | '/mcp'
+    | '/meetings'
     | '/memory'
     | '/operations'
     | '/playground'
+    | '/presence-hub'
     | '/profiles'
     | '/reserve'
     | '/settings'
@@ -1493,6 +1571,8 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/ops/meetings'
+    | '/api/ops/presence'
     | '/api/profiles/activate'
     | '/api/profiles/create'
     | '/api/profiles/delete'
@@ -1520,16 +1600,22 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/agora'
+    | '/barry'
     | '/conductor'
     | '/dashboard'
     | '/early-access'
     | '/files'
     | '/hermes-world'
+    | '/it-ops'
     | '/jobs'
+    | '/kindle'
+    | '/lily'
     | '/mcp'
+    | '/meetings'
     | '/memory'
     | '/operations'
     | '/playground'
+    | '/presence-hub'
     | '/profiles'
     | '/reserve'
     | '/skills'
@@ -1643,6 +1729,8 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/ops/meetings'
+    | '/api/ops/presence'
     | '/api/profiles/activate'
     | '/api/profiles/create'
     | '/api/profiles/delete'
@@ -1670,16 +1758,22 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/agora'
+    | '/barry'
     | '/conductor'
     | '/dashboard'
     | '/early-access'
     | '/files'
     | '/hermes-world'
+    | '/it-ops'
     | '/jobs'
+    | '/kindle'
+    | '/lily'
     | '/mcp'
+    | '/meetings'
     | '/memory'
     | '/operations'
     | '/playground'
+    | '/presence-hub'
     | '/profiles'
     | '/reserve'
     | '/settings'
@@ -1794,6 +1888,8 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/ops/meetings'
+    | '/api/ops/presence'
     | '/api/profiles/activate'
     | '/api/profiles/create'
     | '/api/profiles/delete'
@@ -1822,16 +1918,22 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
   AgoraRoute: typeof AgoraRoute
+  BarryRoute: typeof BarryRoute
   ConductorRoute: typeof ConductorRoute
   DashboardRoute: typeof DashboardRoute
   EarlyAccessRoute: typeof EarlyAccessRoute
   FilesRoute: typeof FilesRoute
   HermesWorldRoute: typeof HermesWorldRoute
+  ItOpsRoute: typeof ItOpsRoute
   JobsRoute: typeof JobsRoute
+  KindleRoute: typeof KindleRoute
+  LilyRoute: typeof LilyRoute
   McpRoute: typeof McpRoute
+  MeetingsRoute: typeof MeetingsRoute
   MemoryRoute: typeof MemoryRoute
   OperationsRoute: typeof OperationsRoute
   PlaygroundRoute: typeof PlaygroundRoute
+  PresenceHubRoute: typeof PresenceHubRoute
   ProfilesRoute: typeof ProfilesRoute
   ReserveRoute: typeof ReserveRouteWithChildren
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -1928,6 +2030,8 @@ export interface RootRouteChildren {
   ApiModelInfoRoute: typeof ApiModelInfoRoute
   ApiOauthDeviceCodeRoute: typeof ApiOauthDeviceCodeRoute
   ApiOauthPollTokenRoute: typeof ApiOauthPollTokenRoute
+  ApiOpsMeetingsRoute: typeof ApiOpsMeetingsRoute
+  ApiOpsPresenceRoute: typeof ApiOpsPresenceRoute
   ApiProfilesActivateRoute: typeof ApiProfilesActivateRoute
   ApiProfilesCreateRoute: typeof ApiProfilesCreateRoute
   ApiProfilesDeleteRoute: typeof ApiProfilesDeleteRoute
@@ -2012,6 +2116,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfilesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/presence-hub': {
+      id: '/presence-hub'
+      path: '/presence-hub'
+      fullPath: '/presence-hub'
+      preLoaderRoute: typeof PresenceHubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/playground': {
       id: '/playground'
       path: '/playground'
@@ -2033,6 +2144,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/meetings': {
+      id: '/meetings'
+      path: '/meetings'
+      fullPath: '/meetings'
+      preLoaderRoute: typeof MeetingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mcp': {
       id: '/mcp'
       path: '/mcp'
@@ -2040,11 +2158,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lily': {
+      id: '/lily'
+      path: '/lily'
+      fullPath: '/lily'
+      preLoaderRoute: typeof LilyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kindle': {
+      id: '/kindle'
+      path: '/kindle'
+      fullPath: '/kindle'
+      preLoaderRoute: typeof KindleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/jobs': {
       id: '/jobs'
       path: '/jobs'
       fullPath: '/jobs'
       preLoaderRoute: typeof JobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/it-ops': {
+      id: '/it-ops'
+      path: '/it-ops'
+      fullPath: '/it-ops'
+      preLoaderRoute: typeof ItOpsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/hermes-world': {
@@ -2080,6 +2219,13 @@ declare module '@tanstack/react-router' {
       path: '/conductor'
       fullPath: '/conductor'
       preLoaderRoute: typeof ConductorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/barry': {
+      id: '/barry'
+      path: '/barry'
+      fullPath: '/barry'
+      preLoaderRoute: typeof BarryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agora': {
@@ -2761,6 +2907,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProfilesActivateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ops/presence': {
+      id: '/api/ops/presence'
+      path: '/api/ops/presence'
+      fullPath: '/api/ops/presence'
+      preLoaderRoute: typeof ApiOpsPresenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ops/meetings': {
+      id: '/api/ops/meetings'
+      path: '/api/ops/meetings'
+      fullPath: '/api/ops/meetings'
+      preLoaderRoute: typeof ApiOpsMeetingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/oauth/poll-token': {
       id: '/api/oauth/poll-token'
       path: '/api/oauth/poll-token'
@@ -3202,16 +3362,22 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   AgoraRoute: AgoraRoute,
+  BarryRoute: BarryRoute,
   ConductorRoute: ConductorRoute,
   DashboardRoute: DashboardRoute,
   EarlyAccessRoute: EarlyAccessRoute,
   FilesRoute: FilesRoute,
   HermesWorldRoute: HermesWorldRoute,
+  ItOpsRoute: ItOpsRoute,
   JobsRoute: JobsRoute,
+  KindleRoute: KindleRoute,
+  LilyRoute: LilyRoute,
   McpRoute: McpRoute,
+  MeetingsRoute: MeetingsRoute,
   MemoryRoute: MemoryRoute,
   OperationsRoute: OperationsRoute,
   PlaygroundRoute: PlaygroundRoute,
+  PresenceHubRoute: PresenceHubRoute,
   ProfilesRoute: ProfilesRoute,
   ReserveRoute: ReserveRouteWithChildren,
   SettingsRoute: SettingsRouteWithChildren,
@@ -3308,6 +3474,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiModelInfoRoute: ApiModelInfoRoute,
   ApiOauthDeviceCodeRoute: ApiOauthDeviceCodeRoute,
   ApiOauthPollTokenRoute: ApiOauthPollTokenRoute,
+  ApiOpsMeetingsRoute: ApiOpsMeetingsRoute,
+  ApiOpsPresenceRoute: ApiOpsPresenceRoute,
   ApiProfilesActivateRoute: ApiProfilesActivateRoute,
   ApiProfilesCreateRoute: ApiProfilesCreateRoute,
   ApiProfilesDeleteRoute: ApiProfilesDeleteRoute,

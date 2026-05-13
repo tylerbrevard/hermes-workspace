@@ -42,6 +42,7 @@ import { useMobileKeyboard } from '@/hooks/use-mobile-keyboard'
 import { SystemMetricsFooter } from '@/components/system-metrics-footer'
 import { CommandPalette } from '@/components/command-palette'
 import { useSettings } from '@/hooks/use-settings'
+import { apiPath } from '@/lib/base-path'
 // ActivityTicker moved to dashboard-only (too noisy for global header)
 
 const TerminalWorkspace = lazy(() =>
@@ -143,7 +144,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       }
 
       try {
-        const res = await fetch('/api/connection-status', { cache: 'no-store' })
+        const res = await fetch(apiPath('/api/connection-status'), { cache: 'no-store' })
         if (!res.ok || cancelled) return
         const data = (await res.json()) as {
           ok?: boolean

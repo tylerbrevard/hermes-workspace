@@ -999,7 +999,7 @@ type ClaudeConfigData = {
 const CLAUDE_API =
   process.env.HERMES_API_URL ||
   process.env.CLAUDE_API_URL ||
-  'http://127.0.0.1:8642'
+  'http://127.0.0.1:18789'
 
 type AvailableModelsResponse = {
   provider: string
@@ -1341,7 +1341,7 @@ function ClaudeConfigSection({
         icon={Settings02Icon}
       >
         <p className="text-sm" style={{ color: 'var(--theme-muted)' }}>
-          Make sure Hermes Agent is running on localhost:8642
+          Make sure Hermes Agent is running on localhost:18789
         </p>
       </SettingsSection>
     )
@@ -2879,7 +2879,7 @@ function ConnectionSection() {
           className={inputClass}
           value={gatewayInput}
           onChange={(e) => setGatewayInput(e.target.value)}
-          placeholder="http://100.x.y.z:8642"
+          placeholder="http://100.x.y.z:18789"
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"
@@ -2927,7 +2927,7 @@ function ConnectionSection() {
 
       <div className="mt-3 rounded-lg border border-primary-200 bg-primary-100/50 p-3 text-xs text-primary-600">
         <strong className="font-semibold">Tailscale / remote tip:</strong> Set
-        the gateway to its Tailscale IP (e.g. <code>http://100.x.y.z:8642</code>
+        the gateway to its Tailscale IP (e.g. <code>http://100.x.y.z:18789</code>
         ) and ensure the gateway listens on <code>0.0.0.0</code> (set{' '}
         <code>API_SERVER_HOST=0.0.0.0</code> in the agent-side <code>.env</code>
         ). No workspace restart needed — capabilities reprobe on save.

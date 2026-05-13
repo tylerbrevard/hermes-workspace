@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AuthStatus } from '@/lib/claude-auth'
 import { writeTextToClipboard } from '@/lib/clipboard'
 import { fetchClaudeAuthStatus } from '@/lib/claude-auth'
+import { apiPath } from '@/lib/base-path'
 
 const POLL_INTERVAL_MS = 2_000
 const FAILURE_REVEAL_MS = 5_000
@@ -42,7 +43,7 @@ function getSetupSteps(
     {
       title: 'Start the gateway',
       command: 'hermes gateway run',
-      note: 'This starts the HTTP API on :8642 for the workspace',
+      note: 'On this Mac, launchd keeps Hermes Agent available on :18789 for the workspace',
     },
   ]
 }
@@ -100,7 +101,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
       if (autoStartFired || isDone.current) return
       autoStartFired = true
       try {
-        const res = await fetch('/api/start-claude', {
+        const res = await fetch(apiPath('/api/start-claude'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         })
@@ -171,7 +172,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
     setServerError(null)
     setServerLog(['Looking for hermes-agent...'])
     try {
-      const res = await fetch('/api/start-claude', {
+      const res = await fetch(apiPath('/api/start-claude'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
@@ -363,7 +364,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
                   at any OpenAI-compatible backend:
                 </p>
                 <pre className="mt-2 overflow-x-auto font-mono text-xs text-white/60">
-                  HERMES_API_URL=http://your-server:8642 pnpm dev
+                  HERMES_API_URL=http://your-server:18789 pnpm dev
                 </pre>
               </div>
             </div>

@@ -880,7 +880,50 @@ function ChatSidebarComponent({
     },
   ]
 
-  const systemItems: Array<NavItemDef> = []
+  const systemItems: Array<NavItemDef> = [
+    {
+      kind: 'link',
+      to: '/meetings',
+      icon: Clock01Icon,
+      label: 'Meetings',
+      active: pathname === '/meetings',
+    },
+    {
+      kind: 'link',
+      to: '/presence-hub',
+      icon: UserMultipleIcon,
+      label: 'Presence',
+      active: pathname === '/presence-hub',
+    },
+    {
+      kind: 'link',
+      to: '/it-ops',
+      icon: Building01Icon,
+      label: 'IT Ops',
+      active: pathname === '/it-ops',
+    },
+    {
+      kind: 'link',
+      to: '/barry',
+      icon: Chat01Icon,
+      label: 'Barry',
+      active: pathname === '/barry',
+    },
+    {
+      kind: 'link',
+      to: '/lily',
+      icon: MessageMultiple01Icon,
+      label: 'Lily',
+      active: pathname === '/lily',
+    },
+    {
+      kind: 'link',
+      to: '/kindle',
+      icon: File01Icon,
+      label: 'Kindle',
+      active: pathname === '/kindle',
+    },
+  ]
 
   return (
     <motion.aside
@@ -1110,7 +1153,11 @@ function ChatSidebarComponent({
             onSelectSession={onSelectSession}
           />
 
-          {/* System */}
+          <SectionLabel
+            label="Legacy"
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+          />
           <CollapsibleSection
             expanded={true}
             items={systemItems}

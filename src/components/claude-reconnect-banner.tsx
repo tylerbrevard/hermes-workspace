@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { apiPath } from '@/lib/base-path'
 
 const POLL_INTERVAL_MS = 10_000
 const FLASH_DURATION_MS = 1_800
@@ -13,7 +14,7 @@ async function probeClaudeHealth(): Promise<boolean> {
   // Use the portable-aware connection status endpoint first,
   // which works with both Hermes Agent and OpenAI-compatible backends.
   try {
-    const response = await fetch('/api/connection-status', {
+    const response = await fetch(apiPath('/api/connection-status'), {
       cache: 'no-store',
     })
     if (response.ok) return true
@@ -22,7 +23,7 @@ async function probeClaudeHealth(): Promise<boolean> {
   }
   // Fallback to direct health proxy
   try {
-    const response = await fetch('/api/claude-proxy/health', {
+    const response = await fetch(apiPath('/api/claude-proxy/health'), {
       cache: 'no-store',
     })
     return response.ok
@@ -117,7 +118,7 @@ export function ClaudeReconnectBanner({
               Date.now() - autoRestartTriedAtRef.current
             if (sinceLastTry > AUTO_RESTART_COOLDOWN_MS) {
               autoRestartTriedAtRef.current = Date.now()
-              void fetch('/api/start-claude', {
+              void fetch(apiPath('/api/start-claude'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
               })
@@ -197,7 +198,7 @@ export function ClaudeReconnectBanner({
     setMessage(null)
 
     try {
-      const response = await fetch('/api/start-agent', {
+      const response = await fetch(apiPath('/api/start-agent'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
