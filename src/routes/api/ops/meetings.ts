@@ -1,8 +1,25 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { execFileSync } from 'node:child_process'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { fetchClawosJson } from '../../../server/clawos-internal'
+import {
+  bulkMarkReviewed,
+  createActionItem,
+  deleteActionItem,
+  deleteDecision,
+  deleteIssue,
+  getMeetingBrief,
+  getMeetingById,
+  getMeetingStats,
+  getTodayMeetings,
+  getWeekHeatmap,
+  getWeeklySparkline,
+  listMeetings,
+  setMeetingReviewed,
+  updateActionItem,
+  updateDecision,
+  updateIssue,
+} from '../../../server/meetings-data'
 
 type Meeting = {
   id: string
@@ -74,113 +91,6 @@ type HeatmapDay = {
   intensity: 0 | 1 | 2 | 3 | 4
 }
 
-const MEETINGS_DB_PATH = '/Users/tylerlyon/clawos/data/.meetings.db'
-
-function sqlEscape(value: string) {
-  return value.replace(/'/g, "''")
-}
-
-function queryDb<T>(sql: string): T[] {
-  const output = execFileSync('sqlite3', ['-json', MEETINGS_DB_PATH, sql], {
-    encoding: 'utf8',
-  }).trim()
-  if (!output) return []
-  return JSON.parse(output) as T[]
-}
-
-function getMeetingDetailFromDb(meetingId: string): Meeting | null {
-  const escapedId = sqlEscape(meetingId)
-  const meeting = queryDb<{
-    id: string
-    title: string
-    type: string | null
-    date: string
-    duration: number | null
-    participants: string | null
-    content: string | null
-    join_url: string | null
-    has_transcription: number | null
-    transcription_source: string | null
-    reviewed: number | null
-  }>(
-    `SELECT id, title, type, date, duration, participants, content, join_url, has_transcription, transcription_source, reviewed FROM meetings WHERE id = '${escapedId}' LIMIT 1;`,
-  )[0]
-
-  if (!meeting) return null
-
-  const actionItems = queryDb<{
-    id: string
-    text: string
-    assignee: string | null
-    due_date: string | null
-    status: string | null
-    priority: string | null
-  }>(
-    `SELECT id, text, assignee, due_date, status, priority FROM action_items WHERE meeting_id = '${escapedId}' AND deleted_at IS NULL ORDER BY created_date ASC;`,
-  )
-
-  const issues = queryDb<{
-    id: string
-    title: string
-    description: string | null
-    status: string | null
-    priority: string | null
-    assignee: string | null
-    stagnant_days: number | null
-  }>(
-    `SELECT id, title, description, status, priority, assignee, stagnant_days FROM issues WHERE meeting_id = '${escapedId}' ORDER BY first_mentioned ASC;`,
-  )
-
-  const decisions = queryDb<{
-    id: string
-    text: string
-    decision_maker: string | null
-    impact: string | null
-    date: string | null
-  }>(
-    `SELECT id, text, decision_maker, impact, date FROM decisions WHERE meeting_id = '${escapedId}' ORDER BY date ASC;`,
-  )
-
-  return {
-    id: meeting.id,
-    title: meeting.title,
-    type: meeting.type || undefined,
-    date: meeting.date,
-    duration: meeting.duration || undefined,
-    participants: meeting.participants ? (JSON.parse(meeting.participants) as Meeting['participants']) : [],
-    content: meeting.content || undefined,
-    joinUrl: meeting.join_url,
-    hasTranscription: Boolean(meeting.has_transcription),
-    transcriptionSource: meeting.transcription_source,
-    reviewed: Boolean(meeting.reviewed),
-    actionItems: actionItems.map((item) => ({
-      id: item.id,
-      text: item.text,
-      assignee: item.assignee || undefined,
-      dueDate: item.due_date || undefined,
-      status: item.status || undefined,
-      priority: item.priority || undefined,
-    })),
-    issues: issues.map((issue) => ({
-      id: issue.id,
-      title: issue.title,
-      description: issue.description || undefined,
-      status: issue.status || undefined,
-      priority: issue.priority || undefined,
-      assignee: issue.assignee || undefined,
-      stagnantDays:
-        typeof issue.stagnant_days === 'number' ? issue.stagnant_days : undefined,
-    })),
-    decisions: decisions.map((decision) => ({
-      id: decision.id,
-      text: decision.text,
-      decisionMaker: decision.decision_maker || undefined,
-      impact: decision.impact || undefined,
-      date: decision.date || undefined,
-    })),
-  }
-}
-
 export const Route = createFileRoute('/api/ops/meetings')({
   server: {
     handlers: {
@@ -203,44 +113,37 @@ export const Route = createFileRoute('/api/ops/meetings')({
             }
 
             const [meetingPayload, briefPayload] = await Promise.all([
-              Promise.resolve(getMeetingDetailFromDb(selectedMeetingId)),
-              fetchClawosJson<MeetingBrief>('/api/meetings/brief', {
-                searchParams: { meetingId: selectedMeetingId },
-              }),
+              Promise.resolve({ meeting: getMeetingById(selectedMeetingId) }),
+              Promise.resolve(getMeetingBrief(selectedMeetingId)),
             ])
 
-            if (!meetingPayload) {
+            if (!meetingPayload.meeting || !briefPayload) {
               return json({ error: 'Meeting not found' }, { status: 404 })
             }
 
             return json({
               selectedMeetingId,
-              selectedMeeting: meetingPayload,
+              selectedMeeting: meetingPayload.meeting,
               brief: briefPayload,
               refreshedAt: new Date().toISOString(),
             })
           }
 
           const [meetingsPayload, todayPayload, heatmapPayload] = await Promise.all([
-            fetchClawosJson<{
-              meetings: Meeting[]
-              analytics?: Record<string, unknown>
-              sparkline?: number[]
-              graphSource?: string
-              graphWarning?: string
-              dataWarning?: string
-              total?: number
-            }>('/api/meetings', {
-              searchParams: {
+            Promise.resolve({
+              ...listMeetings({
                 search,
-                limit,
-                force_refresh: forceRefresh,
-              },
+                limit: Number.parseInt(limit, 10) || 50,
+              }),
+              analytics: getMeetingStats(),
+              sparkline: getWeeklySparkline(),
+              graphSource: 'sqlite',
+              dataWarning: forceRefresh
+                ? 'Force refresh is still handled by the Graph sync path; showing current SQLite data.'
+                : undefined,
             }),
-            fetchClawosJson<{ meetings: Meeting[] }>('/api/meetings/today', {
-              searchParams: { days: 5, force_refresh: forceRefresh },
-            }),
-            fetchClawosJson<{ days: HeatmapDay[] }>('/api/meetings/week-heatmap'),
+            Promise.resolve({ meetings: getTodayMeetings(5) }),
+            Promise.resolve({ days: getWeekHeatmap() }),
           ])
 
           const selectedId =
@@ -291,39 +194,19 @@ export const Route = createFileRoute('/api/ops/meetings')({
             const meetingId =
               typeof body.meetingId === 'string' ? body.meetingId : ''
             const reviewed = body.reviewed !== false
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'set_reviewed',
-                meetingId,
-                reviewed,
-              }),
-            })
-            return json(result)
+            return json(setMeetingReviewed(meetingId, reviewed))
           }
 
           if (kind === 'bulk-review') {
             const meetingIds = Array.isArray(body.meetingIds)
               ? body.meetingIds.filter((value) => typeof value === 'string')
               : []
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'bulk_review',
-                meetingIds,
-              }),
-            })
-            return json(result)
+            return json(bulkMarkReviewed(meetingIds))
           }
 
           if (kind === 'create-action-item') {
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'create_action_item',
+            return json(
+              createActionItem({
                 meetingId:
                   typeof body.meetingId === 'string' ? body.meetingId : '',
                 text: typeof body.text === 'string' ? body.text : '',
@@ -334,33 +217,19 @@ export const Route = createFileRoute('/api/ops/meetings')({
                 priority:
                   typeof body.priority === 'string' ? body.priority : 'medium',
               }),
-            })
-            return json(result)
+            )
           }
 
           if (kind === 'update-action-item') {
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'updateActionItem',
-                actionItem: body.actionItem,
-              }),
-            })
-            return json(result)
+            return json(updateActionItem(body.actionItem))
           }
 
           if (kind === 'delete-action-item') {
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'deleteActionItem',
-                actionItemId:
-                  typeof body.actionItemId === 'string' ? body.actionItemId : '',
-              }),
-            })
-            return json(result)
+            return json(
+              deleteActionItem(
+                typeof body.actionItemId === 'string' ? body.actionItemId : '',
+              ),
+            )
           }
 
           if (kind === 'send-action-items-to-todo') {
@@ -374,52 +243,25 @@ export const Route = createFileRoute('/api/ops/meetings')({
           }
 
           if (kind === 'update-issue') {
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'updateIssue',
-                issue: body.issue,
-              }),
-            })
-            return json(result)
+            return json(updateIssue(body.issue))
           }
 
           if (kind === 'delete-issue') {
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'deleteIssue',
-                issueId: typeof body.issueId === 'string' ? body.issueId : '',
-              }),
-            })
-            return json(result)
+            return json(
+              deleteIssue(typeof body.issueId === 'string' ? body.issueId : ''),
+            )
           }
 
           if (kind === 'delete-decision') {
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'deleteDecision',
-                decisionId:
-                  typeof body.decisionId === 'string' ? body.decisionId : '',
-              }),
-            })
-            return json(result)
+            return json(
+              deleteDecision(
+                typeof body.decisionId === 'string' ? body.decisionId : '',
+              ),
+            )
           }
 
           if (kind === 'update-decision') {
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'updateDecision',
-                decision: body.decision,
-              }),
-            })
-            return json(result)
+            return json(updateDecision(body.decision))
           }
 
           if (kind === 'send-issues-to-todo' || kind === 'send-decisions-to-todo') {

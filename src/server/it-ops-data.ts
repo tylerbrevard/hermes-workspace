@@ -1,14 +1,11 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { listMeetings } from './meetings-data'
 
 const HOME = process.env.HOME || '/Users/tylerlyon'
 const HERMES_WORKSPACE =
   process.env.HERMES_WORKSPACE || path.join(HOME, '.hermes', 'workspace')
-const MEETINGS_DB_PATH =
-  process.env.HERMES_MEETINGS_DB ||
-  process.env.CLAWOS_MEETINGS_DB ||
-  '/Users/tylerlyon/clawos/data/.meetings.db'
 const IT_OPS_DB_PATH =
   process.env.HERMES_IT_OPS_DB || path.join(HERMES_WORKSPACE, '.it-ops.db')
 
@@ -57,21 +54,23 @@ type MeetingRow = {
   id: string
   title: string
   date: string
-  participants: string | null
-  content: string | null
+  participants?: Array<string | { displayName?: string; email?: string }>
+  content?: string | null
+  actionItems?: ActionItemView[]
+  issues?: IssueView[]
+  decisions?: DecisionView[]
 }
 
-type ActionItemRow = {
+type ActionItemView = {
   id: string
-  meeting_id: string
   text: string
   assignee: string | null
   status: string | null
   priority: string | null
+  dueDate?: string | null
 }
 
-type IssueRow = {
-  meeting_id: string
+type IssueView = {
   title: string
   description: string | null
   status: string | null
@@ -79,10 +78,9 @@ type IssueRow = {
   assignee: string | null
 }
 
-type DecisionRow = {
-  meeting_id: string
+type DecisionView = {
   text: string
-  decision_maker: string | null
+  decisionMaker?: string | null
   impact: string | null
 }
 
@@ -110,8 +108,11 @@ function execDb(dbPath: string, sql: string) {
   execFileSync('sqlite3', [dbPath, sql], { encoding: 'utf8' })
 }
 
-function parseParticipants(raw: string | null): Array<string | { displayName?: string; email?: string }> {
+function parseParticipants(
+  raw?: string | null | Array<string | { displayName?: string; email?: string }>,
+): Array<string | { displayName?: string; email?: string }> {
   if (!raw) return []
+  if (Array.isArray(raw)) return raw
   try {
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed : []
@@ -240,37 +241,18 @@ function getEscalationCountSince(sinceISO: string) {
 }
 
 function getItOpsOverview() {
-  const meetings = queryDb<MeetingRow>(
-    MEETINGS_DB_PATH,
-    `SELECT id, title, date, participants, content FROM meetings WHERE title LIKE '%IT Ops Standup%' ORDER BY date ASC LIMIT 500;`,
-  )
+  const meetings = listMeetings({
+    search: 'IT Ops Standup',
+    limit: 500,
+  }).meetings as MeetingRow[]
 
-  const meetingIds = meetings.map((meeting) => `'${sqlEscape(meeting.id)}'`)
-  const idFilter = meetingIds.length ? `IN (${meetingIds.join(',')})` : "IN ('')"
-
-  const actionRows = queryDb<ActionItemRow>(
-    MEETINGS_DB_PATH,
-    `SELECT id, meeting_id, text, assignee, status, priority FROM action_items WHERE meeting_id ${idFilter} AND deleted_at IS NULL ORDER BY created_date ASC;`,
-  )
-  const issueRows = queryDb<IssueRow>(
-    MEETINGS_DB_PATH,
-    `SELECT meeting_id, title, description, status, priority, assignee FROM issues WHERE meeting_id ${idFilter} ORDER BY first_mentioned ASC;`,
-  )
-  const decisionRows = queryDb<DecisionRow>(
-    MEETINGS_DB_PATH,
-    `SELECT meeting_id, text, decision_maker, impact FROM decisions WHERE meeting_id ${idFilter} ORDER BY date ASC;`,
-  )
-
-  const actionsByMeeting = new Map<string, ActionItemRow[]>()
-  const issuesByMeeting = new Map<string, IssueRow[]>()
-  const decisionsByMeeting = new Map<string, DecisionRow[]>()
-  for (const item of actionRows) actionsByMeeting.set(item.meeting_id, [...(actionsByMeeting.get(item.meeting_id) || []), item])
-  for (const item of issueRows) issuesByMeeting.set(item.meeting_id, [...(issuesByMeeting.get(item.meeting_id) || []), item])
-  for (const item of decisionRows) decisionsByMeeting.set(item.meeting_id, [...(decisionsByMeeting.get(item.meeting_id) || []), item])
-
-  const hydratedStandups = meetings.filter(
-    (meeting) => meeting.date >= '2026-01-15' && parseParticipants(meeting.participants).length > 0,
-  )
+  const hydratedStandups = [...meetings]
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .filter(
+      (meeting) =>
+        meeting.date >= '2026-01-15' &&
+        parseParticipants(meeting.participants).length > 0,
+    )
   const total = hydratedStandups.length
   const attendanceMap: Record<string, { present: string[]; absent: string[] }> = {}
   const personStats: Record<string, { present: number; absent: number }> = {}
@@ -296,16 +278,17 @@ function getItOpsOverview() {
     absenceRate: total > 0 ? Math.round(((personStats[name]?.absent ?? 0) / total) * 100) : 0,
   })).sort((a, b) => b.absenceRate - a.absenceRate)
 
-  const actionItems = actionRows.map((item, index) => {
+  const actionItems = hydratedStandups.flatMap((meeting) =>
+    (meeting.actionItems || []).map((item, index) => {
     const task = item.text || ''
     const assignee = item.assignee || (() => {
       const colonIndex = task.indexOf(':')
       return colonIndex > 0 ? task.slice(0, colonIndex).trim() : 'Unassigned'
     })()
     return {
-      id: item.id || `${item.meeting_id}-${index}`,
-      meetingId: item.meeting_id,
-      meetingDate: meetings.find((meeting) => meeting.id === item.meeting_id)?.date.slice(0, 10) || '',
+      id: item.id || `${meeting.id}-${index}`,
+      meetingId: meeting.id,
+      meetingDate: meeting.date.slice(0, 10),
       assignee,
       task,
       isDirectReport: DIRECT_REPORTS.some((name) => assignee.includes(name.split(' ')[0])),
@@ -313,15 +296,16 @@ function getItOpsOverview() {
       status: item.status || undefined,
       priority: item.priority || undefined,
     }
-  })
+    }),
+  )
 
   const recurringIssues = RECURRING_THEMES.map((theme) => {
-    const appearances = meetings.filter((meeting) => {
+    const appearances = hydratedStandups.filter((meeting) => {
       const text = JSON.stringify({
         meeting,
-        issues: issuesByMeeting.get(meeting.id) || [],
-        decisions: decisionsByMeeting.get(meeting.id) || [],
-        actions: actionsByMeeting.get(meeting.id) || [],
+        issues: meeting.issues || [],
+        decisions: meeting.decisions || [],
+        actions: meeting.actionItems || [],
       }).toLowerCase()
       return theme.keywords.some((keyword) => text.includes(keyword.toLowerCase()))
     })
@@ -334,15 +318,15 @@ function getItOpsOverview() {
     }
   }).filter((theme) => theme.count >= 2).sort((a, b) => b.count - a.count)
 
-  const recentMeetings = meetings.slice(-10).reverse().map((meeting) => ({
+  const recentMeetings = [...hydratedStandups].slice(-10).reverse().map((meeting) => ({
     id: meeting.id,
     date: meeting.date.slice(0, 10),
     title: meeting.title,
     attendees: parseParticipants(meeting.participants).map(participantName).filter(Boolean),
     absentDirectReports: attendanceMap[meeting.date.slice(0, 10)]?.absent || [],
-    actionItems: (actionsByMeeting.get(meeting.id) || []).map((item) => item.text),
-    issues: (issuesByMeeting.get(meeting.id) || []).map((issue) => issue.title || issue.description || ''),
-    decisions: (decisionsByMeeting.get(meeting.id) || []).map((decision) => decision.text),
+    actionItems: (meeting.actionItems || []).map((item) => item.text),
+    issues: (meeting.issues || []).map((issue) => issue.title || issue.description || ''),
+    decisions: (meeting.decisions || []).map((decision) => decision.text),
   }))
 
   return {
