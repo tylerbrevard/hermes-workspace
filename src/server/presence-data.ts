@@ -223,7 +223,7 @@ export async function getTeamsPresence(): Promise<TeamsPresence> {
         presence.displayName || DISPLAY_NAMES[availability] || availability,
       color: presence.color || PRESENCE_COLORS[availability] || 'gray',
       timestamp: presence.timestamp || new Date().toISOString(),
-      source: presence.source || 'clawos',
+      source: presence.source || 'legacy-presence',
     }
   } catch {
     // Fall back to the direct Graph bridge for standalone Workspace operation.

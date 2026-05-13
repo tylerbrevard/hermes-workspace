@@ -2,11 +2,20 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getItOpsData } from './it-ops-data'
+import { getTodayMeetings as getWorkspaceTodayMeetings } from './meetings-data'
+import { getTeamsPresence } from './presence-data'
+import { readUpdateStatus } from './update-system'
 
 const HOME = process.env.HOME || '/Users/tylerlyon'
 const HERMES_WORKSPACE =
   process.env.HERMES_WORKSPACE || join(HOME, '.hermes', 'workspace')
 const HERMES_DB_DIR = join(HERMES_WORKSPACE, 'runtime', 'db', 'workspace')
+const GRAPH_WRAPPER = join(
+  HERMES_WORKSPACE,
+  'scripts',
+  'run_hermes_venv_python.sh',
+)
+const GRAPH_BRIDGE = join(HERMES_WORKSPACE, 'scripts', 'graph_bridge.py')
 const MEETINGS_DB =
   process.env.HERMES_MEETINGS_DB ||
   join(HERMES_DB_DIR, '.meetings.db')
@@ -20,7 +29,7 @@ const CONNECTWISE_CONFIG_CANDIDATES = [
   process.env.OPENCLAW_CONNECTWISE_CONFIG,
   join(HOME, '.config', 'hermes', 'tokens', 'connectwise_config.json'),
   join(HOME, '.config', 'openclaw', 'tokens', 'connectwise_config.json'),
-].filter(Boolean) as string[]
+].filter(Boolean) as Array<string>
 type ConnectWiseConfig = {
   baseUrl: string
   companyId: string
@@ -37,54 +46,60 @@ function readJsonFile<T>(path: string, fallback: T): T {
   }
 }
 
-function queryDb<T>(dbPath: string, sql: string): T[] {
+function queryDb<T>(dbPath: string, sql: string): Array<T> {
   if (!existsSync(dbPath)) return []
   const output = execFileSync('sqlite3', ['-json', dbPath, sql], {
     encoding: 'utf8',
     maxBuffer: 8 * 1024 * 1024,
   }).trim()
-  return output ? (JSON.parse(output) as T[]) : []
+  return output ? (JSON.parse(output) as Array<T>) : []
 }
 
-function todayBounds() {
-  const now = new Date()
-  const start = new Date(now)
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(now)
-  end.setHours(23, 59, 59, 999)
-  return { start: start.toISOString(), end: end.toISOString() }
+function graphJson<T>(method: string, endpoint: string): T | null {
+  try {
+    const output = execFileSync(
+      GRAPH_WRAPPER,
+      [GRAPH_BRIDGE, 'json', method, endpoint],
+      {
+        encoding: 'utf8',
+        timeout: 45_000,
+        maxBuffer: 16 * 1024 * 1024,
+      },
+    ).trim()
+    return output ? (JSON.parse(output) as T) : null
+  } catch {
+    return null
+  }
 }
 
 function getTodayMeetings() {
-  const { start, end } = todayBounds()
-  const rows = queryDb<{ id: string; title: string; date: string }>(
-    MEETINGS_DB,
-    `SELECT id, title, date FROM meetings WHERE date >= '${start}' AND date <= '${end}' ORDER BY date ASC;`,
-  )
-  const now = Date.now()
-  return rows.map((meeting) => ({
+  return getWorkspaceTodayMeetings(1).map((meeting) => ({
     id: meeting.id,
     title: meeting.title,
     subject: meeting.title,
     date: meeting.date,
     start: meeting.date,
-    isPast: new Date(meeting.date).getTime() < now,
+    duration: meeting.duration,
+    joinUrl: meeting.joinUrl,
+    participants: meeting.participants,
+    isPast: Boolean((meeting as { isPast?: boolean }).isPast),
   }))
 }
 
-function getPlannerSummary() {
-  const cache = readJsonFile<{ tasks?: any[]; plans?: any[]; groups?: any[] }>(
-    PLANNER_CACHE,
-    {},
-  )
-  const tasks = Array.isArray(cache.tasks) ? cache.tasks : []
+function buildPlannerSummary(
+  tasks: Array<any>,
+  cache: { plans?: Array<any>; groups?: Array<any> },
+  available: boolean,
+  source: string,
+) {
   const now = Date.now()
   const weekEnd = new Date()
   weekEnd.setDate(weekEnd.getDate() + 7)
   const isOpen = (task: any) => (task?.percentComplete ?? 0) < 100
   const dueDate = (task: any) => task?.dueDateTime || task?.dueDate || null
   return {
-    available: existsSync(PLANNER_CACHE),
+    available,
+    source,
     taskCount: tasks.length,
     overdueCount: tasks.filter((task) => {
       const due = dueDate(task)
@@ -96,10 +111,37 @@ function getPlannerSummary() {
       const time = new Date(due).getTime()
       return time >= now && time <= weekEnd.getTime()
     }).length,
-    completedCount: tasks.filter((task) => (task?.percentComplete ?? 0) >= 100).length,
+    completedCount: tasks.filter((task) => (task?.percentComplete ?? 0) >= 100)
+      .length,
     groupsCount: Array.isArray(cache.groups) ? cache.groups.length : 0,
     plansCount: Array.isArray(cache.plans) ? cache.plans.length : 0,
   }
+}
+
+function getPlannerSummary() {
+  const cache = readJsonFile<{
+    tasks?: Array<any>
+    plans?: Array<any>
+    groups?: Array<any>
+  }>(
+    PLANNER_CACHE,
+    {},
+  )
+  const tasks = Array.isArray(cache.tasks) ? cache.tasks : []
+  if (tasks.length > 0) {
+    return buildPlannerSummary(tasks, cache, true, 'cache')
+  }
+  const live = graphJson<{ value?: Array<any>; '@odata.count'?: number }>(
+    'GET',
+    '/me/planner/tasks?$top=200&$count=true',
+  )
+  const liveTasks = Array.isArray(live?.value) ? live.value : []
+  return buildPlannerSummary(
+    liveTasks,
+    cache,
+    liveTasks.length > 0 || existsSync(PLANNER_CACHE),
+    liveTasks.length > 0 ? 'graph' : 'cache',
+  )
 }
 
 function getPresenceSummary() {
@@ -115,20 +157,58 @@ function getPresenceSummary() {
   }
 }
 
+async function getTeamsPresenceSummary() {
+  try {
+    const presence = await getTeamsPresence()
+    return {
+      availability: presence.availability || 'PresenceUnknown',
+      activity: presence.activity || presence.availability || '',
+      displayName: presence.displayName || presence.availability || 'Unknown',
+      color: presence.color || 'gray',
+      stale: Boolean(presence.stale),
+      source:
+        presence.source ||
+        (presence.inferred || presence.fallback ? 'inferred' : 'graph'),
+      error: presence.error || null,
+      timestamp: presence.timestamp || new Date().toISOString(),
+    }
+  } catch {
+    return getPresenceSummary()
+  }
+}
+
+function getWorkspaceUpdateSummary() {
+  try {
+    const status = readUpdateStatus()
+    const productWithUpdate = Object.values(status.products).find(
+      (product) => product.updateAvailable,
+    )
+    return {
+      hasUpdate: status.updateAvailable,
+      latestName: productWithUpdate?.latestHead?.slice(0, 7) || null,
+    }
+  } catch {
+    return {
+      hasUpdate: false,
+      latestName: null,
+    }
+  }
+}
+
 function getCostSummary() {
   const today = new Date().toISOString().slice(0, 10)
   const month = today.slice(0, 7)
-  const todayRow = queryDb<{ total: number }>(
+  const todayRow = queryDb<{ total: number | null }>(
     AZURE_COSTS_DB,
     `SELECT COALESCE(SUM(cost_usd), 0) as total FROM azure_costs WHERE date = '${today}';`,
-  )[0]
-  const monthRow = queryDb<{ total: number }>(
+  )[0] || { total: null }
+  const monthRow = queryDb<{ total: number | null }>(
     AZURE_COSTS_DB,
     `SELECT COALESCE(SUM(cost_usd), 0) as total FROM azure_costs WHERE substr(date, 1, 7) = '${month}';`,
-  )[0]
+  )[0] || { total: null }
   return {
-    today: typeof todayRow?.total === 'number' ? todayRow.total : null,
-    month: typeof monthRow?.total === 'number' ? monthRow.total : null,
+    today: typeof todayRow.total === 'number' ? todayRow.total : null,
+    month: typeof monthRow.total === 'number' ? monthRow.total : null,
   }
 }
 
@@ -166,8 +246,11 @@ function getCronHealth() {
   }
 }
 
-function getHealthSummary(cronHealth: ReturnType<typeof getCronHealth>, presence: ReturnType<typeof getPresenceSummary>) {
-  const issues: string[] = []
+function getHealthSummary(
+  cronHealth: ReturnType<typeof getCronHealth>,
+  presence: { stale?: boolean },
+) {
+  const issues: Array<string> = []
   if (cronHealth.failed > 0) issues.push(`${cronHealth.failed} cron job(s) failing`)
   if (presence.stale) issues.push('Presence state is stale')
   const percent = Math.max(0, 100 - issues.length * 15)
@@ -216,7 +299,7 @@ async function fetchConnectWiseTickets() {
     if (!response.ok) {
       return { recent: [], byPriority: [], error: `ConnectWise API ${response.status}` }
     }
-    const tickets = (await response.json()) as any[]
+    const tickets = (await response.json()) as Array<any>
     const byPriorityMap: Record<string, number> = {}
     for (const ticket of tickets) {
       const priority = ticket.priority?.name || 'Unlabeled'
@@ -245,15 +328,16 @@ async function fetchConnectWiseTickets() {
 }
 
 export async function getKindleData() {
-  const [itOps, cwTickets] = await Promise.all([
+  const [itOps, cwTickets, presence] = await Promise.all([
     getItOpsData(),
     fetchConnectWiseTickets(),
+    getTeamsPresenceSummary(),
   ])
   const meetings = getTodayMeetings()
   const planner = getPlannerSummary()
-  const presence = getPresenceSummary()
   const cronHealth = getCronHealth()
   const healthSummary = getHealthSummary(cronHealth, presence)
+  const updateSummary = getWorkspaceUpdateSummary()
   const nextMeeting =
     meetings
       .filter((meeting) => !meeting.isPast)
@@ -282,8 +366,8 @@ export async function getKindleData() {
         thisWeek: getWinsThisWeek(),
       },
       openclaw: {
-        hasUpdate: false,
-        latestName: null,
+        hasUpdate: updateSummary.hasUpdate,
+        latestName: updateSummary.latestName,
       },
     },
     executive: {
