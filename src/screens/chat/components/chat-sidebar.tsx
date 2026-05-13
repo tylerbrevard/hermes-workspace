@@ -925,9 +925,6 @@ function ChatSidebarComponent({
     },
   ]
 
-  const compatibilityItems: Array<NavItemDef> = [
-  ]
-
   return (
     <motion.aside
       ref={(node) => {
@@ -1169,22 +1166,6 @@ function ChatSidebarComponent({
             onSelectSession={onSelectSession}
           />
 
-          {compatibilityItems.length > 0 ? (
-            <>
-              <SectionLabel
-                label="Compat"
-                isCollapsed={isVisuallyCollapsed}
-                transition={transition}
-              />
-              <CollapsibleSection
-                expanded={true}
-                items={compatibilityItems}
-                isCollapsed={isVisuallyCollapsed}
-                transition={transition}
-                onSelectSession={onSelectSession}
-              />
-            </>
-          ) : null}
         </div>
 
         {/* Sessions list */}
