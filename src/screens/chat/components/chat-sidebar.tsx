@@ -880,7 +880,7 @@ function ChatSidebarComponent({
     },
   ]
 
-  const systemItems: Array<NavItemDef> = [
+  const opsItems: Array<NavItemDef> = [
     {
       kind: 'link',
       to: '/meetings',
@@ -909,6 +909,9 @@ function ChatSidebarComponent({
       label: 'Barry',
       active: pathname === '/barry',
     },
+  ]
+
+  const compatibilityItems: Array<NavItemDef> = [
     {
       kind: 'link',
       to: '/lily',
@@ -1154,13 +1157,26 @@ function ChatSidebarComponent({
           />
 
           <SectionLabel
-            label="Legacy"
+            label="Ops"
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
           />
           <CollapsibleSection
             expanded={true}
-            items={systemItems}
+            items={opsItems}
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+            onSelectSession={onSelectSession}
+          />
+
+          <SectionLabel
+            label="Compat"
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+          />
+          <CollapsibleSection
+            expanded={true}
+            items={compatibilityItems}
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             onSelectSession={onSelectSession}

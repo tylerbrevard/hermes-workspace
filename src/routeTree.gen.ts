@@ -134,6 +134,8 @@ import { Route as ApiProfilesCreateRouteImport } from './routes/api/profiles/cre
 import { Route as ApiProfilesActivateRouteImport } from './routes/api/profiles/activate'
 import { Route as ApiOpsPresenceRouteImport } from './routes/api/ops/presence'
 import { Route as ApiOpsMeetingsRouteImport } from './routes/api/ops/meetings'
+import { Route as ApiOpsItOpsRouteImport } from './routes/api/ops/it-ops'
+import { Route as ApiOpsBarryRouteImport } from './routes/api/ops/barry'
 import { Route as ApiOauthPollTokenRouteImport } from './routes/api/oauth.poll-token'
 import { Route as ApiOauthDeviceCodeRouteImport } from './routes/api/oauth.device-code'
 import { Route as ApiModelInfoRouteImport } from './routes/api/model/info'
@@ -793,6 +795,16 @@ const ApiOpsMeetingsRoute = ApiOpsMeetingsRouteImport.update({
   path: '/api/ops/meetings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOpsItOpsRoute = ApiOpsItOpsRouteImport.update({
+  id: '/api/ops/it-ops',
+  path: '/api/ops/it-ops',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpsBarryRoute = ApiOpsBarryRouteImport.update({
+  id: '/api/ops/barry',
+  path: '/api/ops/barry',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOauthPollTokenRoute = ApiOauthPollTokenRouteImport.update({
   id: '/api/oauth/poll-token',
   path: '/api/oauth/poll-token',
@@ -1092,6 +1104,8 @@ export interface FileRoutesByFullPath {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/ops/barry': typeof ApiOpsBarryRoute
+  '/api/ops/it-ops': typeof ApiOpsItOpsRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1250,6 +1264,8 @@ export interface FileRoutesByTo {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/ops/barry': typeof ApiOpsBarryRoute
+  '/api/ops/it-ops': typeof ApiOpsItOpsRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1410,6 +1426,8 @@ export interface FileRoutesById {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/ops/barry': typeof ApiOpsBarryRoute
+  '/api/ops/it-ops': typeof ApiOpsItOpsRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1571,6 +1589,8 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/ops/barry'
+    | '/api/ops/it-ops'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1729,6 +1749,8 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/ops/barry'
+    | '/api/ops/it-ops'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1888,6 +1910,8 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/ops/barry'
+    | '/api/ops/it-ops'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -2030,6 +2054,8 @@ export interface RootRouteChildren {
   ApiModelInfoRoute: typeof ApiModelInfoRoute
   ApiOauthDeviceCodeRoute: typeof ApiOauthDeviceCodeRoute
   ApiOauthPollTokenRoute: typeof ApiOauthPollTokenRoute
+  ApiOpsBarryRoute: typeof ApiOpsBarryRoute
+  ApiOpsItOpsRoute: typeof ApiOpsItOpsRoute
   ApiOpsMeetingsRoute: typeof ApiOpsMeetingsRoute
   ApiOpsPresenceRoute: typeof ApiOpsPresenceRoute
   ApiProfilesActivateRoute: typeof ApiProfilesActivateRoute
@@ -2921,6 +2947,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOpsMeetingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ops/it-ops': {
+      id: '/api/ops/it-ops'
+      path: '/api/ops/it-ops'
+      fullPath: '/api/ops/it-ops'
+      preLoaderRoute: typeof ApiOpsItOpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ops/barry': {
+      id: '/api/ops/barry'
+      path: '/api/ops/barry'
+      fullPath: '/api/ops/barry'
+      preLoaderRoute: typeof ApiOpsBarryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/oauth/poll-token': {
       id: '/api/oauth/poll-token'
       path: '/api/oauth/poll-token'
@@ -3474,6 +3514,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiModelInfoRoute: ApiModelInfoRoute,
   ApiOauthDeviceCodeRoute: ApiOauthDeviceCodeRoute,
   ApiOauthPollTokenRoute: ApiOauthPollTokenRoute,
+  ApiOpsBarryRoute: ApiOpsBarryRoute,
+  ApiOpsItOpsRoute: ApiOpsItOpsRoute,
   ApiOpsMeetingsRoute: ApiOpsMeetingsRoute,
   ApiOpsPresenceRoute: ApiOpsPresenceRoute,
   ApiProfilesActivateRoute: ApiProfilesActivateRoute,

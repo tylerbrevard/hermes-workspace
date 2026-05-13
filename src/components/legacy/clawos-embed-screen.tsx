@@ -23,7 +23,7 @@ function withEmbedParam(path: string): string {
 export function ClawosEmbedScreen({
   path,
   title,
-  description = 'ClawOS surface embedded inside Hermes Workspace.',
+  description = 'Compatibility view backed by ClawOS while the native Workspace replacement is still in progress.',
 }: ClawosEmbedScreenProps) {
   const standaloneSrc = useMemo(() => {
     const base = resolveClawosBase()
@@ -47,7 +47,7 @@ export function ClawosEmbedScreen({
             rel="noreferrer"
             className="rounded-md border border-[color:var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] hover:bg-[color:var(--theme-card)]"
           >
-            Open standalone
+            Open ClawOS page
           </a>
         </div>
       </div>

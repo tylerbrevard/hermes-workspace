@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { usePageTitle } from '@/hooks/use-page-title'
-import { ClawosEmbedScreen } from '@/components/legacy/clawos-embed-screen'
+import { BarryScreen } from '@/screens/ops/barry-screen'
 
 export const Route = createFileRoute('/barry')({
   ssr: false,
@@ -9,5 +9,5 @@ export const Route = createFileRoute('/barry')({
 
 function BarryRoute() {
   usePageTitle('Barry')
-  return <ClawosEmbedScreen path="/barry" title="Barry" />
+  return <BarryScreen />
 }
