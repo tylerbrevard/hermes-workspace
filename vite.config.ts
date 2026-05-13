@@ -721,6 +721,10 @@ const config = defineConfig(({ mode, command }) => {
             /process\.env\.NODE_ENV/g,
             JSON.stringify(mode),
           )
+          result = result.replace(
+            /process\.env\.TSS_ROUTER_BASEPATH/g,
+            JSON.stringify(appBasePath === '/' ? '/' : appBasePath.replace(/\/$/, '')),
+          )
           result = result.replace(/process\.env/g, '{}')
           result = result.replace(/process\.platform/g, '"browser"')
           return result

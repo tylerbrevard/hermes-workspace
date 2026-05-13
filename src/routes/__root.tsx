@@ -196,14 +196,14 @@ const requestBaseScript = `
     if (node.hasAttribute('style')) {
       const style = node.getAttribute('style')
       if (style && style.includes("url('/")) {
-        node.setAttribute('style', style.replaceAll("url('/", "url('" + basePath + '/"))
+        node.setAttribute('style', style.replaceAll("url('/", "url('" + basePath + "/"))
       }
       if (style && style.includes('url("/')) {
-        node.setAttribute('style', style.replaceAll('url("/', 'url("' + basePath + '/'))
+        node.setAttribute('style', style.replaceAll('url("/', 'url("' + basePath + "/"))
       }
     }
 
-    node.querySelectorAll?.('img[src^="/"],source[src^="/"],video[src^="/"],audio[src^="/"],iframe[src^="/"],link[href^="/"],a[href^="/"],form[action^="/"],[style*="url(\'/"],[style*="url(\\"/"]').forEach(rewriteNode)
+    node.querySelectorAll?.('img[src^="/"],source[src^="/"],video[src^="/"],audio[src^="/"],iframe[src^="/"],link[href^="/"],a[href^="/"],form[action^="/"],[style]').forEach(rewriteNode)
   }
 
   if (document.readyState === 'loading') {
