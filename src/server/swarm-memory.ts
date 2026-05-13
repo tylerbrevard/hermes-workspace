@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renam
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import YAML from 'yaml'
-import { SWARM_CANONICAL_REPO, SWARM_MEMORY_HANDOFFS } from './swarm-environment'
+import { SWARM_CANONICAL_REPO, SWARM_MEMORY_ROOT } from './swarm-environment'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 
 export type SwarmMemoryKind = 'profile' | 'mission' | 'episodic' | 'handoff' | 'shared'
@@ -51,8 +51,8 @@ export type SwarmMemorySearchResult = {
   snippet: string
 }
 
-export const SWARM_SHARED_MEMORY_ROOT = join(SWARM_MEMORY_HANDOFFS, 'swarm')
-export const SWARM_SHARED_HANDOFF_ROOT = join(SWARM_MEMORY_HANDOFFS, 'handoffs', 'swarm')
+export const SWARM_SHARED_MEMORY_ROOT = join(SWARM_MEMORY_ROOT, 'memory', 'swarm')
+export const SWARM_SHARED_HANDOFF_ROOT = join(SWARM_MEMORY_ROOT, 'memory', 'handoffs', 'swarm')
 export const SWARM_RUNTIME_ROOT = join(SWARM_CANONICAL_REPO, '.runtime')
 export const SWARM_PROJECT_CONTEXT_PATH = join(SWARM_SHARED_MEMORY_ROOT, 'PROJECT.md')
 

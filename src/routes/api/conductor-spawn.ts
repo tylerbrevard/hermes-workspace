@@ -43,8 +43,9 @@ function loadDispatchSkill(): string {
   const candidates = [
     resolve(repoRoot(), 'skills/workspace-dispatch/SKILL.md'),
     resolve(process.cwd(), 'skills/workspace-dispatch/SKILL.md'),
-    ...(home ? [resolve(home, '.hermes/skills/workspace-dispatch/SKILL.md')] : []),
-    ...(home ? [resolve(home, '.openclaw/workspace/skills/workspace-dispatch/SKILL.md')] : []),
+    ...(home
+      ? [resolve(home, '.hermes/skills/workspace-dispatch/SKILL.md')]
+      : []),
   ]
   for (const p of candidates) {
     try {
