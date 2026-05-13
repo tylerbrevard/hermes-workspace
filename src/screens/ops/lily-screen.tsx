@@ -1,6 +1,7 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { apiPath } from '@/lib/base-path'
 import { Markdown } from '@/components/prompt-kit/markdown'
+import { useVoiceRecorder } from '@/hooks/use-voice-recorder'
 
 type LilyContext = {
   summary?: {
@@ -22,16 +23,22 @@ type LilyContext = {
   recentFailures?: Array<{ name: string; error: string; when: string }>
 }
 
-type HistoryPair = { q: string; a: string }
+type HistoryPair = { q: string; a: string; source?: string; createdAt?: number }
 
 type LilyContextPayload = {
   context?: LilyContext
+  generatedAt?: string
   error?: string
 }
 
 type LilyParsePayload = {
   content?: string
   source?: string
+  error?: string
+}
+
+type LilyTranscribePayload = {
+  text?: string
   error?: string
 }
 
@@ -58,7 +65,22 @@ function loadHistory(): HistoryPair[] {
       window.localStorage.removeItem(STORAGE_KEY)
       return []
     }
-    return Array.isArray(parsed.history) ? parsed.history : []
+    if (!Array.isArray(parsed.history)) return []
+    return parsed.history
+      .filter(
+        (entry): entry is HistoryPair =>
+          entry &&
+          typeof entry === 'object' &&
+          typeof entry.q === 'string' &&
+          typeof entry.a === 'string',
+      )
+      .map((entry) => ({
+        q: entry.q,
+        a: entry.a,
+        source: typeof entry.source === 'string' ? entry.source : undefined,
+        createdAt:
+          typeof entry.createdAt === 'number' ? entry.createdAt : undefined,
+      }))
   } catch {
     return []
   }
@@ -100,6 +122,40 @@ function getSubline(context: LilyContext | null) {
   return 'Wrap up the day or line up tomorrow.'
 }
 
+function formatRelativeMoment(timestamp: number | null) {
+  if (!timestamp) return 'Not refreshed yet'
+  const diffMs = Date.now() - timestamp
+  if (diffMs < 60_000) return 'Updated just now'
+  const mins = Math.round(diffMs / 60_000)
+  if (mins < 60) return `Updated ${mins}m ago`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `Updated ${hrs}h ago`
+  return `Updated ${Math.round(hrs / 24)}d ago`
+}
+
+function formatSourceLabel(source?: string) {
+  if (!source) return 'Reply'
+  if (source === 'hermes-gateway') return 'Hermes gateway'
+  if (source === 'openai-direct') return 'OpenAI fallback'
+  return source.replace(/[-_]/g, ' ')
+}
+
+function buildOperatorSnapshot(context: LilyContext | null) {
+  if (!context?.summary) return 'Refreshing live context.'
+  const summary = context.summary
+  if (summary.transientIssue) return summary.transientIssue.summary
+  if ((context.recentFailures || []).length > 0) {
+    return `${context.recentFailures?.length} recent failure${context.recentFailures?.length === 1 ? '' : 's'} need review.`
+  }
+  if ((summary.meetingsToday || 0) > 0 && summary.nextMeeting) {
+    return `${summary.meetingsToday} meeting${summary.meetingsToday === 1 ? '' : 's'} today. Next: ${summary.nextMeeting.title} at ${summary.nextMeeting.when}.`
+  }
+  if ((summary.nextJobs || []).length > 0) {
+    return `${summary.healthyJobs} jobs healthy. Next up: ${summary.nextJobs?.[0]?.name} ${summary.nextJobs?.[0]?.when}.`
+  }
+  return 'No immediate operator issues detected.'
+}
+
 const SUGGESTED_PROMPTS = [
   'What needs attention right now?',
   "Summarize today's meetings and next job.",
@@ -114,6 +170,14 @@ export function LilyScreen() {
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [contextLoadedAt, setContextLoadedAt] = useState<number | null>(null)
+  const [transcribing, setTranscribing] = useState(false)
+  const [audioEnabled, setAudioEnabled] = useState(true)
+  const [speaking, setSpeaking] = useState(false)
+  const [lastTranscript, setLastTranscript] = useState('')
+  const requestAbortRef = useRef<AbortController | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioUrlRef = useRef<string | null>(null)
 
   async function loadContext() {
     setRefreshing(true)
@@ -125,6 +189,9 @@ export function LilyScreen() {
       }
       startTransition(() => {
         setContext(payload.context || null)
+        setContextLoadedAt(
+          payload.generatedAt ? new Date(payload.generatedAt).getTime() : Date.now(),
+        )
         setError(null)
       })
     } catch (err) {
@@ -139,15 +206,121 @@ export function LilyScreen() {
     void loadContext()
   }, [])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadContext()
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      requestAbortRef.current?.abort()
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current)
+        audioUrlRef.current = null
+      }
+    }
+  }, [])
+
   const latestAnswer = useMemo(
     () => history.length > 0 ? history[history.length - 1] : null,
     [history],
   )
+  const operatorSnapshot = useMemo(
+    () => buildOperatorSnapshot(context),
+    [context],
+  )
+
+  function cleanupAudio() {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current)
+      audioUrlRef.current = null
+    }
+    setSpeaking(false)
+  }
+
+  async function playAudio(text: string) {
+    const cleanText = text.trim()
+    if (!cleanText) return
+    cleanupAudio()
+    if (!audioEnabled) return
+
+    try {
+      const response = await fetch(apiPath('/api/ops/lily-speak'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleanText, voice: 'nova' }),
+      })
+      if (!response.ok) {
+        throw new Error(`Speech failed (${response.status})`)
+      }
+      const audioBlob = await response.blob()
+      const audioUrl = URL.createObjectURL(audioBlob)
+      const audio = new Audio(audioUrl)
+      audioUrlRef.current = audioUrl
+      audioRef.current = audio
+      audio.onended = () => {
+        cleanupAudio()
+      }
+      audio.onerror = () => {
+        cleanupAudio()
+        setError('Audio playback failed')
+      }
+      setSpeaking(true)
+      await audio.play()
+    } catch (err) {
+      cleanupAudio()
+      setError(err instanceof Error ? err.message : 'Speech failed')
+    }
+  }
+
+  const voiceRecorder = useVoiceRecorder({
+    maxDurationMs: 90_000,
+    onRecorded: async (blob) => {
+      setTranscribing(true)
+      setError(null)
+      try {
+        const formData = new FormData()
+        formData.append('audio', new File([blob], 'workspace-lily.webm', { type: blob.type || 'audio/webm' }))
+        const response = await fetch(apiPath('/api/ops/lily-transcribe'), {
+          method: 'POST',
+          body: formData,
+        })
+        const payload = (await response.json()) as LilyTranscribePayload
+        if (!response.ok || !payload.text?.trim()) {
+          throw new Error(payload.error || 'Transcription failed')
+        }
+        const transcript = payload.text.trim()
+        setLastTranscript(transcript)
+        setInput(transcript)
+        await sendPrompt(transcript)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Transcription failed')
+      } finally {
+        setTranscribing(false)
+      }
+    },
+    onError: (message) => {
+      setError(message)
+    },
+  })
 
   async function sendPrompt(prompt: string) {
     const question = prompt.trim()
     if (!question || loading) return
 
+    requestAbortRef.current?.abort()
+    const controller = new AbortController()
+    requestAbortRef.current = controller
     setLoading(true)
     setError(null)
     try {
@@ -160,6 +333,7 @@ export function LilyScreen() {
       const response = await fetch(apiPath('/api/ops/lily'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           systemPrompt: `${SYSTEM_PROMPT} Current Workspace context: ${JSON.stringify(
             context || {},
@@ -173,46 +347,90 @@ export function LilyScreen() {
       }
       const updated = [
         ...history,
-        { q: question, a: payload.content || "Hmm, I didn't get a response back." },
+        {
+          q: question,
+          a: payload.content || "Hmm, I didn't get a response back.",
+          source: payload.source,
+          createdAt: Date.now(),
+        },
       ].slice(-6)
       startTransition(() => {
         setHistory(updated)
         saveHistory(updated)
         setInput('')
       })
+      if (audioEnabled) {
+        void playAudio(updated[updated.length - 1]?.a || '')
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return
+      }
       setError(err instanceof Error ? err.message : 'Lily request failed')
     } finally {
+      requestAbortRef.current = null
       setLoading(false)
     }
+  }
+
+  function clearHistory() {
+    startTransition(() => {
+      setHistory([])
+      saveHistory([])
+    })
+  }
+
+  function cancelRequest() {
+    requestAbortRef.current?.abort()
+    requestAbortRef.current = null
+    setLoading(false)
   }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-1 pb-6 sm:px-2">
       <div className={shellClassName()}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-              Ops
+          <div className="flex items-start gap-3">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary-900 text-lg font-semibold text-white shadow-sm dark:bg-neutral-100 dark:text-neutral-900">
+              L
             </div>
-            <h1 className="mt-1 text-lg font-semibold text-primary-900 dark:text-neutral-100">
-              Lily
-            </h1>
-            <p className="text-sm text-primary-600 dark:text-neutral-400">
-              {getGreeting()}
-            </p>
-            <p className="mt-1 text-sm text-primary-500 dark:text-neutral-500">
-              {getSubline(context)}
-            </p>
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
+                Ops
+              </div>
+              <h1 className="mt-1 text-lg font-semibold text-primary-900 dark:text-neutral-100">
+                Lily
+              </h1>
+              <p className="text-sm text-primary-600 dark:text-neutral-400">
+                {getGreeting()}
+              </p>
+              <p className="mt-1 text-sm text-primary-500 dark:text-neutral-500">
+                {getSubline(context)}
+              </p>
+              <p className="mt-2 text-xs text-primary-500 dark:text-neutral-500">
+                {formatRelativeMoment(contextLoadedAt)}
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadContext()}
-            disabled={refreshing}
-            className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
-          >
-            Refresh context
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {history.length > 0 ? (
+              <button
+                type="button"
+                onClick={clearHistory}
+                className="rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-2 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+              >
+                Clear history
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void loadContext()}
+              disabled={refreshing}
+              className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh context'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -228,6 +446,14 @@ export function LilyScreen() {
             Live Context
           </h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className={cardClassName()}>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                Operator snapshot
+              </div>
+              <div className="mt-2 text-sm leading-6 text-primary-900 dark:text-neutral-100">
+                {operatorSnapshot}
+              </div>
+            </div>
             <div className={cardClassName()}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
                 Jobs
@@ -336,30 +562,111 @@ export function LilyScreen() {
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                  event.preventDefault()
+                  void sendPrompt(input)
+                }
+              }}
               rows={4}
               placeholder="Ask Lily anything..."
               className="min-h-28 flex-1 rounded-2xl border border-primary-200 bg-white px-3 py-3 text-sm text-primary-900 outline-none focus:border-primary-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
             />
           </div>
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-primary-600 dark:text-neutral-400">
+            {voiceRecorder.isSupported ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (voiceRecorder.isRecording) {
+                    voiceRecorder.stop()
+                  } else {
+                    void voiceRecorder.start()
+                  }
+                }}
+                disabled={loading || transcribing}
+                className="rounded-full border border-primary-200 px-3 py-1.5 dark:border-neutral-800"
+              >
+                {voiceRecorder.isRecording
+                  ? `Stop recording (${Math.max(
+                      1,
+                      Math.round(voiceRecorder.durationMs / 1000),
+                    )}s)`
+                  : 'Record voice prompt'}
+              </button>
+            ) : (
+              <span className="rounded-full border border-primary-200 px-3 py-1.5 dark:border-neutral-800">
+                Voice input not supported here
+              </span>
+            )}
             <button
               type="button"
-              onClick={() => void sendPrompt(input)}
-              disabled={loading || !input.trim()}
-              className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+              onClick={() => {
+                setAudioEnabled((value) => {
+                  const next = !value
+                  if (!next) cleanupAudio()
+                  return next
+                })
+              }}
+              className="rounded-full border border-primary-200 px-3 py-1.5 dark:border-neutral-800"
             >
-              {loading ? 'Thinking…' : 'Send'}
+              {audioEnabled ? 'Mute reply audio' : 'Unmute reply audio'}
             </button>
+            <button
+              type="button"
+              onClick={() => void playAudio(latestAnswer?.a || '')}
+              disabled={!latestAnswer?.a || transcribing}
+              className="rounded-full border border-primary-200 px-3 py-1.5 disabled:opacity-60 dark:border-neutral-800"
+            >
+              {speaking ? 'Replay latest reply' : 'Play latest reply'}
+            </button>
+            {transcribing ? (
+              <span className="rounded-full border border-primary-200 px-3 py-1.5 dark:border-neutral-800">
+                Transcribing voice note…
+              </span>
+            ) : null}
+            {lastTranscript ? (
+              <span className="rounded-full border border-primary-200 px-3 py-1.5 dark:border-neutral-800">
+                Last transcript: {lastTranscript.slice(0, 64)}
+                {lastTranscript.length > 64 ? '…' : ''}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-2 flex justify-end">
+            <div className="flex gap-2">
+              {loading ? (
+                <button
+                  type="button"
+                  onClick={cancelRequest}
+                  className="rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-2 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+                >
+                  Stop
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void sendPrompt(input)}
+                disabled={loading || transcribing || !input.trim()}
+                className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+              >
+                {loading ? 'Thinking…' : 'Send'}
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3">
             {latestAnswer ? (
               <div className={cardClassName()}>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                  Latest response
+                  {formatSourceLabel(latestAnswer.source)}
                 </div>
-                <div className="mt-2 text-xs text-primary-600 dark:text-neutral-400">
-                  {latestAnswer.q}
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-primary-600 dark:text-neutral-400">
+                  <span>{latestAnswer.q}</span>
+                  {latestAnswer.createdAt ? (
+                    <span className="rounded-full border border-primary-200 px-2 py-0.5 dark:border-neutral-800">
+                      {formatRelativeMoment(latestAnswer.createdAt).replace('Updated ', '')}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-3">
                   <Markdown className="space-y-3">{latestAnswer.a}</Markdown>
@@ -392,7 +699,7 @@ export function LilyScreen() {
                           {pair.q}
                         </div>
                         <div className="mt-3 text-xs font-medium uppercase tracking-[0.12em] text-primary-500 dark:text-neutral-400">
-                          Lily
+                          {formatSourceLabel(pair.source)}
                         </div>
                         <div className="mt-2">
                           <Markdown className="space-y-3">{pair.a}</Markdown>

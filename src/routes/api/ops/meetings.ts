@@ -1,7 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
-import { fetchClawosJson } from '../../../server/clawos-internal'
+import {
+  runMeetingExtraction,
+  runMeetingPipeline,
+  runRecentMeetingExtraction,
+  sendMeetingItemsToTodo,
+  syncExtractedMeetingActionsToTodo,
+} from '../../../server/meeting-actions'
 import {
   bulkMarkReviewed,
   createActionItem,
@@ -91,6 +97,20 @@ type HeatmapDay = {
   intensity: 0 | 1 | 2 | 3 | 4
 }
 
+type MeetingsPayload = {
+  meetings?: Meeting[]
+  total?: number
+  hasMore?: boolean
+  analytics?: Record<string, unknown>
+  sparkline?: number[]
+  graphSource?: string
+  graphWarning?: string
+  lastSync?: string
+  syncMessage?: string
+  newMeetings?: number
+  dataWarning?: string
+}
+
 export const Route = createFileRoute('/api/ops/meetings')({
   server: {
     handlers: {
@@ -139,7 +159,7 @@ export const Route = createFileRoute('/api/ops/meetings')({
               sparkline: getWeeklySparkline(),
               graphSource: 'sqlite',
               dataWarning: forceRefresh
-                ? 'Force refresh is still handled by the Graph sync path; showing current SQLite data.'
+                ? 'Force refresh is handled by the Hermes meeting pipeline; showing current SQLite data while it runs.'
                 : undefined,
             }),
             Promise.resolve({ meetings: getTodayMeetings(5) }),
@@ -182,12 +202,7 @@ export const Route = createFileRoute('/api/ops/meetings')({
           const kind = typeof body.kind === 'string' ? body.kind : ''
 
           if (kind === 'force-sync') {
-            const result = await fetchClawosJson('/api/meetings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'force_sync' }),
-            })
-            return json(result)
+            return json(runMeetingPipeline())
           }
 
           if (kind === 'set-reviewed') {
@@ -234,12 +249,7 @@ export const Route = createFileRoute('/api/ops/meetings')({
 
           if (kind === 'send-action-items-to-todo') {
             const items = Array.isArray(body.items) ? body.items : []
-            const result = await fetchClawosJson('/api/meetings/todo', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items }),
-            })
-            return json(result)
+            return json(sendMeetingItemsToTodo(items))
           }
 
           if (kind === 'update-issue') {
@@ -266,27 +276,13 @@ export const Route = createFileRoute('/api/ops/meetings')({
 
           if (kind === 'send-issues-to-todo' || kind === 'send-decisions-to-todo') {
             const items = Array.isArray(body.items) ? body.items : []
-            const result = await fetchClawosJson('/api/meetings/todo', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items }),
-            })
-            return json(result)
+            return json(sendMeetingItemsToTodo(items))
           }
 
           if (kind === 'extract-selected') {
             const meetingId =
               typeof body.meetingId === 'string' ? body.meetingId : ''
-            const content = typeof body.content === 'string' ? body.content : ''
-            const result = await fetchClawosJson('/api/meetings/extract', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                meetingId,
-                content,
-              }),
-            })
-            return json(result)
+            return json(runMeetingExtraction(meetingId))
           }
 
           if (kind === 'auto-extract-recent') {
@@ -294,12 +290,11 @@ export const Route = createFileRoute('/api/ops/meetings')({
               typeof body.limit === 'number' && Number.isFinite(body.limit)
                 ? body.limit
                 : 5
-            const result = await fetchClawosJson('/api/meetings/auto-extract', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ limit }),
-            })
-            return json(result)
+            return json(runRecentMeetingExtraction(limit))
+          }
+
+          if (kind === 'sync-extracted-actions-to-todo') {
+            return json(syncExtractedMeetingActionsToTodo())
           }
 
           return json({ error: 'Unsupported operation' }, { status: 400 })

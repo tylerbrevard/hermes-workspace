@@ -5,17 +5,17 @@ import { dirname, join } from 'node:path'
 const HOME = process.env.HOME || '/Users/tylerlyon'
 const HERMES_WORKSPACE =
   process.env.HERMES_WORKSPACE || join(HOME, '.hermes', 'workspace')
+const HERMES_DB_DIR = join(HERMES_WORKSPACE, 'runtime', 'db', 'workspace')
 const GRAPH_WRAPPER = join(HERMES_WORKSPACE, 'scripts', 'run_hermes_venv_python.sh')
 const GRAPH_BRIDGE = join(HERMES_WORKSPACE, 'scripts', 'graph_bridge.py')
 const TYLER_GUID = 'b906d90e-689b-464e-8904-aed5180b463a'
 const PRESENCE_STATE = join(HERMES_WORKSPACE, '.presence_state.json')
-const M5_DB = process.env.HERMES_M5_DISPLAY_DB || '/Users/tylerlyon/clawos/data/.m5-display.db'
+const M5_DB = process.env.HERMES_M5_DISPLAY_DB || join(HERMES_DB_DIR, '.m5-display.db')
 const IOT_CONFIG = join(HERMES_WORKSPACE, '.iot-config.json')
 const M5_WORDS = join(HERMES_WORKSPACE, '.m5_words.json')
 const MEETINGS_DB =
   process.env.HERMES_MEETINGS_DB ||
-  process.env.CLAWOS_MEETINGS_DB ||
-  '/Users/tylerlyon/clawos/data/.meetings.db'
+  join(HERMES_DB_DIR, '.meetings.db')
 
 type TeamsPresence = {
   availability?: string

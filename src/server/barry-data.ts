@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { getActiveProfileName } from './profiles-browser'
 
 const HOME = process.env.HOME || '/Users/tylerlyon'
 const HERMES_WORKSPACE =
@@ -11,7 +12,8 @@ const ONE_ON_ONES_DB =
   join(HERMES_WORKSPACE, '.one-on-ones.json')
 const WINS_CACHE_FILE = join(HERMES_WORKSPACE, '.wins-cache.json')
 const WINS_TEAM_MEMBERS_FILE = join(HERMES_WORKSPACE, '.wins-team-members.json')
-const SETTINGS_FILE = join(HERMES_WORKSPACE, '.clawos-settings.json')
+const WORKSPACE_SETTINGS_FILE = join(HERMES_WORKSPACE, '.workspace-settings.json')
+const LEGACY_SETTINGS_FILE = join(HERMES_WORKSPACE, '.clawos-settings.json')
 const NOTION_KEY_FILE = join(HOME, '.config', 'notion', 'api_key')
 const WINS_DATA_SOURCE_ID = '3223a60b-cbfa-8126-9dc8-000bbecb3a60'
 const WINS_CACHE_TTL_MS = 5 * 60 * 1000
@@ -191,11 +193,27 @@ function writeJsonFile(path: string, value: unknown) {
 }
 
 function readCurrentUser() {
-  const settings = readJsonFile<{ profile?: { name?: string } }>(SETTINGS_FILE, {})
-  const profileName = settings.profile?.name?.trim()
-  return profileName && profileName.length > 0
-    ? profileName.split(/\s+/)[0]
-    : 'Tyler'
+  const workspaceSettings = readJsonFile<{ profile?: { name?: string } }>(
+    WORKSPACE_SETTINGS_FILE,
+    {},
+  )
+  const legacySettings = readJsonFile<{ profile?: { name?: string } }>(
+    LEGACY_SETTINGS_FILE,
+    {},
+  )
+  const configuredName =
+    workspaceSettings.profile?.name?.trim() || legacySettings.profile?.name?.trim()
+
+  if (configuredName) {
+    return configuredName.split(/\s+/)[0]
+  }
+
+  const activeProfile = getActiveProfileName().trim()
+  if (activeProfile && activeProfile !== 'default') {
+    return activeProfile.split(/[_-]/)[0]
+  }
+
+  return 'Tyler'
 }
 
 function plainText(richText: unknown): string {

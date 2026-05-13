@@ -6,10 +6,10 @@ import { getItOpsData } from './it-ops-data'
 const HOME = process.env.HOME || '/Users/tylerlyon'
 const HERMES_WORKSPACE =
   process.env.HERMES_WORKSPACE || join(HOME, '.hermes', 'workspace')
+const HERMES_DB_DIR = join(HERMES_WORKSPACE, 'runtime', 'db', 'workspace')
 const MEETINGS_DB =
   process.env.HERMES_MEETINGS_DB ||
-  process.env.CLAWOS_MEETINGS_DB ||
-  '/Users/tylerlyon/clawos/data/.meetings.db'
+  join(HERMES_DB_DIR, '.meetings.db')
 const AZURE_COSTS_DB = join(HERMES_WORKSPACE, '.azure-costs.db')
 const PLANNER_CACHE = join(HERMES_WORKSPACE, '.planner-cache.json')
 const PRESENCE_STATE = join(HERMES_WORKSPACE, '.presence_state.json')

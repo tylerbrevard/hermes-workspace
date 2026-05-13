@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
-import { fetchClawos } from '../../../server/clawos-internal'
 import { getCronJobs } from '../../../server/claude-dashboard-api'
+import { parseLilyPrompt } from '../../../server/lily-services'
 import { getTodayMeetings } from '../../../server/meetings-data'
 
 type LilyContext = {
@@ -235,15 +235,25 @@ export const Route = createFileRoute('/api/ops/lily')({
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const body = await request.text()
-        const response = await fetchClawos('/api/lily/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        })
-
-        const payload = (await response.json().catch(() => ({}))) as LilyParseResponse
-        return json(payload, { status: response.status })
+        try {
+          const body = (await request.json().catch(() => null)) as {
+            systemPrompt?: string
+            prompt?: string
+          } | null
+          if (!body || typeof body !== 'object') {
+            return json({ error: 'Invalid JSON body' }, { status: 400 })
+          }
+          const payload = (await parseLilyPrompt(body)) as LilyParseResponse
+          return json(payload)
+        } catch (error) {
+          return json(
+            {
+              error:
+                error instanceof Error ? error.message : 'Lily request failed',
+            },
+            { status: 502 },
+          )
+        }
       },
     },
   },

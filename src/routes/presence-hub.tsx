@@ -1,12 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { usePageTitle } from '@/hooks/use-page-title'
-import { PresenceHubScreen } from '@/screens/presence/presence-hub-screen'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/presence-hub')({
-  component: PresenceHubRoute,
+  beforeLoad() {
+    throw redirect({
+      to: '/presence',
+      replace: true,
+    })
+  },
+  component: () => null,
 })
-
-function PresenceHubRoute() {
-  usePageTitle('Presence Hub')
-  return <PresenceHubScreen />
-}

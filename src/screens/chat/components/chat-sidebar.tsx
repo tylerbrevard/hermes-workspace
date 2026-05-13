@@ -890,10 +890,10 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
-      to: '/presence-hub',
+      to: '/presence',
       icon: UserMultipleIcon,
       label: 'Presence',
-      active: pathname === '/presence-hub',
+      active: pathname === '/presence' || pathname === '/presence-hub',
     },
     {
       kind: 'link',

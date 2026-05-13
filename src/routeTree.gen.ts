@@ -20,6 +20,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReserveRouteImport } from './routes/reserve'
 import { Route as ProfilesRouteImport } from './routes/profiles'
 import { Route as PresenceHubRouteImport } from './routes/presence-hub'
+import { Route as PresenceRouteImport } from './routes/presence'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as MemoryRouteImport } from './routes/memory'
@@ -134,6 +135,8 @@ import { Route as ApiProfilesCreateRouteImport } from './routes/api/profiles/cre
 import { Route as ApiProfilesActivateRouteImport } from './routes/api/profiles/activate'
 import { Route as ApiOpsPresenceRouteImport } from './routes/api/ops/presence'
 import { Route as ApiOpsMeetingsRouteImport } from './routes/api/ops/meetings'
+import { Route as ApiOpsLilyTranscribeRouteImport } from './routes/api/ops/lily-transcribe'
+import { Route as ApiOpsLilySpeakRouteImport } from './routes/api/ops/lily-speak'
 import { Route as ApiOpsLilyRouteImport } from './routes/api/ops/lily'
 import { Route as ApiOpsKindleRouteImport } from './routes/api/ops/kindle'
 import { Route as ApiOpsItOpsRouteImport } from './routes/api/ops/it-ops'
@@ -224,6 +227,11 @@ const ProfilesRoute = ProfilesRouteImport.update({
 const PresenceHubRoute = PresenceHubRouteImport.update({
   id: '/presence-hub',
   path: '/presence-hub',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PresenceRoute = PresenceRouteImport.update({
+  id: '/presence',
+  path: '/presence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlaygroundRoute = PlaygroundRouteImport.update({
@@ -797,6 +805,16 @@ const ApiOpsMeetingsRoute = ApiOpsMeetingsRouteImport.update({
   path: '/api/ops/meetings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOpsLilyTranscribeRoute = ApiOpsLilyTranscribeRouteImport.update({
+  id: '/api/ops/lily-transcribe',
+  path: '/api/ops/lily-transcribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpsLilySpeakRoute = ApiOpsLilySpeakRouteImport.update({
+  id: '/api/ops/lily-speak',
+  path: '/api/ops/lily-speak',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOpsLilyRoute = ApiOpsLilyRouteImport.update({
   id: '/api/ops/lily',
   path: '/api/ops/lily',
@@ -1001,6 +1019,7 @@ export interface FileRoutesByFullPath {
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
+  '/presence': typeof PresenceRoute
   '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
@@ -1120,6 +1139,8 @@ export interface FileRoutesByFullPath {
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
   '/api/ops/kindle': typeof ApiOpsKindleRoute
   '/api/ops/lily': typeof ApiOpsLilyRoute
+  '/api/ops/lily-speak': typeof ApiOpsLilySpeakRoute
+  '/api/ops/lily-transcribe': typeof ApiOpsLilyTranscribeRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1164,6 +1185,7 @@ export interface FileRoutesByTo {
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
+  '/presence': typeof PresenceRoute
   '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
@@ -1282,6 +1304,8 @@ export interface FileRoutesByTo {
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
   '/api/ops/kindle': typeof ApiOpsKindleRoute
   '/api/ops/lily': typeof ApiOpsLilyRoute
+  '/api/ops/lily-speak': typeof ApiOpsLilySpeakRoute
+  '/api/ops/lily-transcribe': typeof ApiOpsLilyTranscribeRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1327,6 +1351,7 @@ export interface FileRoutesById {
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
+  '/presence': typeof PresenceRoute
   '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
@@ -1446,6 +1471,8 @@ export interface FileRoutesById {
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
   '/api/ops/kindle': typeof ApiOpsKindleRoute
   '/api/ops/lily': typeof ApiOpsLilyRoute
+  '/api/ops/lily-speak': typeof ApiOpsLilySpeakRoute
+  '/api/ops/lily-transcribe': typeof ApiOpsLilyTranscribeRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1492,6 +1519,7 @@ export interface FileRouteTypes {
     | '/memory'
     | '/operations'
     | '/playground'
+    | '/presence'
     | '/presence-hub'
     | '/profiles'
     | '/reserve'
@@ -1611,6 +1639,8 @@ export interface FileRouteTypes {
     | '/api/ops/it-ops'
     | '/api/ops/kindle'
     | '/api/ops/lily'
+    | '/api/ops/lily-speak'
+    | '/api/ops/lily-transcribe'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1655,6 +1685,7 @@ export interface FileRouteTypes {
     | '/memory'
     | '/operations'
     | '/playground'
+    | '/presence'
     | '/presence-hub'
     | '/profiles'
     | '/reserve'
@@ -1773,6 +1804,8 @@ export interface FileRouteTypes {
     | '/api/ops/it-ops'
     | '/api/ops/kindle'
     | '/api/ops/lily'
+    | '/api/ops/lily-speak'
+    | '/api/ops/lily-transcribe'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1817,6 +1850,7 @@ export interface FileRouteTypes {
     | '/memory'
     | '/operations'
     | '/playground'
+    | '/presence'
     | '/presence-hub'
     | '/profiles'
     | '/reserve'
@@ -1936,6 +1970,8 @@ export interface FileRouteTypes {
     | '/api/ops/it-ops'
     | '/api/ops/kindle'
     | '/api/ops/lily'
+    | '/api/ops/lily-speak'
+    | '/api/ops/lily-transcribe'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1981,6 +2017,7 @@ export interface RootRouteChildren {
   MemoryRoute: typeof MemoryRoute
   OperationsRoute: typeof OperationsRoute
   PlaygroundRoute: typeof PlaygroundRoute
+  PresenceRoute: typeof PresenceRoute
   PresenceHubRoute: typeof PresenceHubRoute
   ProfilesRoute: typeof ProfilesRoute
   ReserveRoute: typeof ReserveRouteWithChildren
@@ -2082,6 +2119,8 @@ export interface RootRouteChildren {
   ApiOpsItOpsRoute: typeof ApiOpsItOpsRoute
   ApiOpsKindleRoute: typeof ApiOpsKindleRoute
   ApiOpsLilyRoute: typeof ApiOpsLilyRoute
+  ApiOpsLilySpeakRoute: typeof ApiOpsLilySpeakRoute
+  ApiOpsLilyTranscribeRoute: typeof ApiOpsLilyTranscribeRoute
   ApiOpsMeetingsRoute: typeof ApiOpsMeetingsRoute
   ApiOpsPresenceRoute: typeof ApiOpsPresenceRoute
   ApiProfilesActivateRoute: typeof ApiProfilesActivateRoute
@@ -2173,6 +2212,13 @@ declare module '@tanstack/react-router' {
       path: '/presence-hub'
       fullPath: '/presence-hub'
       preLoaderRoute: typeof PresenceHubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/presence': {
+      id: '/presence'
+      path: '/presence'
+      fullPath: '/presence'
+      preLoaderRoute: typeof PresenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/playground': {
@@ -2973,6 +3019,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOpsMeetingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ops/lily-transcribe': {
+      id: '/api/ops/lily-transcribe'
+      path: '/api/ops/lily-transcribe'
+      fullPath: '/api/ops/lily-transcribe'
+      preLoaderRoute: typeof ApiOpsLilyTranscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ops/lily-speak': {
+      id: '/api/ops/lily-speak'
+      path: '/api/ops/lily-speak'
+      fullPath: '/api/ops/lily-speak'
+      preLoaderRoute: typeof ApiOpsLilySpeakRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/ops/lily': {
       id: '/api/ops/lily'
       path: '/api/ops/lily'
@@ -3457,6 +3517,7 @@ const rootRouteChildren: RootRouteChildren = {
   MemoryRoute: MemoryRoute,
   OperationsRoute: OperationsRoute,
   PlaygroundRoute: PlaygroundRoute,
+  PresenceRoute: PresenceRoute,
   PresenceHubRoute: PresenceHubRoute,
   ProfilesRoute: ProfilesRoute,
   ReserveRoute: ReserveRouteWithChildren,
@@ -3558,6 +3619,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOpsItOpsRoute: ApiOpsItOpsRoute,
   ApiOpsKindleRoute: ApiOpsKindleRoute,
   ApiOpsLilyRoute: ApiOpsLilyRoute,
+  ApiOpsLilySpeakRoute: ApiOpsLilySpeakRoute,
+  ApiOpsLilyTranscribeRoute: ApiOpsLilyTranscribeRoute,
   ApiOpsMeetingsRoute: ApiOpsMeetingsRoute,
   ApiOpsPresenceRoute: ApiOpsPresenceRoute,
   ApiProfilesActivateRoute: ApiProfilesActivateRoute,

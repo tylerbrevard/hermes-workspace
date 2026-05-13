@@ -236,10 +236,10 @@ export function PresenceHubScreen() {
               Presence
             </div>
             <h1 className="mt-1 text-lg font-semibold text-primary-900 dark:text-neutral-100">
-              Presence Hub
+              Presence
             </h1>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              Native Workspace view for Teams state and M5 display sync. This path avoids destructive device controls.
+              Teams state and M5 display sync, with only the non-destructive control path exposed here.
             </p>
           </div>
           <div className="flex gap-2">

@@ -1,10 +1,16 @@
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 
+const HERMES_MEETINGS_DB =
+  '/Users/tylerlyon/.hermes/workspace/runtime/db/workspace/.meetings.db'
 const MEETINGS_DB_PATH =
   process.env.HERMES_MEETINGS_DB ||
-  process.env.CLAWOS_MEETINGS_DB ||
-  '/Users/tylerlyon/clawos/data/.meetings.db'
+  HERMES_MEETINGS_DB
+
+if (!existsSync(MEETINGS_DB_PATH)) {
+  throw new Error(`Hermes meetings database not found: ${MEETINGS_DB_PATH}`)
+}
 
 export type Meeting = {
   id: string
