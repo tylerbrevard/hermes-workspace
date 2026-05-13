@@ -363,12 +363,19 @@ export function recordLegacyIotTelemetry(body: Record<string, unknown>) {
       ? body.device
       : typeof body.device_id === 'string'
         ? body.device_id
-        : ''
+        : typeof body.deviceId === 'string'
+          ? body.deviceId
+          : ''
   if (!deviceId) throw new Error('device or device_id is required')
   upsertM5Device({
     deviceId,
     status: typeof body.status === 'string' ? body.status : 'online',
-    currentWord: typeof body.word === 'string' ? body.word : undefined,
+    currentWord:
+      typeof body.word === 'string'
+        ? body.word
+        : typeof body.currentWord === 'string'
+          ? body.currentWord
+          : undefined,
   })
   return {
     ok: true,
