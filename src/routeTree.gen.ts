@@ -135,11 +135,8 @@ import { Route as ApiProfilesCreateRouteImport } from './routes/api/profiles/cre
 import { Route as ApiProfilesActivateRouteImport } from './routes/api/profiles/activate'
 import { Route as ApiOpsPresenceRouteImport } from './routes/api/ops/presence'
 import { Route as ApiOpsMeetingsRouteImport } from './routes/api/ops/meetings'
-import { Route as ApiOpsLilyTranscribeRouteImport } from './routes/api/ops/lily-transcribe'
-import { Route as ApiOpsLilySpeakRouteImport } from './routes/api/ops/lily-speak'
-import { Route as ApiOpsLilyRouteImport } from './routes/api/ops/lily'
-import { Route as ApiOpsKindleRouteImport } from './routes/api/ops/kindle'
 import { Route as ApiOpsItOpsRouteImport } from './routes/api/ops/it-ops'
+import { Route as ApiOpsConnectwiseRouteImport } from './routes/api/ops/connectwise'
 import { Route as ApiOpsBarryRouteImport } from './routes/api/ops/barry'
 import { Route as ApiOauthPollTokenRouteImport } from './routes/api/oauth.poll-token'
 import { Route as ApiOauthDeviceCodeRouteImport } from './routes/api/oauth.device-code'
@@ -805,29 +802,14 @@ const ApiOpsMeetingsRoute = ApiOpsMeetingsRouteImport.update({
   path: '/api/ops/meetings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiOpsLilyTranscribeRoute = ApiOpsLilyTranscribeRouteImport.update({
-  id: '/api/ops/lily-transcribe',
-  path: '/api/ops/lily-transcribe',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiOpsLilySpeakRoute = ApiOpsLilySpeakRouteImport.update({
-  id: '/api/ops/lily-speak',
-  path: '/api/ops/lily-speak',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiOpsLilyRoute = ApiOpsLilyRouteImport.update({
-  id: '/api/ops/lily',
-  path: '/api/ops/lily',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiOpsKindleRoute = ApiOpsKindleRouteImport.update({
-  id: '/api/ops/kindle',
-  path: '/api/ops/kindle',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiOpsItOpsRoute = ApiOpsItOpsRouteImport.update({
   id: '/api/ops/it-ops',
   path: '/api/ops/it-ops',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpsConnectwiseRoute = ApiOpsConnectwiseRouteImport.update({
+  id: '/api/ops/connectwise',
+  path: '/api/ops/connectwise',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOpsBarryRoute = ApiOpsBarryRouteImport.update({
@@ -1136,11 +1118,8 @@ export interface FileRoutesByFullPath {
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/ops/barry': typeof ApiOpsBarryRoute
+  '/api/ops/connectwise': typeof ApiOpsConnectwiseRoute
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
-  '/api/ops/kindle': typeof ApiOpsKindleRoute
-  '/api/ops/lily': typeof ApiOpsLilyRoute
-  '/api/ops/lily-speak': typeof ApiOpsLilySpeakRoute
-  '/api/ops/lily-transcribe': typeof ApiOpsLilyTranscribeRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1301,11 +1280,8 @@ export interface FileRoutesByTo {
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/ops/barry': typeof ApiOpsBarryRoute
+  '/api/ops/connectwise': typeof ApiOpsConnectwiseRoute
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
-  '/api/ops/kindle': typeof ApiOpsKindleRoute
-  '/api/ops/lily': typeof ApiOpsLilyRoute
-  '/api/ops/lily-speak': typeof ApiOpsLilySpeakRoute
-  '/api/ops/lily-transcribe': typeof ApiOpsLilyTranscribeRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1468,11 +1444,8 @@ export interface FileRoutesById {
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/ops/barry': typeof ApiOpsBarryRoute
+  '/api/ops/connectwise': typeof ApiOpsConnectwiseRoute
   '/api/ops/it-ops': typeof ApiOpsItOpsRoute
-  '/api/ops/kindle': typeof ApiOpsKindleRoute
-  '/api/ops/lily': typeof ApiOpsLilyRoute
-  '/api/ops/lily-speak': typeof ApiOpsLilySpeakRoute
-  '/api/ops/lily-transcribe': typeof ApiOpsLilyTranscribeRoute
   '/api/ops/meetings': typeof ApiOpsMeetingsRoute
   '/api/ops/presence': typeof ApiOpsPresenceRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
@@ -1636,11 +1609,8 @@ export interface FileRouteTypes {
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
     | '/api/ops/barry'
+    | '/api/ops/connectwise'
     | '/api/ops/it-ops'
-    | '/api/ops/kindle'
-    | '/api/ops/lily'
-    | '/api/ops/lily-speak'
-    | '/api/ops/lily-transcribe'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1801,11 +1771,8 @@ export interface FileRouteTypes {
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
     | '/api/ops/barry'
+    | '/api/ops/connectwise'
     | '/api/ops/it-ops'
-    | '/api/ops/kindle'
-    | '/api/ops/lily'
-    | '/api/ops/lily-speak'
-    | '/api/ops/lily-transcribe'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -1967,11 +1934,8 @@ export interface FileRouteTypes {
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
     | '/api/ops/barry'
+    | '/api/ops/connectwise'
     | '/api/ops/it-ops'
-    | '/api/ops/kindle'
-    | '/api/ops/lily'
-    | '/api/ops/lily-speak'
-    | '/api/ops/lily-transcribe'
     | '/api/ops/meetings'
     | '/api/ops/presence'
     | '/api/profiles/activate'
@@ -2116,11 +2080,8 @@ export interface RootRouteChildren {
   ApiOauthDeviceCodeRoute: typeof ApiOauthDeviceCodeRoute
   ApiOauthPollTokenRoute: typeof ApiOauthPollTokenRoute
   ApiOpsBarryRoute: typeof ApiOpsBarryRoute
+  ApiOpsConnectwiseRoute: typeof ApiOpsConnectwiseRoute
   ApiOpsItOpsRoute: typeof ApiOpsItOpsRoute
-  ApiOpsKindleRoute: typeof ApiOpsKindleRoute
-  ApiOpsLilyRoute: typeof ApiOpsLilyRoute
-  ApiOpsLilySpeakRoute: typeof ApiOpsLilySpeakRoute
-  ApiOpsLilyTranscribeRoute: typeof ApiOpsLilyTranscribeRoute
   ApiOpsMeetingsRoute: typeof ApiOpsMeetingsRoute
   ApiOpsPresenceRoute: typeof ApiOpsPresenceRoute
   ApiProfilesActivateRoute: typeof ApiProfilesActivateRoute
@@ -3019,39 +2980,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOpsMeetingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/ops/lily-transcribe': {
-      id: '/api/ops/lily-transcribe'
-      path: '/api/ops/lily-transcribe'
-      fullPath: '/api/ops/lily-transcribe'
-      preLoaderRoute: typeof ApiOpsLilyTranscribeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/ops/lily-speak': {
-      id: '/api/ops/lily-speak'
-      path: '/api/ops/lily-speak'
-      fullPath: '/api/ops/lily-speak'
-      preLoaderRoute: typeof ApiOpsLilySpeakRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/ops/lily': {
-      id: '/api/ops/lily'
-      path: '/api/ops/lily'
-      fullPath: '/api/ops/lily'
-      preLoaderRoute: typeof ApiOpsLilyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/ops/kindle': {
-      id: '/api/ops/kindle'
-      path: '/api/ops/kindle'
-      fullPath: '/api/ops/kindle'
-      preLoaderRoute: typeof ApiOpsKindleRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/ops/it-ops': {
       id: '/api/ops/it-ops'
       path: '/api/ops/it-ops'
       fullPath: '/api/ops/it-ops'
       preLoaderRoute: typeof ApiOpsItOpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ops/connectwise': {
+      id: '/api/ops/connectwise'
+      path: '/api/ops/connectwise'
+      fullPath: '/api/ops/connectwise'
+      preLoaderRoute: typeof ApiOpsConnectwiseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ops/barry': {
@@ -3616,11 +3556,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOauthDeviceCodeRoute: ApiOauthDeviceCodeRoute,
   ApiOauthPollTokenRoute: ApiOauthPollTokenRoute,
   ApiOpsBarryRoute: ApiOpsBarryRoute,
+  ApiOpsConnectwiseRoute: ApiOpsConnectwiseRoute,
   ApiOpsItOpsRoute: ApiOpsItOpsRoute,
-  ApiOpsKindleRoute: ApiOpsKindleRoute,
-  ApiOpsLilyRoute: ApiOpsLilyRoute,
-  ApiOpsLilySpeakRoute: ApiOpsLilySpeakRoute,
-  ApiOpsLilyTranscribeRoute: ApiOpsLilyTranscribeRoute,
   ApiOpsMeetingsRoute: ApiOpsMeetingsRoute,
   ApiOpsPresenceRoute: ApiOpsPresenceRoute,
   ApiProfilesActivateRoute: ApiProfilesActivateRoute,
