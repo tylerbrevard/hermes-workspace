@@ -363,6 +363,18 @@ async function getItOpsAnalytics() {
   }))
   let trendData: Array<{ date: string; created: number; resolved: number }> = []
   let queueBreakdown: Array<{ queue: string; count: number }> = []
+  let priorityBreakdown: Array<{ priority: string; count: number }> = []
+  let recentTickets: Array<{
+    id: string | number
+    summary: string
+    board: string
+    status: string
+    priority: string
+    owner: string
+    company: string
+    dateEntered: string | null
+    requiredDate: string | null
+  }> = []
 
   const config = readConnectWiseConfig()
   if (!config) {
@@ -453,13 +465,37 @@ async function getItOpsAnalytics() {
       .map(([date, counts]) => ({ date, created: counts.created, resolved: counts.resolved }))
 
     const queueMap: Record<string, number> = {}
+    const priorityMap: Record<string, number> = {}
     for (const ticket of openTickets) {
       const board = ticket.board?.name || 'Unknown'
       queueMap[board] = (queueMap[board] || 0) + 1
+      const priority = ticket.priority?.name || 'Unlabeled'
+      priorityMap[priority] = (priorityMap[priority] || 0) + 1
     }
     queueBreakdown = Object.entries(queueMap)
       .sort((left, right) => right[1] - left[1])
       .map(([queue, count]) => ({ queue, count }))
+    priorityBreakdown = Object.entries(priorityMap)
+      .sort((left, right) => right[1] - left[1])
+      .map(([priority, count]) => ({ priority, count }))
+    recentTickets = [...openTickets]
+      .sort((left, right) => {
+        const leftTime = left.dateEntered ? new Date(left.dateEntered).getTime() : 0
+        const rightTime = right.dateEntered ? new Date(right.dateEntered).getTime() : 0
+        return rightTime - leftTime
+      })
+      .slice(0, 12)
+      .map((ticket) => ({
+        id: ticket.id,
+        summary: ticket.summary || '(no summary)',
+        board: ticket.board?.name || 'Unknown',
+        status: ticket.status?.name || 'Unknown',
+        priority: ticket.priority?.name || 'Unlabeled',
+        owner: ticket.owner?.name || ticket.assignedTo?.name || 'Unassigned',
+        company: ticket.company?.name || 'Unknown company',
+        dateEntered: ticket.dateEntered || null,
+        requiredDate: ticket.requiredDate || null,
+      }))
 
     try {
       for (const ticket of openTickets) {
@@ -507,6 +543,8 @@ async function getItOpsAnalytics() {
     teamPerformance,
     trendData,
     queueBreakdown,
+    priorityBreakdown,
+    recentTickets,
     briefing,
     errors,
     fetchedAt: now.toISOString(),

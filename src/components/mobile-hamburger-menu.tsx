@@ -136,7 +136,7 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
   },
   {
     id: 'it-ops',
-    label: 'IT Ops',
+    label: 'ConnectWise',
     icon: Building01Icon,
     to: '/it-ops',
     match: (p: string) => p.startsWith('/it-ops'),
@@ -147,20 +147,6 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     icon: Chat01Icon,
     to: '/barry',
     match: (p: string) => p.startsWith('/barry'),
-  },
-  {
-    id: 'kindle',
-    label: 'Kindle',
-    icon: File01Icon,
-    to: '/kindle',
-    match: (p: string) => p.startsWith('/kindle'),
-  },
-  {
-    id: 'lily',
-    label: 'Lily',
-    icon: Chat01Icon,
-    to: '/lily',
-    match: (p: string) => p.startsWith('/lily'),
   },
   {
     id: 'settings',

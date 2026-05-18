@@ -65,6 +65,21 @@ type ItOpsData = {
       queue: string
       count: number
     }>
+    priorityBreakdown?: Array<{
+      priority: string
+      count: number
+    }>
+    recentTickets?: Array<{
+      id: string | number
+      summary: string
+      board: string
+      status: string
+      priority: string
+      owner: string
+      company: string
+      dateEntered: string | null
+      requiredDate: string | null
+    }>
     briefing: string
     errors?: string[]
     fetchedAt: string
@@ -122,10 +137,10 @@ export function ItOpsScreen() {
               Ops
             </div>
             <h1 className="mt-1 text-lg font-semibold text-primary-900 dark:text-neutral-100">
-              IT Ops
+              IT Ops / ConnectWise
             </h1>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              Native Workspace summary for ticket health, standup patterns, and action load.
+              ConnectWise ticket health, service-board load, standup patterns, and action ownership.
             </p>
           </div>
           <button
@@ -201,7 +216,7 @@ export function ItOpsScreen() {
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <section className={shellClassName()}>
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            Briefing
+            ConnectWise Briefing
           </h2>
           <div className="mt-3 text-sm text-primary-800 dark:text-neutral-200">
             {data?.analytics?.briefing || 'No briefing available.'}
@@ -214,7 +229,7 @@ export function ItOpsScreen() {
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                Queue breakdown
+                Service boards
               </div>
               <div className="mt-3 grid gap-2">
                 {(data?.analytics?.queueBreakdown || []).slice(0, 6).map((item) => (
@@ -225,6 +240,48 @@ export function ItOpsScreen() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                Priority load
+              </div>
+              <div className="mt-3 grid gap-2">
+                {(data?.analytics?.priorityBreakdown || []).slice(0, 6).map((item) => (
+                  <div key={item.priority} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-primary-800 dark:text-neutral-200">{item.priority}</span>
+                    <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
+                      {item.count}
+                    </span>
+                  </div>
+                ))}
+                {(data?.analytics?.priorityBreakdown || []).length === 0 ? (
+                  <div className="text-sm text-primary-500 dark:text-neutral-400">
+                    No priority data available.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900 md:col-span-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                Recent open tickets
+              </div>
+              <div className="mt-3 grid gap-2">
+                {(data?.analytics?.recentTickets || []).slice(0, 8).map((ticket) => (
+                  <div key={String(ticket.id)} className="rounded-lg border border-primary-200 bg-primary-50/70 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950">
+                    <div className="font-medium text-primary-900 dark:text-neutral-100">
+                      #{ticket.id} {ticket.summary}
+                    </div>
+                    <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
+                      {ticket.company} · {ticket.board} · {ticket.status} · {ticket.priority} · {ticket.owner}
+                    </div>
+                  </div>
+                ))}
+                {(data?.analytics?.recentTickets || []).length === 0 ? (
+                  <div className="text-sm text-primary-500 dark:text-neutral-400">
+                    No recent open tickets available.
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900">

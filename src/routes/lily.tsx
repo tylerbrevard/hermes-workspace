@@ -1,13 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { usePageTitle } from '@/hooks/use-page-title'
-import { LilyScreen } from '@/screens/ops/lily-screen'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/lily')({
-  ssr: false,
-  component: LilyRoute,
+  beforeLoad() {
+    throw redirect({
+      to: '/chat/$sessionKey',
+      params: { sessionKey: 'main' },
+      replace: true,
+    })
+  },
+  component: () => null,
 })
-
-function LilyRoute() {
-  usePageTitle('Lily')
-  return <LilyScreen />
-}

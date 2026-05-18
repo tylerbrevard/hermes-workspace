@@ -229,10 +229,19 @@ export function LifeOsScreen() {
                 <div>PACKS: <span className="text-[#8ef0a3]">{snapshot.pai.packs}</span></div>
                 <div>WORKFLOWS: <span className="text-[#8ef0a3]">{snapshot.pai.workflows}</span></div>
                 <div>HOOKS: <span className="text-[#8ef0a3]">{snapshot.pai.hooks}</span></div>
+                <div className="mt-2 text-[#8bb7ff]">PAI TOOL: GetCounts.ts</div>
+                <div>SKILLS: <span className="text-[#8ef0a3]">{snapshot.pai.toolCounts.skills}</span> / WORKFLOWS: <span className="text-[#8ef0a3]">{snapshot.pai.toolCounts.workflows}</span></div>
+                <div>ACTIVE HOOKS: <span className="text-[#8ef0a3]">{snapshot.pai.toolCounts.hooks}</span> / FILES: <span className="text-[#8ef0a3]">{snapshot.pai.toolCounts.files}</span></div>
               </div>
               <div>
                 <div>PULSE: <span className={statusClass(snapshot.pai.pulse.status)}>{snapshot.pai.pulse.status}</span> {snapshot.pai.pulse.pid ? `pid ${snapshot.pai.pulse.pid}` : ''}</div>
                 <div>DOCS: {snapshot.pai.terminalDocs.join(', ') || 'none'}</div>
+                <div className="mt-2 text-[#8bb7ff]">PAI TOOL: HealthSnapshot.ts</div>
+                <div>HEALTH INBOX: <span className={snapshot.pai.healthSnapshot.pending > 0 ? 'text-[#e9c36f]' : 'text-[#8ef0a3]'}>{snapshot.pai.healthSnapshot.pending}</span> pending / {snapshot.pai.healthSnapshot.count} snapshots</div>
+                <div>LATEST HEALTH: <span className="text-[#9ba3b5]">{snapshot.pai.healthSnapshot.latest || 'none'}</span></div>
+                <div className="mt-2 text-[#8bb7ff]">PAI TOOL: CostTracker.ts</div>
+                <div>API BYPASS SITES: <span className={snapshot.pai.cost.bypass ? 'text-[#ff7b93]' : 'text-[#8ef0a3]'}>{snapshot.pai.cost.bypass ?? 'unknown'}</span> / LEGIT: <span className="text-[#8ef0a3]">{snapshot.pai.cost.legit ?? 'unknown'}</span></div>
+                <div>COST ALERTS: <span className={snapshot.pai.cost.alerts.length ? 'text-[#ff7b93]' : 'text-[#8ef0a3]'}>{snapshot.pai.cost.alerts.length}</span></div>
                 <div className="mt-2 text-[#9ba3b5]">{snapshot.pai.telosSummary}</div>
               </div>
             </div>

@@ -1,13 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { usePageTitle } from '@/hooks/use-page-title'
-import { KindleScreen } from '@/screens/ops/kindle-screen'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/kindle')({
-  ssr: false,
-  component: KindleRoute,
+  beforeLoad() {
+    throw redirect({
+      to: '/it-ops',
+      replace: true,
+    })
+  },
+  component: () => null,
 })
-
-function KindleRoute() {
-  usePageTitle('Kindle')
-  return <KindleScreen />
-}

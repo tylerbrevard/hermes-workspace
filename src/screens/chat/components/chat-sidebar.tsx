@@ -907,7 +907,7 @@ function ChatSidebarComponent({
       kind: 'link',
       to: '/it-ops',
       icon: Building01Icon,
-      label: 'IT Ops',
+      label: 'ConnectWise',
       active: pathname === '/it-ops',
     },
     {
@@ -916,20 +916,6 @@ function ChatSidebarComponent({
       icon: Chat01Icon,
       label: 'Barry',
       active: pathname === '/barry',
-    },
-    {
-      kind: 'link',
-      to: '/kindle',
-      icon: File01Icon,
-      label: 'Kindle',
-      active: pathname === '/kindle',
-    },
-    {
-      kind: 'link',
-      to: '/lily',
-      icon: MessageMultiple01Icon,
-      label: 'Lily',
-      active: pathname === '/lily',
     },
   ]
 

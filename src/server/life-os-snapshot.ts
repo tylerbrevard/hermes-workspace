@@ -13,6 +13,7 @@ const PAI_SOURCE_ROOT = path.join(HOME, 'projects', 'Personal_AI_Infrastructure'
 const USER_ROOT = path.join(PAI_ROOT, 'USER')
 const HERMES_WORKSPACE_ROOT = path.join(HOME, 'hermes-workspace')
 const TYLER_REMOTE_ROOT = path.join(HOME, 'Documents', 'Tyler remote')
+const BUN_BIN = path.join(HOME, '.bun', 'bin', 'bun')
 
 type CheckState = 'healthy' | 'warn' | 'down' | 'unknown'
 
@@ -59,6 +60,24 @@ export type LifeOsSnapshot = {
     }
     telosSummary: string
     terminalDocs: Array<string>
+    toolCounts: {
+      skills: number
+      workflows: number
+      hooks: number
+      signals: number
+      files: number
+      ratings: number
+    }
+    healthSnapshot: {
+      pending: number
+      count: number
+      latest: string | null
+    }
+    cost: {
+      bypass: number | null
+      legit: number | null
+      alerts: Array<string>
+    }
   }
   services: Array<{
     label: string
@@ -220,6 +239,61 @@ async function getPulsePid() {
   }
 }
 
+async function getPaiToolCounts() {
+  const fallback = {
+    skills: 0,
+    workflows: 0,
+    hooks: 0,
+    signals: 0,
+    files: 0,
+    ratings: 0,
+  }
+  if (!existsSync(BUN_BIN)) return fallback
+  const output = await run(BUN_BIN, [path.join(PAI_ROOT, 'TOOLS', 'GetCounts.ts')], 6000)
+  try {
+    const parsed = JSON.parse(output) as Partial<typeof fallback>
+    return {
+      skills: Number(parsed.skills) || 0,
+      workflows: Number(parsed.workflows) || 0,
+      hooks: Number(parsed.hooks) || 0,
+      signals: Number(parsed.signals) || 0,
+      files: Number(parsed.files) || 0,
+      ratings: Number(parsed.ratings) || 0,
+    }
+  } catch {
+    return fallback
+  }
+}
+
+async function getPaiHealthSnapshotStatus() {
+  const fallback = { pending: 0, count: 0, latest: null as string | null }
+  if (!existsSync(BUN_BIN)) return fallback
+  const output = await run(BUN_BIN, [path.join(PAI_ROOT, 'TOOLS', 'HealthSnapshot.ts'), 'status'], 6000)
+  if (!output) return fallback
+  return {
+    pending: Number(output.match(/pending:\s+(\d+)/)?.[1] || 0),
+    count: Number(output.match(/count:\s+(\d+)/)?.[1] || 0),
+    latest: output.match(/latest:\s+(.+)/)?.[1]?.trim() || null,
+  }
+}
+
+async function getPaiCostStatus() {
+  const fallback = { bypass: null as number | null, legit: null as number | null, alerts: [] as Array<string> }
+  if (!existsSync(BUN_BIN)) return fallback
+  const output = await run(BUN_BIN, [path.join(PAI_ROOT, 'TOOLS', 'CostTracker.ts'), 'status'], 8000)
+  if (!output) return fallback
+  const bypass = output.match(/bypass:\s+(\d+)/)?.[1]
+  const legit = output.match(/legit:\s+(\d+)/)?.[1]
+  return {
+    bypass: bypass ? Number(bypass) : null,
+    legit: legit ? Number(legit) : null,
+    alerts: output
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.includes('ALERT') || line.startsWith('⚠')),
+  }
+}
+
 async function getTerminalDocs() {
   const docs = [
     path.join(PAI_ROOT, 'DOCUMENTATION', 'Pulse', 'TerminalTabs.md'),
@@ -242,6 +316,9 @@ export async function buildLifeOsSnapshot(): Promise<LifeOsSnapshot> {
     userMd,
     telosSummary,
     pulsePid,
+    paiToolCounts,
+    paiHealthSnapshot,
+    paiCostStatus,
     terminalDocs,
     tailscale,
     pulseOut,
@@ -269,6 +346,9 @@ export async function buildLifeOsSnapshot(): Promise<LifeOsSnapshot> {
       /telos/i,
     ]),
     getPulsePid(),
+    getPaiToolCounts(),
+    getPaiHealthSnapshotStatus(),
+    getPaiCostStatus(),
     getTerminalDocs(),
     getTailscaleRoutes(),
     readTail(path.join(PAI_ROOT, 'PULSE', 'logs', 'pulse-stdout.log')),
@@ -347,6 +427,9 @@ export async function buildLifeOsSnapshot(): Promise<LifeOsSnapshot> {
       },
       telosSummary: telosSummary || 'Telos source present; summary line not found.',
       terminalDocs,
+      toolCounts: paiToolCounts,
+      healthSnapshot: paiHealthSnapshot,
+      cost: paiCostStatus,
     },
     services: [gateway, workspace, pulse, pulseMenu, office],
     workspace: {
