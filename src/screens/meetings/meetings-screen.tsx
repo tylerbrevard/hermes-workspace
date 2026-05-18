@@ -264,6 +264,9 @@ export function MeetingsScreen() {
       null,
     [data, selectedMeetingId],
   )
+  const meetingBrief = data?.brief || null
+  const previousMeetings = meetingBrief?.previousMeetings || []
+  const openActionItems = meetingBrief?.openActionItems || []
 
   async function post(body: Record<string, unknown>, reload = true) {
     setWorking(true)
@@ -312,7 +315,7 @@ export function MeetingsScreen() {
       assignee: item.assignee,
       dueDate: item.dueDate,
       priority: item.priority,
-      meetingTitle: item.meetingTitle || data?.brief?.meetingTitle,
+      meetingTitle: item.meetingTitle || meetingBrief?.meetingTitle,
       sourceType: 'meeting-action-item',
     }))
     if (items.length === 0) return
@@ -751,7 +754,7 @@ export function MeetingsScreen() {
             <div className="text-xs text-primary-500 dark:text-neutral-400">
               {detailLoading
                 ? 'Refreshing detail…'
-                : selectedMeeting?.title || data?.brief?.meetingTitle || 'Select a meeting'}
+                : selectedMeeting?.title || meetingBrief?.meetingTitle || 'Select a meeting'}
             </div>
           </div>
 
@@ -800,7 +803,7 @@ export function MeetingsScreen() {
                   <button
                     type="button"
                     onClick={() => void sendOpenActionItemsToTodo()}
-                    disabled={working || data.brief.openActionItems.length === 0}
+                    disabled={working || openActionItems.length === 0}
                     className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                   >
                     Send open items to To Do
@@ -853,7 +856,7 @@ export function MeetingsScreen() {
                     Prior meetings
                   </div>
                   <div className="mt-3 grid gap-2">
-                    {(data.brief.previousMeetings || []).map((meeting) => (
+                    {previousMeetings.map((meeting) => (
                       <button
                         key={meeting.id}
                         type="button"
@@ -866,7 +869,7 @@ export function MeetingsScreen() {
                         </div>
                       </button>
                     ))}
-                    {data.brief.previousMeetings.length === 0 ? (
+                    {previousMeetings.length === 0 ? (
                       <div className="text-sm text-primary-500 dark:text-neutral-400">
                         No overlapping-participant history found.
                       </div>
@@ -1419,7 +1422,7 @@ export function MeetingsScreen() {
                 </div>
               </div>
 
-              {data?.brief ? (
+              {meetingBrief ? (
                 <div className="rounded-2xl border border-primary-200 bg-primary-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
                     Carry-forward context
@@ -1429,7 +1432,7 @@ export function MeetingsScreen() {
                   </div>
                   <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
                     <div className="grid gap-2">
-                      {(data.brief.previousMeetings || []).map((meeting) => (
+                      {previousMeetings.map((meeting) => (
                         <button
                           key={meeting.id}
                           type="button"
@@ -1444,7 +1447,7 @@ export function MeetingsScreen() {
                       ))}
                     </div>
                     <div className="grid gap-2">
-                      {(data.brief.openActionItems || []).map((item) => (
+                      {openActionItems.map((item) => (
                         <div
                           key={item.id}
                           className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"

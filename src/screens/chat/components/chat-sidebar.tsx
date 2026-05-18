@@ -581,13 +581,14 @@ function ChatSidebarComponent({
   const isPlaygroundActive = pathname === '/playground'
   const isAgoraActive = pathname === '/agora'
   const isTerminalActive = pathname === '/terminal'
+  const isLifeOsActive = pathname === '/life-os'
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
   const isTasksActive = pathname === '/tasks'
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
-  const mainRoutes = ['/chat', '/new', '/files', '/terminal']
+  const mainRoutes = ['/chat', '/new', '/files', '/terminal', '/life-os']
   const knowledgeRoutes = ['/memory', '/skills']
   const systemRoutes = ['/settings', '/logs']
 
@@ -809,6 +810,13 @@ function ChatSidebarComponent({
       icon: ComputerTerminal01Icon,
       label: t('nav.terminal'),
       active: isTerminalActive,
+    },
+    {
+      kind: 'link',
+      to: '/life-os',
+      icon: Castle02Icon,
+      label: 'Life OS',
+      active: isLifeOsActive,
     },
     {
       kind: 'link',

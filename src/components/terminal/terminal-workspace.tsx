@@ -62,8 +62,8 @@ type TerminalSessionResponse = {
   sessionId?: string
 }
 
-// See terminal-panel.tsx — ~/.hermes is not guaranteed to exist in the workspace image.
-const DEFAULT_TERMINAL_CWD = '~'
+const DEFAULT_TERMINAL_CWD = '~/.hermes/workspace'
+const DEFAULT_TERMINAL_COMMAND = ['/Users/tylerlyon/.local/bin/hermes', '--tui']
 const TERMINAL_BG = '#0d0d0d'
 
 function toDebugAnalysis(value: unknown): DebugAnalysis | null {
@@ -341,7 +341,10 @@ export function TerminalWorkspace({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cwd: DEFAULT_TERMINAL_CWD,
-          // Let the server pick the shell from $SHELL
+          // If sessionId still exists server-side, the API reattaches and ignores
+          // command. If a stale browser tab points at a dead session, this keeps
+          // the fallback spawn on the Hermes TUI instead of a plain shell.
+          command: DEFAULT_TERMINAL_COMMAND,
           cols: terminal.cols,
           rows: terminal.rows,
           // If this tab already has a sessionId, ask the server to reattach

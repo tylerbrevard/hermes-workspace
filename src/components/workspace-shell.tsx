@@ -98,13 +98,14 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     if (path.startsWith('/chat') || path === '/new' || path === '/') return 1
     if (path.startsWith('/files')) return 2
     if (path.startsWith('/terminal')) return 3
-    if (path.startsWith('/jobs')) return 4
-    if (path === '/swarm' || path.startsWith('/swarm2')) return 5
-    if (path.startsWith('/memory')) return 6
-    if (path.startsWith('/skills')) return 7
-    if (path.startsWith('/mcp')) return 8
-    if (path.startsWith('/profiles')) return 9
-    if (path.startsWith('/settings')) return 10
+    if (path.startsWith('/life-os')) return 4
+    if (path.startsWith('/jobs')) return 5
+    if (path === '/swarm' || path.startsWith('/swarm2')) return 6
+    if (path.startsWith('/memory')) return 7
+    if (path.startsWith('/skills')) return 8
+    if (path.startsWith('/mcp')) return 9
+    if (path.startsWith('/profiles')) return 10
+    if (path.startsWith('/settings')) return 11
     return -1
   }, [])
 
@@ -169,6 +170,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   // Derive active session from URL
   const mobilePageTitle = (() => {
     if (pathname.startsWith('/terminal')) return 'Terminal'
+    if (pathname.startsWith('/life-os')) return 'Life OS'
     if (pathname.startsWith('/files')) return 'Files'
     if (pathname.startsWith('/jobs')) return 'Jobs'
     if (pathname.startsWith('/conductor')) return 'Conductor'

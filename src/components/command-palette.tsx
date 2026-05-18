@@ -199,6 +199,15 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         onSelect: () => void navigate({ to: '/terminal' }),
       },
       {
+        id: 'screen-life-os',
+        group: 'Screens',
+        label: 'Life OS',
+        keywords: 'pai pulse life operating system terminal dashboard',
+        shortcut: 'Go',
+        icon: CommandLineIcon,
+        onSelect: () => void navigate({ to: '/life-os' }),
+      },
+      {
         id: 'screen-memory',
         group: 'Screens',
         label: 'Memory',

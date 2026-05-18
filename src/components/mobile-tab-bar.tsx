@@ -3,6 +3,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   BrainIcon,
   Building01Icon,
+  Castle02Icon,
   Chat01Icon,
   Clock01Icon,
   CommandLineIcon,
@@ -80,6 +81,13 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     icon: CommandLineIcon,
     to: '/terminal',
     match: (p) => p.startsWith('/terminal'),
+  },
+  {
+    id: 'life-os',
+    label: 'Life OS',
+    icon: Castle02Icon,
+    to: '/life-os',
+    match: (p) => p.startsWith('/life-os'),
   },
   {
     id: 'jobs',
