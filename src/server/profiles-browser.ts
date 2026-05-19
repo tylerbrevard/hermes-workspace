@@ -190,6 +190,7 @@ export function listProfiles(): Array<ProfileSummary> {
 
     for (const entry of entries) {
       const name = entry.name
+      if (name === 'default') continue
       const profilePath = path.join(profilesRoot, name)
       if (!entry.isDirectory()) {
         if (!entry.isSymbolicLink()) continue
