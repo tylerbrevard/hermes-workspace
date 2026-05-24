@@ -1487,20 +1487,6 @@ code {
   margin: 1.5rem 0;
 }
 
-/* Demo mode — activated via ?demo=1 query param */
-[data-demo='true'] {
-  font-size: 105%;
-}
-[data-demo='true'] .tool-card-collapsed {
-  display: none;
-}
-[data-demo='true'] .tool-card-expanded {
-  display: block !important;
-}
-[data-demo='true'] * {
-  transition-duration: 0.05s !important;
-}
-
 /* Mobile nav drawer — push content right + dim when open */
 @media (max-width: 767px) {
   body.nav-drawer-open > #root {

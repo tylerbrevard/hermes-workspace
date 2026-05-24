@@ -158,7 +158,7 @@ function AgentRow({
       onKeyDown={(e) => e.key === 'Enter' && onSelect()}
       onClick={onSelect}
       className={cn(
-        'group relative flex cursor-pointer items-stretch overflow-hidden rounded-lg border transition-all',
+        'group relative flex cursor-pointer items-stretch overflow-hidden rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
         'border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50',
         isSelected && 'border-accent-200 bg-accent-50/40 ring-1 ring-accent-200',
       )}

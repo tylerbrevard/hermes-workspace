@@ -138,7 +138,7 @@ export function Swarm2OrchestratorCard({
     id: agent.workerId,
     name: agent.workerName,
     modelId: agent.role,
-    status: agent.state === 'blocked' ? 'error' : agent.state === 'ready' ? 'done' : 'active',
+    status: agent.state === 'blocked' ? 'error' : agent.state === 'ready' ? 'ready' : 'active',
     lastLine: agent.task,
     lastAt: Date.now(),
     taskCount: agent.state === 'ready' ? 0 : 1,
@@ -351,6 +351,7 @@ export function Swarm2OrchestratorCard({
                   missionRunning={activeAgents.some((agent) => agent.state === 'working' || agent.state === 'reviewing')}
                   onViewOutput={() => undefined}
                   containerHeight={360}
+                  processType="parallel"
                   hideHeader
                 />
               </div>
@@ -381,7 +382,7 @@ export function Swarm2OrchestratorCard({
                       </div>
                       <div className="mt-2 line-clamp-3 text-[10px] leading-snug text-[var(--theme-muted-2)]" title={agent.task}>{agent.task}</div>
                       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--theme-bg)]">
-                        <div className={cn('h-full rounded-full transition-all', isBlocked ? 'bg-red-500' : isReview ? 'bg-amber-500' : 'bg-[var(--theme-accent)]')} style={{ width: `${agent.progress}%` }} />
+                        <div className={cn('h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]', isBlocked ? 'bg-red-500' : isReview ? 'bg-amber-500' : 'bg-[var(--theme-accent)]')} style={{ width: `${agent.progress}%` }} />
                       </div>
                     </div>
                   )

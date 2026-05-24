@@ -81,7 +81,7 @@ function ScrollButton({
       size="icon-sm"
       className={cn(
         'pointer-events-auto rounded-full shadow-md',
-        'transition-all duration-100 ease-in-out',
+        'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-100 ease-in-out',
         !isAtBottom && showButton
           ? 'translate-y-0 scale-100 opacity-100'
           : 'pointer-events-none translate-y-4 scale-98 opacity-0',

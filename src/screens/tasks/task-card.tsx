@@ -31,7 +31,7 @@ export function TaskCard({ task, assigneeLabels = {}, onClick, onDragStart, isDr
       onDragStart={onDragStart}
       onClick={onClick}
       className={cn(
-        'relative rounded-lg border p-3 cursor-pointer transition-all select-none',
+        'relative rounded-lg border p-3 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] select-none',
         'bg-[var(--theme-card)] border-[var(--theme-border)]',
         'hover:border-[var(--theme-accent)]',
         isDragging ? 'opacity-40 rotate-1 shadow-2xl' : 'hover:shadow-[0_4px_16px_rgba(0,0,0,0.35)]',

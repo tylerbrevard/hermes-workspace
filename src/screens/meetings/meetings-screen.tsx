@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState, startTransition } from 'react'
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 type Meeting = {
   id: string
@@ -117,6 +117,28 @@ function formatWhen(value: string) {
   })
 }
 
+function formatFreshness(value?: string | null) {
+  if (!value) return 'Last Graph pull unknown'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Last Graph pull unknown'
+  return `Last Graph pull ${date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`
+}
+
+function stripTone(state: 'ok' | 'warn' | 'bad') {
+  if (state === 'ok') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200'
+  }
+  if (state === 'warn') {
+    return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200'
+  }
+  return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200'
+}
+
 function participantLabel(meeting: Meeting) {
   const names = (meeting.participants || [])
     .map((participant) =>
@@ -166,6 +188,7 @@ export function MeetingsScreen() {
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'needs-review' | 'reviewed'>('all')
   const [selectedMeetingId, setSelectedMeetingId] = useState<string>('')
   const [newActionItemText, setNewActionItemText] = useState('')
   const [editingActionItemId, setEditingActionItemId] = useState<string | null>(null)
@@ -267,6 +290,16 @@ export function MeetingsScreen() {
   const meetingBrief = data?.brief || null
   const previousMeetings = meetingBrief?.previousMeetings || []
   const openActionItems = meetingBrief?.openActionItems || []
+  const nextMeeting = data?.todayMeetings?.[0] || data?.meetings?.[0] || null
+  const visibleRecentMeetings = useMemo(
+    () =>
+      (data?.meetings || []).filter((meeting) => {
+        if (reviewFilter === 'needs-review') return !meeting.reviewed
+        if (reviewFilter === 'reviewed') return Boolean(meeting.reviewed)
+        return true
+      }),
+    [data?.meetings, reviewFilter],
+  )
 
   async function post(body: Record<string, unknown>, reload = true) {
     setWorking(true)
@@ -319,6 +352,7 @@ export function MeetingsScreen() {
       sourceType: 'meeting-action-item',
     }))
     if (items.length === 0) return
+    if (!window.confirm(`Send ${items.length} meeting action item(s) to To Do?`)) return
     await post({ kind: 'send-action-items-to-todo', items })
   }
 
@@ -332,6 +366,7 @@ export function MeetingsScreen() {
       sourceType: 'meeting-issue',
     }))
     if (items.length === 0) return
+    if (!window.confirm(`Send ${items.length} meeting issue(s) to To Do?`)) return
     await post({ kind: 'send-issues-to-todo', items })
   }
 
@@ -345,6 +380,7 @@ export function MeetingsScreen() {
       sourceType: 'meeting-decision',
     }))
     if (items.length === 0) return
+    if (!window.confirm(`Send ${items.length} meeting decision(s) to To Do?`)) return
     await post({ kind: 'send-decisions-to-todo', items })
   }
 
@@ -358,6 +394,7 @@ export function MeetingsScreen() {
   }
 
   async function autoExtractRecent() {
+    if (!window.confirm('Extract action items, issues, and decisions from the five most recent meetings?')) return
     await post({
       kind: 'auto-extract-recent',
       limit: 5,
@@ -493,17 +530,34 @@ export function MeetingsScreen() {
               Native Workspace view for meeting health, today’s calendar, and review state.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 sm:justify-end">
             <input
               type="search"
+              aria-label="Search meetings"
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}
               placeholder="Search meetings"
-              className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+              className="min-w-0 flex-1 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 sm:min-w-56 sm:flex-none"
             />
+            <select
+              aria-label="Filter meetings by review status"
+              value={reviewFilter}
+              onChange={(event) =>
+                setReviewFilter(event.currentTarget.value as typeof reviewFilter)
+              }
+              className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+            >
+              <option value="all">All review states</option>
+              <option value="needs-review">Needs review</option>
+              <option value="reviewed">Reviewed</option>
+            </select>
             <button
               type="button"
-              onClick={() => post({ kind: 'force-sync' })}
+              onClick={() => {
+                if (window.confirm('Force a fresh Graph meeting sync now?')) {
+                  void post({ kind: 'force-sync' })
+                }
+              }}
               disabled={working}
               className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
             >
@@ -519,7 +573,11 @@ export function MeetingsScreen() {
             </button>
             <button
               type="button"
-              onClick={() => post({ kind: 'bulk-review', meetingIds: unreviewedIds })}
+              onClick={() => {
+                if (window.confirm(`Mark ${unreviewedIds.length} unreviewed meeting(s) reviewed?`)) {
+                  void post({ kind: 'bulk-review', meetingIds: unreviewedIds })
+                }
+              }}
               disabled={working || unreviewedIds.length === 0}
               className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
             >
@@ -527,11 +585,33 @@ export function MeetingsScreen() {
             </button>
           </div>
         </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-4">
+          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(error ? 'bad' : data?.graphWarning || data?.dataWarning ? 'warn' : 'ok')}`}>
+            Calendar {error ? 'offline' : data?.graphWarning || data?.dataWarning ? 'degraded' : 'connected'}
+          </span>
+          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(data?.graphSource ? 'ok' : 'warn')}`}>
+            Source {data?.graphSource || 'unknown'}
+          </span>
+          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(nextMeeting ? 'ok' : 'warn')}`}>
+            Next {nextMeeting ? formatWhen(nextMeeting.date) : 'none scheduled'}
+          </span>
+          <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+            {formatFreshness(data?.refreshedAt)}
+          </span>
+        </div>
       </div>
 
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-          {error}
+          <div className="font-semibold">Meeting data is unavailable</div>
+          <div className="mt-1">{error}</div>
+          <button
+            type="button"
+            onClick={() => void load(true)}
+            className="mt-3 rounded-xl border border-red-300 bg-red-100/60 px-3 py-2 text-xs font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-100"
+          >
+            Retry Graph sync
+          </button>
         </div>
       ) : null}
       {data?.graphWarning || data?.dataWarning ? (
@@ -624,7 +704,14 @@ export function MeetingsScreen() {
             ))}
             {!loading && (data?.todayMeetings?.length || 0) === 0 ? (
               <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-                No meetings in the current window.
+                <div className="font-medium text-primary-700 dark:text-neutral-200">No meetings in the current window.</div>
+                <button
+                  type="button"
+                  onClick={() => void load(true)}
+                  className="mt-3 rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                >
+                  Refresh calendar
+                </button>
               </div>
             ) : null}
           </div>
@@ -636,13 +723,14 @@ export function MeetingsScreen() {
               Recent meeting records
             </h2>
             <div className="text-xs text-primary-500 dark:text-neutral-400">
-              {loading ? 'Loading…' : `${data?.meetings?.length || 0} rows`}
+              {loading ? 'Loading…' : `${visibleRecentMeetings.length} rows`}
             </div>
           </div>
           <div className="mt-4 grid gap-3">
-            {(data?.meetings || []).slice(0, 24).map((meeting) => (
+            {visibleRecentMeetings.slice(0, 24).map((meeting) => (
               <div
                 key={meeting.id}
+                data-testid="meeting-record"
                 className={`rounded-2xl border px-4 py-3 transition-colors dark:border-neutral-800 ${
                   selectedMeetingId === meeting.id
                     ? 'border-primary-400 bg-primary-100/80 dark:bg-neutral-900/90'
@@ -653,7 +741,8 @@ export function MeetingsScreen() {
                   <button
                     type="button"
                     onClick={() => pickMeeting(meeting.id)}
-                    className="text-left"
+                    className="text-left lg:min-w-0"
+                    aria-current={selectedMeetingId === meeting.id ? 'true' : undefined}
                   >
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -707,6 +796,20 @@ export function MeetingsScreen() {
                 </div>
               </div>
             ))}
+            {!loading && visibleRecentMeetings.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+                <div className="font-medium text-primary-700 dark:text-neutral-200">
+                  No meetings match this review filter.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('all')}
+                  className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs font-medium text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                >
+                  Show all meetings
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>
@@ -832,11 +935,23 @@ export function MeetingsScreen() {
                       Join link
                     </a>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(selectedMeeting.id)}
+                    className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+                  >
+                    Copy source id
+                  </button>
                 </div>
                 {selectedMeeting.content ? (
-                  <div className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 p-3 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
-                    {selectedMeeting.content}
-                  </div>
+                  <details className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 p-3 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
+                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                      Meeting source notes
+                    </summary>
+                    <div className="mt-3 whitespace-pre-wrap break-words">
+                      {selectedMeeting.content}
+                    </div>
+                  </details>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   {participantList(selectedMeeting).map((participant) => (

@@ -114,7 +114,7 @@ function Group({
               key={w.id}
               type="button"
               onClick={() => (visible ? layout.hide(w.id) : layout.show(w.id))}
-              className="group inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all"
+              className="group inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]"
               style={{
                 background: visible
                   ? 'color-mix(in srgb, var(--theme-success) 14%, transparent)'

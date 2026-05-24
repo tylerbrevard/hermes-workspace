@@ -1,8 +1,8 @@
-import { GroupProps } from '@react-three/fiber'
+import type { ComponentProps } from 'react'
 import type { CharacterArchetypeId } from '../lib/character-config'
 import { HERMESWORLD_CHARACTER_ARCHETYPES } from '../lib/character-config'
 
-type NpcCharacterProps = GroupProps & {
+type NpcCharacterProps = ComponentProps<'group'> & {
   archetypeId: CharacterArchetypeId
   accent?: string
 }

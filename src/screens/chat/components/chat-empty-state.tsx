@@ -25,12 +25,12 @@ const SUGGESTIONS: Array<SuggestionChip> = [
   {
     label: 'Save a preference',
     prompt:
-      'Save this to memory exactly: "For demos, respond in 3 bullets max and put risk first." Then confirm saved.',
+      'Save this to memory exactly: "For status updates, respond in 3 bullets max and put risk first." Then confirm saved.',
     icon: BrainIcon,
   },
   {
     label: 'Create a file',
-    prompt: 'Create demo-checklist.md with 5 launch checks for this app.',
+    prompt: 'Create launch-checklist.md with 5 launch checks for this app.',
     icon: PuzzleIcon,
   },
 ]
@@ -44,7 +44,18 @@ export function ChatEmptyState({
   onSuggestionClick,
   compact = false,
 }: ChatEmptyStateProps) {
-  const [activeProfile, setActiveProfile] = useState<ProfileSummary | null>(null)
+  const [activeProfile, setActiveProfile] = useState<ProfileSummary | null>(
+    null,
+  )
+  const [gatewayHint, setGatewayHint] = useState<{
+    label: string
+    detail: string
+    tone: 'ok' | 'warn'
+  }>({
+    label: 'Checking gateway',
+    detail: 'Loading session and model health',
+    tone: 'warn',
+  })
 
   useEffect(() => {
     fetch('/api/profiles/list')
@@ -57,6 +68,34 @@ export function ChatEmptyState({
       .catch(() => {
         // silently ignore — profile info is cosmetic
       })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/session-status')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        const ok = data?.ok !== false
+        setGatewayHint({
+          label: ok ? 'Gateway ready' : 'Gateway needs attention',
+          detail: ok
+            ? 'Sessions, tools, and streaming are available'
+            : 'Open status or retry if sends stall',
+          tone: ok ? 'ok' : 'warn',
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        setGatewayHint({
+          label: 'Gateway status unavailable',
+          detail: 'Chat can still open; retry if the first send fails',
+          tone: 'warn',
+        })
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return (
@@ -82,10 +121,7 @@ export function ChatEmptyState({
         </div>
 
         {/* Editorial micro-label */}
-        <p
-          className="micro-label mb-2"
-          style={{ color: 'var(--theme-muted)' }}
-        >
+        <p className="micro-label mb-2" style={{ color: 'var(--theme-muted)' }}>
           Hermes Workspace
         </p>
 
@@ -98,7 +134,10 @@ export function ChatEmptyState({
         </h2>
 
         {activeProfile && (
-          <span className="mt-2 text-xs" style={{ color: 'var(--theme-accent)' }}>
+          <span
+            className="mt-2 text-xs"
+            style={{ color: 'var(--theme-accent)' }}
+          >
             {activeProfile.name}
             {activeProfile.model ? ` · ${activeProfile.model}` : ''}
           </span>
@@ -109,6 +148,30 @@ export function ChatEmptyState({
             <p className="mt-3 text-sm" style={{ color: 'var(--theme-muted)' }}>
               Agent chat · live tools · memory · full observability
             </p>
+            <div
+              className="mt-4 flex max-w-md items-start gap-2 rounded-md px-3 py-2 text-left text-xs"
+              style={{
+                background: 'var(--theme-card)',
+                border: '1px solid var(--theme-border)',
+                color: 'var(--theme-muted)',
+              }}
+            >
+              <span
+                className="mt-1 size-2 shrink-0 rounded-full"
+                style={{
+                  background: gatewayHint.tone === 'ok' ? '#10b981' : '#f59e0b',
+                }}
+              />
+              <span>
+                <span
+                  className="block font-semibold"
+                  style={{ color: 'var(--theme-text)' }}
+                >
+                  {gatewayHint.label}
+                </span>
+                {gatewayHint.detail}
+              </span>
+            </div>
           </>
         )}
 
@@ -119,7 +182,7 @@ export function ChatEmptyState({
               key={suggestion.label}
               type="button"
               onClick={() => onSuggestionClick?.(suggestion.prompt)}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-3.5 py-2 text-xs font-medium transition-all"
+              className="flex cursor-pointer items-center gap-2 rounded-md px-3.5 py-2 text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]"
               style={{
                 background: 'var(--theme-card)',
                 border: '1px solid var(--theme-border)',

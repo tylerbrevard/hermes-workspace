@@ -297,7 +297,7 @@ export function OperatorTipCard({
               <button
                 type="button"
                 onClick={handleCta}
-                className="rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] transition-all hover:scale-[1.03] hover:bg-[var(--theme-card)]/70"
+                className="rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:scale-[1.03] hover:bg-[var(--theme-card)]/70"
                 style={{
                   borderColor: 'var(--theme-border)',
                   color: 'var(--theme-text)',
@@ -311,7 +311,7 @@ export function OperatorTipCard({
               onClick={handleNext}
               aria-label="Next tip"
               title="Next tip"
-              className="inline-flex size-6 items-center justify-center rounded-full border transition-all hover:scale-[1.05] hover:bg-[var(--theme-card)]/70"
+              className="inline-flex size-6 items-center justify-center rounded-full border transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:scale-[1.05] hover:bg-[var(--theme-card)]/70"
               style={{
                 borderColor: 'var(--theme-border)',
                 color: 'var(--theme-muted)',

@@ -196,7 +196,9 @@ export function useRealtimeChatHistory({
           if (
             msgText.startsWith('Pre-compaction memory flush') ||
             msgText.startsWith('Store durable memories now') ||
-            msgText.startsWith('APPEND new content only and do not overwrite') ||
+            msgText.startsWith(
+              'APPEND new content only and do not overwrite',
+            ) ||
             msgText.startsWith('A subagent task') ||
             msgText.startsWith('[Queued announce messages') ||
             msgText.startsWith('Summarize this naturally for the user') ||
@@ -425,11 +427,7 @@ export function useRealtimeChatHistory({
               queryClient.getQueryData<Record<string, unknown>>(key)
             const newCount =
               (newData?.messages as Array<unknown> | undefined)?.length ?? 0
-            if (
-              prevCount > 10 &&
-              newCount > 0 &&
-              newCount < prevCount * 0.6
-            ) {
+            if (prevCount > 10 && newCount > 0 && newCount < prevCount * 0.6) {
               onCompactionEnd?.()
               toast(
                 'Context compacted — older messages were summarized to free up space',
@@ -505,7 +503,7 @@ export function useRealtimeChatHistory({
     }
     // Streaming just completed — capture final text so the message stays
     // visible during the handoff from streaming placeholder to history message.
-    // The stub useChatStream never fires onDone, so this is the only path.
+    // The compatibility useChatStream never fires onDone, so this is the only path.
     if (prev && prev.text && !streamingState) {
       completedStreamingTextRef.current = prev.text
       if (prev.thinking) {

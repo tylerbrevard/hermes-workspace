@@ -33,7 +33,10 @@ function makeRequest(url: string): Request {
 
 async function callGet(url: string): Promise<Response> {
   const request = makeRequest(url)
-  const handler = Route.options.server?.handlers?.GET
+  const handlers = Route.options.server?.handlers as
+    | { GET?: (ctx: { request: Request }) => Response | Promise<Response> }
+    | undefined
+  const handler = handlers?.GET
   if (!handler) throw new Error('No GET handler')
   return handler({ request } as Parameters<typeof handler>[0])
 }
@@ -68,25 +71,25 @@ describe('GET /api/mcp/hub-search — query parsing', () => {
   it('passes q, source, limit to unifiedSearch', async () => {
     mockUnifiedSearch.mockResolvedValue({ results: [], source: 'mcp-get', total: 0 })
     await callGet('http://localhost/api/mcp/hub-search?q=github&source=mcp-get&limit=5')
-    expect(mockUnifiedSearch).toHaveBeenCalledWith('github', 'mcp-get', 5)
+    expect(mockUnifiedSearch).toHaveBeenCalledWith('github', 'mcp-get', 5, 0)
   })
 
   it('uses defaults when params absent', async () => {
     mockUnifiedSearch.mockResolvedValue({ results: [], source: 'all', total: 0 })
     await callGet('http://localhost/api/mcp/hub-search')
-    expect(mockUnifiedSearch).toHaveBeenCalledWith('', 'all', 20)
+    expect(mockUnifiedSearch).toHaveBeenCalledWith('', 'all', 20, 0)
   })
 
   it('clamps limit to 100', async () => {
     mockUnifiedSearch.mockResolvedValue({ results: [], source: 'all', total: 0 })
     await callGet('http://localhost/api/mcp/hub-search?limit=9999')
-    expect(mockUnifiedSearch).toHaveBeenCalledWith('', 'all', 100)
+    expect(mockUnifiedSearch).toHaveBeenCalledWith('', 'all', 500, 0)
   })
 
   it('defaults invalid source to all', async () => {
     mockUnifiedSearch.mockResolvedValue({ results: [], source: 'all', total: 0 })
     await callGet('http://localhost/api/mcp/hub-search?source=invalid')
-    expect(mockUnifiedSearch).toHaveBeenCalledWith('', 'all', 20)
+    expect(mockUnifiedSearch).toHaveBeenCalledWith('', 'all', 20, 0)
   })
 })
 

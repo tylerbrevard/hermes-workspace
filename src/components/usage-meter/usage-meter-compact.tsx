@@ -322,7 +322,7 @@ export function UsageMeterCompact() {
               </div>
               <div className="h-1 flex-1 rounded-full bg-neutral-200 dark:bg-neutral-700">
                 <div
-                  className={cn('h-full rounded-full transition-all', barColor(row.pct))}
+                  className={cn('h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]', barColor(row.pct))}
                   style={{ width: `${row.pct}%` }}
                 />
               </div>

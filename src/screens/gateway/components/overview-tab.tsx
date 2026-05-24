@@ -64,7 +64,7 @@ export function OverviewTab({
   return (
     <div className="h-full overflow-y-auto bg-neutral-50 p-4">
       <div className="space-y-4">
-        <section className="rounded-xl border border-neutral-200 bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+        <section className="rounded-xl border border-neutral-200 bg-white px-4 py-3 shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:-translate-y-0.5 hover:shadow-md">
           {missionActive ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -123,7 +123,7 @@ export function OverviewTab({
           ].map((stat) => (
             <div
               key={stat.label}
-              className="flex h-full min-h-[92px] flex-col justify-between rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              className="flex h-full min-h-[92px] flex-col justify-between rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:-translate-y-0.5 hover:shadow-md"
             >
               <p className="text-[11px] font-medium text-neutral-500">{stat.label}</p>
               <p className="mt-1 text-lg font-semibold tracking-tight text-neutral-900">{stat.value}</p>
@@ -132,7 +132,7 @@ export function OverviewTab({
           ))}
         </section>
 
-        <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+        <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:-translate-y-0.5 hover:shadow-md">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <h2 className="text-sm font-semibold text-neutral-900">Agents</h2>
@@ -215,7 +215,7 @@ export function OverviewTab({
                 return (
                   <div
                     key={agent.id}
-                    className="relative flex h-full min-h-[220px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                    className="relative flex h-full min-h-[220px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <div className={cn('absolute inset-y-0 left-0 w-[3px]', accent.bar)} />
                     <div className="flex items-start justify-between gap-2">
@@ -298,7 +298,7 @@ export function OverviewTab({
           )}
         </section>
 
-        <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+        <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:-translate-y-0.5 hover:shadow-md">
           <h2 className="text-sm font-semibold text-neutral-900">Recent Activity</h2>
           {recentActivityItems.length === 0 ? (
             <p className="mt-2 text-xs text-neutral-500">📝 No recent activity yet.</p>

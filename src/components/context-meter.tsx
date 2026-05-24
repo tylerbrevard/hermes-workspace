@@ -85,7 +85,7 @@ export function ContextMeter({
         >
           <div
             className={cn(
-              'h-full transition-all duration-700',
+              'h-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-700',
               getBarColor(pct),
             )}
             style={{ width: `${Math.min(pct, 100)}%` }}
@@ -122,7 +122,7 @@ export function ContextMeter({
       >
         <div
           className={cn(
-            'h-full rounded-full transition-all duration-700',
+            'h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-700',
             getBarColor(pct),
           )}
           style={{ width: `${Math.min(pct, 100)}%` }}

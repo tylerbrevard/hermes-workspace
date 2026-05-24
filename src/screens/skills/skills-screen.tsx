@@ -105,6 +105,29 @@ const DEFAULT_CATEGORIES = [
   'Finance & Crypto',
 ]
 
+function formatRefreshTime(updatedAt: number): string {
+  if (!updatedAt) return 'not loaded yet'
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(updatedAt)
+}
+
+function formatSkillOrigin(origin?: SkillSummary['origin']): string {
+  if (origin === 'builtin') return 'Built-in'
+  if (origin === 'agent-created') return 'Agent-created'
+  if (origin === 'marketplace') return 'Marketplace'
+  return 'Unknown'
+}
+
+function sourceTail(sourcePath: string): string {
+  if (!sourcePath) return 'unknown source'
+  const parts = sourcePath.split('/').filter(Boolean)
+  return parts.slice(-2).join('/') || sourcePath
+}
+
 function resolveSkillSearchTier(
   skill: SkillSummary,
   query: string,
@@ -154,7 +177,15 @@ export function SkillsScreen() {
   }, [searchInput, tab])
 
   const skillsQuery = useQuery({
-    queryKey: ['skills-browser', tab, searchInput, category, origin, page, sort],
+    queryKey: [
+      'skills-browser',
+      tab,
+      searchInput,
+      category,
+      origin,
+      page,
+      sort,
+    ],
     queryFn: async function fetchSkills(): Promise<SkillsApiResponse> {
       const params = new URLSearchParams()
       params.set('tab', tab)
@@ -239,26 +270,43 @@ export function SkillsScreen() {
     [searchInput, skillsQuery.data?.skills],
   )
 
+  const skillCounts = useMemo(
+    function resolveSkillCounts() {
+      const sourceSkills = skillsQuery.data?.skills || []
+      return sourceSkills.reduce(
+        (counts, skill) => {
+          if (skill.installed) counts.installed += 1
+          if (skill.enabled) counts.enabled += 1
+          if (skill.origin === 'builtin') counts.builtin += 1
+          if (skill.origin === 'agent-created') counts.agentCreated += 1
+          if (
+            skill.security?.level === 'medium' ||
+            skill.security?.level === 'high'
+          ) {
+            counts.review += 1
+          }
+          return counts
+        },
+        { installed: 0, enabled: 0, builtin: 0, agentCreated: 0, review: 0 },
+      )
+    },
+    [skillsQuery.data?.skills],
+  )
+
   const marketplaceSkills = useMemo<Array<SkillSummary>>(
     function resolveMarketplaceSkills() {
       return (hubQuery.data?.results || []).map(function mapHubSkill(skill) {
         // Gateway returns: name, description, source, identifier, trust_level, repo, path, tags, extra, installed
         const skillId = skill.id || skill.name
+        const extra = skill.extra as Record<string, unknown>
         const author =
           skill.author ||
           (skill.repo ? skill.repo.split('/')[0] : null) ||
-          (skill.extra as Record<string, unknown>)?.author ||
+          extra.author ||
           skill.source ||
           'Community'
-        const homepage =
-          skill.homepage ||
-          skill.repo ||
-          (skill.extra as Record<string, unknown>)?.homepage ||
-          null
-        const category =
-          skill.category ||
-          (skill.extra as Record<string, unknown>)?.category ||
-          'Productivity'
+        const homepage = skill.homepage || skill.repo || extra.homepage || null
+        const skillCategory = skill.category || extra.category || 'Productivity'
 
         return {
           id: skillId,
@@ -269,7 +317,7 @@ export function SkillsScreen() {
           triggers: skill.tags,
           tags: skill.tags,
           homepage: typeof homepage === 'string' ? homepage : null,
-          category: String(category),
+          category: String(skillCategory),
           icon:
             skill.source === 'github'
               ? '🐙'
@@ -473,6 +521,44 @@ export function SkillsScreen() {
               </p>
             </div>
           </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+            {[
+              ['Installed', skillCounts.installed],
+              ['Enabled', skillCounts.enabled],
+              ['Built-in', skillCounts.builtin],
+              ['Agent-created', skillCounts.agentCreated],
+              ['Review', skillCounts.review],
+            ].map(([label, value]) => (
+              <div
+                key={String(label)}
+                className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2"
+              >
+                <span className="text-primary-500">{label}</span>
+                <p className="mt-1 text-lg font-semibold text-ink">
+                  {String(value)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-primary-500">
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Source: local skill registry and Skills Hub
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Owner: Hermes Skills
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Last refreshed: {formatRefreshTime(skillsQuery.dataUpdatedAt)}
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Health:{' '}
+              {skillsQuery.isError
+                ? 'installed skills unavailable'
+                : hubQuery.isError && tab === 'marketplace'
+                  ? 'hub search unavailable'
+                  : 'catalog reachable'}
+            </span>
+          </div>
         </header>
 
         <section className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl sm:p-4">
@@ -492,9 +578,7 @@ export function SkillsScreen() {
               {tab === 'installed' ? (
                 <select
                   value={category}
-                  onChange={(event) =>
-                    handleCategoryChange(event.target.value)
-                  }
+                  onChange={(event) => handleCategoryChange(event.target.value)}
                   className="h-9 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none"
                 >
                   {categories.map((item) => (
@@ -688,6 +772,26 @@ export function SkillsScreen() {
                     />
                   </div>
                 )}
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                  <MetadataPill
+                    label="Origin"
+                    value={formatSkillOrigin(selectedSkill.origin)}
+                  />
+                  <MetadataPill
+                    label="Owner"
+                    value={selectedSkill.author || 'Unknown'}
+                  />
+                  <MetadataPill
+                    label="Runtime"
+                    value={
+                      selectedSkill.installed
+                        ? selectedSkill.enabled
+                          ? 'Installed / enabled'
+                          : 'Installed / disabled'
+                        : 'Not installed'
+                    }
+                  />
+                </div>
               </div>
 
               <ScrollAreaRoot className="h-[56vh]">
@@ -766,6 +870,25 @@ export function SkillsScreen() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      void writeTextToClipboard(selectedSkill.sourcePath).then(
+                        () =>
+                          toast('Copied skill source path', {
+                            type: 'success',
+                          }),
+                        () =>
+                          toast(selectedSkill.sourcePath, {
+                            type: 'warning',
+                            duration: 7000,
+                          }),
+                      )
+                    }}
+                  >
+                    Copy source
+                  </Button>
                   {selectedSkill.installed ? (
                     <Button
                       variant="outline"
@@ -857,7 +980,6 @@ function SecurityBadge({
 }) {
   if (!security) return null
   const config = SECURITY_BADGE[security.level]
-  if (!config) return null
 
   const [expanded, setExpanded] = useState(false)
 
@@ -899,7 +1021,6 @@ function SecurityBadge({
 function SecurityScanCard({ security }: { security: SecurityRisk }) {
   const [showDetails, setShowDetails] = useState(false)
   const config = SECURITY_BADGE[security.level]
-  if (!config) return null
 
   const summaryText =
     security.flags.length === 0
@@ -968,8 +1089,7 @@ function SecurityScanCard({ security }: { security: SecurityRisk }) {
       )}
       <div className="border-t border-primary-100 px-3 py-2">
         <p className="text-[10px] text-primary-400 italic">
-          Like a lobster shell, security has layers — review code before you run
-          it.
+          Security scans are advisory. Review code before you run it.
         </p>
       </div>
     </div>
@@ -999,7 +1119,7 @@ function SkillsGrid({
         </p>
         <p className="mt-1 text-xs text-primary-500 text-pretty max-w-sm mx-auto">
           {emptyState?.description ||
-            'Try adjusting your filters or search term'}
+            'Try adjusting filters, clearing search, or switching to Marketplace for installable skills.'}
         </p>
       </div>
     )
@@ -1075,6 +1195,12 @@ function SkillsGrid({
                 <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-xs text-primary-500">
                   {skill.category}
                 </span>
+                <span
+                  className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-xs text-primary-500"
+                  title={skill.sourcePath || undefined}
+                >
+                  {sourceTail(skill.sourcePath)}
+                </span>
                 {skill.triggers.slice(0, 2).map((trigger) => (
                   <span
                     key={`${skill.id}-${trigger}`}
@@ -1139,6 +1265,19 @@ function SkillsGrid({
           )
         })}
       </AnimatePresence>
+    </div>
+  )
+}
+
+function MetadataPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-primary-200 bg-primary-100/50 px-2.5 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-primary-400">
+        {label}
+      </div>
+      <div className="mt-0.5 truncate text-xs font-medium text-primary-800">
+        {value}
+      </div>
     </div>
   )
 }

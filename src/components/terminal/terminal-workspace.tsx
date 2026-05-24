@@ -136,6 +136,7 @@ export function TerminalWorkspace({
   const [debugAnalysis, setDebugAnalysis] = useState<DebugAnalysis | null>(null)
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
+  const [pasteNotice, setPasteNotice] = useState('')
 
   const containerMapRef = useRef(new Map<string, HTMLDivElement>())
   const terminalMapRef = useRef(new Map<string, Terminal>())
@@ -259,6 +260,55 @@ export function TerminalWorkspace({
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
       if (!activeTab) return
       void sendInput(activeTab.id, `${command}\r`)
+    },
+    [activeTab, sendInput],
+  )
+
+  const handleSafePaste = useCallback(
+    async function handleSafePaste() {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
+      if (!activeTab) return
+      const clipboard = (navigator as unknown as Record<string, unknown>)
+        .clipboard
+      if (
+        !clipboard ||
+        typeof (clipboard as { readText?: unknown }).readText !== 'function'
+      ) {
+        setPasteNotice('Clipboard read is unavailable in this browser.')
+        return
+      }
+
+      const text = await (clipboard as Clipboard)
+        .readText()
+        .catch(function fallback() {
+          return ''
+        })
+      if (!text) {
+        setPasteNotice('Clipboard is empty.')
+        return
+      }
+
+      const commandCount = text.split(/\r?\n/).filter(Boolean).length
+      const riskyPattern =
+        /\b(rm\s+-rf|sudo|mkfs|diskutil|dd\s+if=|:(){:|chmod\s+-R|chown\s+-R)\b/
+      const needsConfirm = commandCount > 1 || riskyPattern.test(text)
+      if (needsConfirm) {
+        const preview = text.length > 240 ? `${text.slice(0, 240)}...` : text
+        const ok = window.confirm(
+          `Paste ${commandCount} clipboard line${commandCount === 1 ? '' : 's'} into terminal?\n\n${preview}`,
+        )
+        if (!ok) {
+          setPasteNotice('Paste cancelled.')
+          return
+        }
+      }
+
+      sendInput(activeTab.id, text.replace(/\r?\n/g, '\r'))
+      setPasteNotice(
+        needsConfirm
+          ? `Pasted ${commandCount} confirmed line${commandCount === 1 ? '' : 's'}.`
+          : 'Pasted clipboard.',
+      )
     },
     [activeTab, sendInput],
   )
@@ -464,7 +514,7 @@ export function TerminalWorkspace({
       }
 
       // Flush any remaining buffered writes
-      clearTimeout(flushTimer as ReturnType<typeof setTimeout>)
+      clearTimeout(flushTimer as unknown as ReturnType<typeof setTimeout>)
       flushWrites()
 
       const latestTab = useTerminalPanelStore
@@ -809,6 +859,15 @@ export function TerminalWorkspace({
           <Button
             size="icon-sm"
             variant="ghost"
+            onClick={handleSafePaste}
+            aria-label="Safe paste clipboard"
+            title="Safe paste clipboard"
+          >
+            <HugeiconsIcon icon={Copy01Icon} size={20} strokeWidth={1.5} />
+          </Button>
+          <Button
+            size="icon-sm"
+            variant="ghost"
             onClick={handleAnalyzeDebug}
             disabled={debugLoading}
             aria-label="AI Debug analysis"
@@ -867,6 +926,37 @@ export function TerminalWorkspace({
           ) : null}
         </div>
       </div>
+
+      <div className="flex min-h-8 items-center justify-between gap-3 border-b border-primary-300 bg-primary-50 px-3 text-[11px] text-primary-700">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn(
+              'size-1.5 shrink-0 rounded-full',
+              activeTab.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500',
+            )}
+          />
+          <span className="shrink-0 font-semibold">
+            {activeTab.status === 'active' ? 'Connected' : 'Starting'}
+          </span>
+          <span className="truncate font-mono">
+            cwd {activeTab.cwd || DEFAULT_TERMINAL_CWD}
+          </span>
+          {activeTab.sessionId ? (
+            <span className="hidden shrink-0 font-mono text-primary-500 sm:inline">
+              session {activeTab.sessionId.slice(0, 8)}
+            </span>
+          ) : null}
+        </div>
+        <span className="hidden shrink-0 text-primary-500 md:inline">
+          Clipboard paste confirms multi-line or risky commands.
+        </span>
+      </div>
+
+      {pasteNotice ? (
+        <div className="border-b border-primary-300 bg-primary-100 px-3 py-1 text-[11px] text-primary-700">
+          {pasteNotice}
+        </div>
+      ) : null}
 
       <div
         className="relative flex-1 overflow-hidden bg-primary-50"

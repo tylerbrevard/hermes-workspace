@@ -64,7 +64,7 @@ function formatMobileSessionTitle(rawTitle: string): string {
   return title
 }
 
-type ThinkingLevel = 'off' | 'low' | 'adaptive'
+type ThinkingLevel = 'off' | 'low' | 'medium' | 'high'
 
 type ChatHeaderProps = {
   activeTitle: string
@@ -120,7 +120,7 @@ function ChatHeaderComponent({
   onToggleFileExplorer,
   dataUpdatedAt = 0,
   onRefresh,
-  agentModel: _agentModel = '',
+  agentModel = '',
   agentConnected = true,
   onOpenAgentDetails,
   pullOffset = 0,
@@ -163,13 +163,22 @@ function ChatHeaderComponent({
 
   const isStale = dataUpdatedAt > 0 && Date.now() - dataUpdatedAt > 15000
   const mobileTitle = formatMobileSessionTitle(activeTitle)
-  void _agentModel
-  void agentConnected
-  void statusMode
-  void activeToolName
   void isFocusMode
   void onToggleFocusMode // kept for prop compat
-  const showThinkingIndicator = thinkingLevel === 'adaptive'
+  const showThinkingIndicator = thinkingLevel === 'high'
+  const statusLabel =
+    statusMode === 'tool'
+      ? activeToolName
+        ? `Tool: ${activeToolName}`
+        : 'Tool running'
+      : statusMode === 'streaming'
+        ? 'Streaming'
+        : statusMode === 'sending'
+          ? 'Thinking'
+          : agentConnected
+            ? 'Ready'
+            : 'Offline'
+  const modelLabel = agentModel.trim() || 'Model auto'
 
   const handleRefresh = useCallback(() => {
     if (!onRefresh) return
@@ -300,6 +309,26 @@ function ChatHeaderComponent({
 
           <div className="flex-1" />
 
+          <button
+            type="button"
+            onClick={handleOpenAgentDetails}
+            className={cn(
+              'ml-2 flex min-w-0 max-w-[34vw] items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium transition-colors',
+              agentConnected
+                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+            )}
+            aria-label={`Agent status: ${statusLabel}`}
+            title={`${statusLabel} · ${modelLabel}`}
+          >
+            <span
+              className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                agentConnected ? 'bg-emerald-500' : 'bg-amber-500',
+              )}
+            />
+            <span className="truncate">{statusLabel}</span>
+          </button>
         </div>
       </div>
     )
@@ -544,6 +573,37 @@ function ChatHeaderComponent({
             </TooltipRoot>
           </TooltipProvider>
         ) : null}
+        <TooltipProvider>
+          <TooltipRoot>
+            <TooltipTrigger
+              onClick={handleOpenAgentDetails}
+              render={
+                <button
+                  type="button"
+                  className={cn(
+                    'mr-2 inline-flex max-w-[260px] items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors hover:bg-primary-100 dark:hover:bg-primary-800',
+                    agentConnected
+                      ? 'border-emerald-300/50 text-emerald-700 dark:text-emerald-300'
+                      : 'border-amber-300/60 text-amber-700 dark:text-amber-300',
+                  )}
+                  aria-label={`Agent status: ${statusLabel}`}
+                >
+                  <span
+                    className={cn(
+                      'size-1.5 shrink-0 rounded-full',
+                      agentConnected ? 'bg-emerald-500' : 'bg-amber-500',
+                    )}
+                  />
+                  <span className="truncate">{statusLabel}</span>
+                </button>
+              }
+            />
+            <TooltipContent side="bottom">
+              {modelLabel} ·{' '}
+              {agentConnected ? 'gateway connected' : 'gateway reconnecting'}
+            </TooltipContent>
+          </TooltipRoot>
+        </TooltipProvider>
         {/* Undo / Clear actions */}
         {onUndo && (
           <TooltipProvider>

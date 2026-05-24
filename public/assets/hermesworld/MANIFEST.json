@@ -433,7 +433,7 @@
       "width": 1280,
       "height": 874,
       "durationSeconds": 9.683333,
-      "suggestedUseCategory": "video_demo"
+      "suggestedUseCategory": "video_preview"
     },
     {
       "path": "public/assets/hermesworld/video/hero-poster.jpg",
@@ -448,21 +448,21 @@
       "suggestedUseCategory": "video_poster"
     },
     {
-      "path": "public/assets/hermesworld/video/world-demo-720p.mp4",
+      "path": "public/assets/hermesworld/video/world-preview-720p.mp4",
       "directory": "public/assets/hermesworld/video",
-      "fileName": "world-demo-720p.mp4",
+      "fileName": "world-preview-720p.mp4",
       "extension": "mp4",
       "bytes": 10353994,
       "sizeLabel": "9.87 MB",
       "width": 1076,
       "height": 720,
       "durationSeconds": 75.033333,
-      "suggestedUseCategory": "video_demo"
+      "suggestedUseCategory": "video_preview"
     },
     {
-      "path": "public/assets/hermesworld/video/world-demo-poster.jpg",
+      "path": "public/assets/hermesworld/video/world-preview-poster.jpg",
       "directory": "public/assets/hermesworld/video",
-      "fileName": "world-demo-poster.jpg",
+      "fileName": "world-preview-poster.jpg",
       "extension": "jpg",
       "bytes": 63007,
       "sizeLabel": "61.5 KB",

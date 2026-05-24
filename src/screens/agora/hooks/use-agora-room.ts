@@ -1,13 +1,3 @@
-/**
- * useAgoraRoom — local mock room state for v0.0.
- *
- * - Owns self position + facing
- * - Owns mock other-user list with gentle ambient drift
- * - Handles WASD/arrow movement (desktop)
- * - Owns chat messages + speech-bubble TTL
- *
- * Replaced by real WebSocket sync in v0.1.
- */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_WORLD,
@@ -17,7 +7,6 @@ import {
   type AgoraUser,
   type AgoraWorld,
 } from '../lib/agora-types'
-import { buildMockAgoraUsers, driftUser } from '../lib/agora-mock'
 
 const MOVE_SPEED_PX = 6
 const BUBBLE_TTL_MS = 7000
@@ -42,9 +31,7 @@ export function useAgoraRoom({
     isMoving: false,
   }))
 
-  const [others, setOthers] = useState<AgoraUser[]>(() =>
-    buildMockAgoraUsers({ worldWidth: world.width, worldHeight: world.height }),
-  )
+  const [others] = useState<AgoraUser[]>([])
 
   const [messages, setMessages] = useState<AgoraMessage[]>([])
 
@@ -59,9 +46,26 @@ export function useAgoraRoom({
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (
+        t &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.isContentEditable)
+      )
+        return
       const k = e.key.toLowerCase()
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
+      if (
+        [
+          'w',
+          'a',
+          's',
+          'd',
+          'arrowup',
+          'arrowdown',
+          'arrowleft',
+          'arrowright',
+        ].includes(k)
+      ) {
         keysRef.current.add(k)
         e.preventDefault()
       }
@@ -115,20 +119,6 @@ export function useAgoraRoom({
     return () => cancelAnimationFrame(raf)
   }, [world.width, world.height])
 
-  // ── Ambient drift for fake users ──────────────────────────
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setOthers((prev) =>
-        prev.map((u) =>
-          Math.random() < 0.5
-            ? driftUser(u, { worldWidth: world.width, worldHeight: world.height })
-            : { ...u, isMoving: false },
-        ),
-      )
-    }, 1100)
-    return () => window.clearInterval(id)
-  }, [world.width, world.height])
-
   // ── Tap-to-walk (mobile) ───────────────────────────────────
   const moveSelfToward = useCallback(
     (targetX: number, targetY: number) => {
@@ -176,52 +166,6 @@ export function useAgoraRoom({
     [profile.id],
   )
 
-  // Random fake-user chatter for demo flavor (~every 12-25s)
-  useEffect(() => {
-    const lines = [
-      'gm builders',
-      'shipped a fix to the Agora protocol',
-      'who wants to pair on skill packaging?',
-      'trying out the new Codex spark model',
-      'wow this lobby actually works',
-      'brb building',
-      'anyone testing the voice POC?',
-      'where do I drop bug reports',
-      'love the Greek pantheon',
-      'just installed Hermes Workspace, hi everyone',
-    ]
-    let cancelled = false
-    const tick = () => {
-      if (cancelled) return
-      if (others.length === 0) return
-      const speaker = others[Math.floor(Math.random() * others.length)]
-      const line = lines[Math.floor(Math.random() * lines.length)]
-      setMessages((prev) => {
-        const next: AgoraMessage[] = [
-          ...prev,
-          {
-            id:
-              typeof crypto !== 'undefined' && 'randomUUID' in crypto
-                ? crypto.randomUUID()
-                : `${Date.now()}-${Math.random()}`,
-            userId: speaker.profile.id,
-            body: line,
-            createdAt: Date.now(),
-          },
-        ]
-        return next.length > MAX_BUBBLES ? next.slice(-MAX_BUBBLES) : next
-      })
-      window.setTimeout(tick, 12000 + Math.random() * 13000)
-    }
-    const initial = window.setTimeout(tick, 4000)
-    return () => {
-      cancelled = true
-      window.clearTimeout(initial)
-    }
-    // intentionally only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   // ── Derived: active speech bubbles per user ────────────────
   const activeBubbles = useMemo(() => {
     const now = Date.now()
@@ -245,7 +189,8 @@ export function useAgoraRoom({
   const nearbyIds = useMemo(() => {
     const ids = new Set<string>()
     for (const o of others) {
-      if (Math.hypot(o.x - self.x, o.y - self.y) < PROXIMITY_PX) ids.add(o.profile.id)
+      if (Math.hypot(o.x - self.x, o.y - self.y) < PROXIMITY_PX)
+        ids.add(o.profile.id)
     }
     return ids
   }, [others, self.x, self.y])

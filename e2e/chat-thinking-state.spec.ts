@@ -10,7 +10,7 @@ test.describe('Chat thinking state #449', () => {
     const SESSION_PATH = '/chat/20260515_150106_4be3a000'
 
     // Inject a stale waiting entry for THIS session before the page loads
-    await page.addInitScript((sessionKey) => {
+    await page.addInitScript((sessionKey: string) => {
       window.sessionStorage.setItem(
         `claude_waiting_${sessionKey}`,
         JSON.stringify({
@@ -45,7 +45,7 @@ test.describe('Chat thinking state #449', () => {
 
     // VERIFY: The stale sessionStorage entry was cleaned up
     const staleKey = SESSION_PATH.replace('/chat/', '')
-    const hasStaleEntry = await page.evaluate((key) => {
+    const hasStaleEntry = await page.evaluate((key: string) => {
       return window.sessionStorage.getItem(`claude_waiting_${key}`) !== null
     }, staleKey)
     expect(hasStaleEntry).toBe(false)

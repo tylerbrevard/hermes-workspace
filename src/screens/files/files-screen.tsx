@@ -1,4 +1,12 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/hooks/use-page-title'
 import {
@@ -58,6 +66,8 @@ type ContextMenuState = {
   y: number
   entry: FileEntry
 }
+
+type FileTypeFilter = 'all' | 'folders' | 'editable' | 'images'
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -149,10 +159,118 @@ function formatDate(iso: string): string {
   })
 }
 
+async function copyToClipboard(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    return
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = value
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
+}
+
 function getParentPath(pathValue: string): string {
   const parts = pathValue.replace(/\\/g, '/').split('/').filter(Boolean)
   if (parts.length <= 1) return ''
   return parts.slice(0, -1).join('/')
+}
+
+function getUnsafeFileNameMessage(name: string): string | null {
+  const trimmed = name.trim()
+  if (!trimmed) return 'Name is required.'
+  if (trimmed === '.' || trimmed === '..') return "Name cannot be '.' or '..'."
+  if (trimmed.includes('/') || trimmed.includes('\\')) {
+    return 'Use a name only, not a path.'
+  }
+  if (trimmed.includes('\0')) return 'Name cannot include null bytes.'
+  return null
+}
+
+async function getFetchErrorMessage(res: Response) {
+  try {
+    const data = (await res.json()) as { error?: unknown }
+    if (typeof data.error === 'string' && data.error.trim()) {
+      return data.error
+    }
+  } catch {
+    // Fall back to status text below.
+  }
+  return `HTTP ${res.status}`
+}
+
+function countEntries(entries: Array<FileEntry>): {
+  files: number
+  folders: number
+  editable: number
+  images: number
+} {
+  return entries.reduce(
+    (counts, entry) => {
+      if (entry.type === 'folder') {
+        counts.folders += 1
+        if (entry.children) {
+          const childCounts = countEntries(entry.children)
+          counts.files += childCounts.files
+          counts.folders += childCounts.folders
+          counts.editable += childCounts.editable
+          counts.images += childCounts.images
+        }
+      } else {
+        counts.files += 1
+        if (isEditableFile(entry.name)) counts.editable += 1
+        if (isImageFile(entry.name)) counts.images += 1
+      }
+      return counts
+    },
+    { files: 0, folders: 0, editable: 0, images: 0 },
+  )
+}
+
+function entryMatchesFilter(
+  entry: FileEntry,
+  query: string,
+  typeFilter: FileTypeFilter,
+): boolean {
+  const q = query.trim().toLowerCase()
+  const matchesQuery =
+    !q ||
+    entry.name.toLowerCase().includes(q) ||
+    entry.path.toLowerCase().includes(q)
+  if (!matchesQuery) return false
+  switch (typeFilter) {
+    case 'all':
+      return true
+    case 'folders':
+      return entry.type === 'folder'
+    case 'editable':
+      return entry.type === 'file' && isEditableFile(entry.name)
+    case 'images':
+      return entry.type === 'file' && isImageFile(entry.name)
+  }
+}
+
+function filterEntries(
+  entries: Array<FileEntry>,
+  query: string,
+  typeFilter: FileTypeFilter,
+): Array<FileEntry> {
+  return entries
+    .filter((entry) => !IGNORED_DIRS.has(entry.name))
+    .map((entry) => {
+      const children = entry.children
+        ? filterEntries(entry.children, query, typeFilter)
+        : undefined
+      const selfMatches = entryMatchesFilter(entry, query, typeFilter)
+      if (!selfMatches && (!children || children.length === 0)) return null
+      return children ? { ...entry, children } : entry
+    })
+    .filter((entry): entry is FileEntry => Boolean(entry))
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -286,7 +404,10 @@ type HighlightToken = {
   kind: HighlightKind
 }
 
-const HIGHLIGHT_CLASS_BY_KIND: Record<Exclude<HighlightKind, 'plain'>, string> = {
+const HIGHLIGHT_CLASS_BY_KIND: Record<
+  Exclude<HighlightKind, 'plain'>,
+  string
+> = {
   comment: 'hl-comment',
   jsonKey: 'hl-key',
   keyword: 'hl-kw',
@@ -295,18 +416,23 @@ const HIGHLIGHT_CLASS_BY_KIND: Record<Exclude<HighlightKind, 'plain'>, string> =
   type: 'hl-type',
 }
 
-function pushHighlightToken(tokens: Array<HighlightToken>, text: string, kind: HighlightKind = 'plain') {
+function pushHighlightToken(
+  tokens: Array<HighlightToken>,
+  text: string,
+  kind: HighlightKind = 'plain',
+) {
   if (!text) return
   tokens.push({ text, kind })
 }
 
 function tokenizeJson(code: string): Array<HighlightToken> {
   const tokens: Array<HighlightToken> = []
-  const pattern = /("(?:[^"\\]|\\.)*")(\s*:)?|-?\d+\.?\d*|\b(?:true|false|null)\b/g
+  const pattern =
+    /("(?:[^"\\]|\\.)*")(\s*:)?|-?\d+\.?\d*|\b(?:true|false|null)\b/g
   let lastIndex = 0
 
   for (const match of code.matchAll(pattern)) {
-    const index = match.index ?? 0
+    const index = match.index
     pushHighlightToken(tokens, code.slice(lastIndex, index))
 
     const [value, stringValue, colon] = match
@@ -333,13 +459,17 @@ function tokenizeCode(code: string): Array<HighlightToken> {
   let lastIndex = 0
 
   for (const match of code.matchAll(pattern)) {
-    const index = match.index ?? 0
+    const index = match.index
     const value = match[0]
     pushHighlightToken(tokens, code.slice(lastIndex, index))
 
     if (value.startsWith('//') || value.startsWith('/*')) {
       pushHighlightToken(tokens, value, 'comment')
-    } else if (value.startsWith('"') || value.startsWith("'") || value.startsWith('`')) {
+    } else if (
+      value.startsWith('"') ||
+      value.startsWith("'") ||
+      value.startsWith('`')
+    ) {
       pushHighlightToken(tokens, value, 'string')
     } else if (/^-?\d+\.?\d*$/.test(value)) {
       pushHighlightToken(tokens, value, 'number')
@@ -700,7 +830,8 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
   const isEditable = isEditableFile(fileName)
 
   const highlighted = useMemo<Array<ReactNode>>(
-    () => (isCode && !isMd && content ? highlightCodeContent(content, ext) : []),
+    () =>
+      isCode && !isMd && content ? highlightCodeContent(content, ext) : [],
     [isCode, isMd, content, ext],
   )
 
@@ -821,21 +952,34 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
   // ── Shared header / footer ─────────────────────────────────────────────────
 
   const header = (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-primary-200 dark:border-neutral-800 px-4 py-2.5">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-primary-200 px-3 py-2 dark:border-neutral-800 md:flex-nowrap md:gap-3 md:px-4 md:py-2.5">
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-lg">{getFileIcon(selectedEntry)}</span>
         <span className="truncate text-sm font-semibold text-primary-900 dark:text-neutral-100">
           {selectedEntry.name}
         </span>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void copyToClipboard(selectedEntry.path)}
+        >
+          Copy Path
+        </Button>
         {(isMd || isHtml) && !isImage && (
           <Button
             size="sm"
             variant="outline"
             onClick={() => setRawMode((v) => !v)}
           >
-            {rawMode ? (isHtml ? 'Preview HTML' : 'Preview') : (isHtml ? 'Raw HTML' : 'Raw')}
+            {rawMode
+              ? isHtml
+                ? 'Preview HTML'
+                : 'Preview'
+              : isHtml
+                ? 'Raw HTML'
+                : 'Raw'}
           </Button>
         )}
         {isEditable && (
@@ -853,13 +997,23 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
   )
 
   const footer = (
-    <div className="flex shrink-0 items-center gap-4 border-t border-primary-200 dark:border-neutral-800 px-4 py-1.5 text-xs text-primary-400 dark:text-neutral-500">
+    <div className="flex shrink-0 flex-wrap items-center gap-4 border-t border-primary-200 dark:border-neutral-800 px-4 py-1.5 text-xs text-primary-400 dark:text-neutral-500">
+      <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-300">
+        Source: server workspace
+      </span>
       {selectedEntry.size !== undefined && (
         <span>{formatBytes(selectedEntry.size)}</span>
       )}
       {selectedEntry.modifiedAt && (
         <span>Modified {formatDate(selectedEntry.modifiedAt)}</span>
       )}
+      <button
+        type="button"
+        onClick={() => void copyToClipboard(selectedEntry.path)}
+        className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600 underline-offset-2 hover:underline dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-300"
+      >
+        Copy path
+      </button>
       {dirty && (
         <span className="text-accent-500 font-medium">Unsaved changes</span>
       )}
@@ -973,7 +1127,9 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
   // ── Code viewer (syntax highlighted) — also raw mode for md ───────────────
 
   if (isCode) {
-    const displayContent = isMd ? highlightCodeContent(content, 'md') : highlighted
+    const displayContent = isMd
+      ? highlightCodeContent(content, 'md')
+      : highlighted
     return (
       <>
         {diffModal}
@@ -1040,11 +1196,15 @@ export function FilesScreen() {
   const [treeError, setTreeError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [selectedEntry, setSelectedEntry] = useState<FileEntry | null>(null)
+  const [treeSearch, setTreeSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState<FileTypeFilter>('all')
 
   // CRUD state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [promptState, setPromptState] = useState<PromptState | null>(null)
   const [promptValue, setPromptValue] = useState('')
+  const [promptError, setPromptError] = useState<string | null>(null)
+  const [promptBusy, setPromptBusy] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<FileEntry | null>(null)
 
   const loadTree = useCallback(async () => {
@@ -1155,58 +1315,92 @@ export function FilesScreen() {
       defaultValue: entry.name,
     })
     setPromptValue(entry.name)
+    setPromptError(null)
   }, [])
 
   const openNewFolderPrompt = useCallback(() => {
     setPromptState({ mode: 'new-folder', targetPath: '' })
     setPromptValue('')
+    setPromptError(null)
   }, [])
 
   const handlePromptSubmit = useCallback(async () => {
     if (!promptState) return
     const value = promptValue.trim()
-    if (!value) return
-
-    if (promptState.mode === 'rename') {
-      const parent = getParentPath(promptState.targetPath)
-      const nextPath = parent ? `${parent}/${value}` : value
-      await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          action: 'rename',
-          from: promptState.targetPath,
-          to: nextPath,
-        }),
-      })
-    } else {
-      // new-folder
-      const nextPath = promptState.targetPath
-        ? `${promptState.targetPath}/${value}`
-        : value
-      await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'mkdir', path: nextPath }),
-      })
+    const unsafeMessage = getUnsafeFileNameMessage(value)
+    if (unsafeMessage) {
+      setPromptError(unsafeMessage)
+      return
     }
 
-    setPromptState(null)
-    setPromptValue('')
-    await loadTree()
-  }, [promptState, promptValue, loadTree])
+    setPromptBusy(true)
+    setPromptError(null)
+
+    try {
+      if (promptState.mode === 'rename') {
+        const res = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'rename',
+            from: promptState.targetPath,
+            name: value,
+          }),
+        })
+        if (!res.ok) throw new Error(await getFetchErrorMessage(res))
+
+        if (selectedEntry?.path === promptState.targetPath) {
+          const parent = getParentPath(promptState.targetPath)
+          setSelectedEntry({
+            ...selectedEntry,
+            name: value,
+            path: parent ? `${parent}/${value}` : value,
+          })
+        }
+      } else {
+        // new-folder
+        const nextPath = promptState.targetPath
+          ? `${promptState.targetPath}/${value}`
+          : value
+        const res = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'mkdir', path: nextPath }),
+        })
+        if (!res.ok) throw new Error(await getFetchErrorMessage(res))
+      }
+
+      setPromptState(null)
+      setPromptValue('')
+      await loadTree()
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPromptBusy(false)
+    }
+  }, [promptState, promptValue, selectedEntry, loadTree])
 
   const selectedPath = selectedEntry?.path ?? null
+  const entryCounts = useMemo(() => countEntries(entries), [entries])
+  const filteredEntries = useMemo(
+    () => filterEntries(entries, treeSearch, typeFilter),
+    [entries, treeSearch, typeFilter],
+  )
+  const filteredCounts = useMemo(
+    () => countEntries(filteredEntries),
+    [filteredEntries],
+  )
+  const hasActiveFilter = treeSearch.trim().length > 0 || typeFilter !== 'all'
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden bg-primary-50/95 dark:bg-neutral-950">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-primary-50/95 dark:bg-neutral-950 md:flex-row">
       {/* ── Left panel — directory tree ─────────────────────────────────── */}
       <aside
         className={cn(
-          'flex h-full w-[260px] shrink-0 flex-col overflow-hidden',
+          'flex h-[min(42dvh,360px)] w-auto shrink-0 flex-col overflow-hidden md:h-full md:w-[260px]',
           'rounded-xl border border-primary-200 bg-primary-50/95 shadow-sm',
           'dark:border-neutral-800 dark:bg-neutral-900/80',
-          'm-2 mr-0',
+          'm-2 mb-0 md:mr-0',
         )}
       >
         {/* Tree header */}
@@ -1216,7 +1410,8 @@ export function FilesScreen() {
             <button
               type="button"
               onClick={openNewFolderPrompt}
-              title="New folder"
+              title="Create folder in server workspace root"
+              aria-label="Create folder in server workspace root"
               className="rounded p-1 text-sm text-primary-400 hover:bg-primary-200 dark:hover:bg-neutral-800 hover:text-primary-600 dark:hover:text-neutral-300 transition-colors leading-none"
             >
               📁+
@@ -1224,12 +1419,88 @@ export function FilesScreen() {
             <button
               type="button"
               onClick={() => void loadTree()}
-              title="Refresh"
+              title="Refresh server workspace files"
+              aria-label="Refresh server workspace files"
               className="rounded p-1 text-lg text-primary-400 hover:bg-primary-200 dark:hover:bg-neutral-800 hover:text-primary-600 dark:hover:text-neutral-300 transition-colors leading-none"
             >
               ↺
             </button>
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1.5 border-b border-primary-200 px-2 py-2 text-[11px] dark:border-neutral-800">
+          {[
+            ['Files', filteredCounts.files],
+            ['Folders', filteredCounts.folders],
+            ['Editable', filteredCounts.editable],
+            ['Images', filteredCounts.images],
+          ].map(([label, value]) => (
+            <div
+              key={String(label)}
+              className="rounded-md border border-primary-200 bg-white/70 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-950/40"
+            >
+              <span className="text-primary-400 dark:text-neutral-500">
+                {label}
+              </span>
+              <span className="ml-1 font-semibold text-primary-800 dark:text-neutral-100">
+                {String(value)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2 border-b border-primary-200 px-2 py-2 dark:border-neutral-800">
+          <label className="sr-only" htmlFor="files-tree-search">
+            Search files
+          </label>
+          <input
+            id="files-tree-search"
+            type="search"
+            value={treeSearch}
+            onChange={(event) => setTreeSearch(event.currentTarget.value)}
+            placeholder="Search names or paths"
+            className="h-8 w-full rounded-md border border-primary-200 bg-white/80 px-2 text-xs text-primary-900 outline-none transition focus:border-primary-400 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-neutral-100"
+          />
+          <div className="flex flex-wrap gap-1">
+            {[
+              ['all', 'All'],
+              ['folders', 'Folders'],
+              ['editable', 'Editable'],
+              ['images', 'Images'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTypeFilter(value as FileTypeFilter)}
+                className={cn(
+                  'rounded-full border px-2 py-1 text-[10px] font-medium transition',
+                  typeFilter === value
+                    ? 'border-primary-700 bg-primary-900 text-white dark:border-neutral-200 dark:bg-neutral-100 dark:text-neutral-950'
+                    : 'border-primary-200 bg-white/60 text-primary-500 hover:text-primary-800 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {hasActiveFilter ? (
+            <div className="flex items-center justify-between gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
+              <span>
+                Showing {filteredCounts.files + filteredCounts.folders} of{' '}
+                {entryCounts.files + entryCounts.folders} entries
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setTreeSearch('')
+                  setTypeFilter('all')
+                }}
+                className="font-medium text-primary-700 hover:underline dark:text-neutral-200"
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {/* Tree body */}
@@ -1249,28 +1520,43 @@ export function FilesScreen() {
               <div className="space-y-1 px-3 py-2 text-xs text-red-500">
                 <div>{treeError}</div>
                 <div className="text-primary-400 dark:text-neutral-500">
-                  Check the server workspace catalog or HERMES_WORKSPACE_DIR; this browser no longer needs local folder access.
+                  Check the server workspace catalog or HERMES_WORKSPACE_DIR;
+                  this browser no longer needs local folder access.
                 </div>
               </div>
             ) : entries.length === 0 ? (
               <div className="px-3 py-2 text-xs text-primary-400 dark:text-neutral-500">
-                Server workspace is empty. Agent-created files will appear here after they are written to the configured workspace path.
+                Server workspace is empty. Create a folder from the toolbar.
+                Agent-created files will appear here in the configured workspace
+                path.
+              </div>
+            ) : filteredEntries.length === 0 ? (
+              <div className="space-y-2 px-3 py-2 text-xs text-primary-400 dark:text-neutral-500">
+                <div>No files match the current search or type filter.</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTreeSearch('')
+                    setTypeFilter('all')
+                  }}
+                  className="rounded-md border border-primary-200 px-2 py-1 text-primary-700 hover:bg-primary-100 dark:border-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                >
+                  Clear filters
+                </button>
               </div>
             ) : (
-              entries
-                .filter((e) => !IGNORED_DIRS.has(e.name))
-                .map((entry) => (
-                  <TreeNode
-                    key={entry.path}
-                    entry={entry}
-                    depth={0}
-                    expanded={expanded}
-                    selectedPath={selectedPath}
-                    onToggle={handleToggle}
-                    onSelect={handleSelect}
-                    onContextMenu={handleContextMenu}
-                  />
-                ))
+              filteredEntries.map((entry) => (
+                <TreeNode
+                  key={entry.path}
+                  entry={entry}
+                  depth={0}
+                  expanded={expanded}
+                  selectedPath={selectedPath}
+                  onToggle={handleToggle}
+                  onSelect={handleSelect}
+                  onContextMenu={handleContextMenu}
+                />
+              ))
             )}
           </ScrollAreaViewport>
           <ScrollAreaScrollbar orientation="vertical">
@@ -1283,7 +1569,7 @@ export function FilesScreen() {
       {/* ── Right panel — file viewer / editor ─────────────────────────── */}
       <main
         className={cn(
-          'flex h-full flex-1 min-w-0 flex-col overflow-hidden',
+          'flex min-h-[260px] flex-1 flex-col overflow-hidden md:h-full md:min-w-0 md:min-h-0',
           'rounded-xl border border-primary-200 bg-primary-50/95 shadow-sm',
           'dark:border-neutral-800 dark:bg-neutral-900/80',
           'm-2',
@@ -1334,6 +1620,15 @@ export function FilesScreen() {
             </button>
           )}
           <button
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-primary-100 dark:hover:bg-neutral-800"
+            onClick={() => {
+              void copyToClipboard(contextMenu.entry.path)
+              setContextMenu(null)
+            }}
+          >
+            📋 Copy path
+          </button>
+          <button
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
             onClick={() => {
               setDeleteConfirm(contextMenu.entry)
@@ -1349,7 +1644,10 @@ export function FilesScreen() {
       <DialogRoot
         open={Boolean(promptState)}
         onOpenChange={(open) => {
-          if (!open) setPromptState(null)
+          if (!open) {
+            setPromptState(null)
+            setPromptError(null)
+          }
         }}
       >
         <DialogContent>
@@ -1364,16 +1662,30 @@ export function FilesScreen() {
             </DialogDescription>
             <input
               value={promptValue}
-              onChange={(e) => setPromptValue(e.target.value)}
+              onChange={(e) => {
+                setPromptValue(e.target.value)
+                setPromptError(null)
+              }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.nativeEvent.isComposing) void handlePromptSubmit()
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing)
+                  void handlePromptSubmit()
               }}
               className="w-full rounded-md border border-primary-200 dark:border-neutral-700 bg-primary-50 dark:bg-neutral-900 px-3 py-2 text-sm text-primary-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary-300"
               autoFocus
             />
+            {promptError ? (
+              <p className="text-xs font-medium text-red-700 dark:text-red-400">
+                {promptError}
+              </p>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
               <DialogClose render={<Button variant="outline">Cancel</Button>} />
-              <Button onClick={() => void handlePromptSubmit()}>Save</Button>
+              <Button
+                onClick={() => void handlePromptSubmit()}
+                disabled={promptBusy}
+              >
+                {promptBusy ? 'Saving...' : 'Save'}
+              </Button>
             </div>
           </div>
         </DialogContent>

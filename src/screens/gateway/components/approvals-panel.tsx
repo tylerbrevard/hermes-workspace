@@ -325,7 +325,7 @@ function ApprovalCard({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-xl border transition-all duration-200',
+        'overflow-hidden rounded-xl border transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200',
         isPending
           ? 'border border-l-4 border-amber-200 border-l-amber-500 bg-amber-50/30 shadow-sm dark:border-amber-800/40 dark:border-l-amber-500 dark:bg-amber-950/10'
           : 'border-neutral-200 bg-neutral-50 opacity-60 dark:border-neutral-800 dark:bg-neutral-900',
@@ -364,7 +364,7 @@ function ApprovalCard({
               type="button"
               onClick={onApprove}
               disabled={disabled}
-              className="flex-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-all duration-200 hover:bg-emerald-700"
+              className="flex-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 hover:bg-emerald-700"
             >
               ✓ Approve
             </button>
@@ -372,7 +372,7 @@ function ApprovalCard({
               type="button"
               onClick={onDeny}
               disabled={disabled}
-              className="flex-1 rounded-lg border border-red-400 px-3 py-1.5 text-[11px] font-semibold text-red-600 transition-all duration-200 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/20"
+              className="flex-1 rounded-lg border border-red-400 px-3 py-1.5 text-[11px] font-semibold text-red-600 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/20"
             >
               ✕ Deny
             </button>

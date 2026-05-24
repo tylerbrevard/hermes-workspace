@@ -3,7 +3,7 @@ export type MemoryViewerFile = {
   path: string
   size: number
   modifiedAt: string
-  source: 'api' | 'mock'
+  source: 'api'
   isRootMemory: boolean
   isDaily: boolean
   dateGroup: string | null

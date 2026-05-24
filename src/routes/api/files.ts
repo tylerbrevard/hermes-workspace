@@ -68,6 +68,34 @@ function toRelative(resolvedPath: string, workspaceRoot: string) {
   return relative || ''
 }
 
+export function validateWorkspaceFileName(name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    throw new Error('Name is required')
+  }
+  if (trimmed === '.' || trimmed === '..') {
+    throw new Error('Name cannot be . or ..')
+  }
+  if (trimmed.includes('/') || trimmed.includes('\\')) {
+    throw new Error('Name cannot include path separators')
+  }
+  if (trimmed.includes('\0')) {
+    throw new Error('Name cannot include null bytes')
+  }
+  return trimmed
+}
+
+export function getRenameDestination(
+  fromPath: string,
+  rawName: string,
+  workspaceRoot: string,
+) {
+  const safeName = validateWorkspaceFileName(rawName)
+  const toPath = path.join(path.dirname(fromPath), safeName)
+  ensureWorkspacePath(toPath, workspaceRoot)
+  return toPath
+}
+
 function sortEntries(entries: Array<FileEntry>) {
   return entries.sort((a, b) => {
     if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
@@ -386,10 +414,27 @@ export const Route = createFileRoute('/api/files')({
               String(body.from || ''),
               workspaceRoot,
             )
-            const toPath = ensureWorkspacePath(
-              String(body.to || ''),
-              workspaceRoot,
-            )
+            const toPath =
+              typeof body.name === 'string'
+                ? getRenameDestination(fromPath, body.name, workspaceRoot)
+                : ensureWorkspacePath(String(body.to || ''), workspaceRoot)
+            if (fromPath === toPath) {
+              return json(
+                { ok: false, error: 'Rename would not change the path' },
+                { status: 400 },
+              )
+            }
+            try {
+              await fs.lstat(toPath)
+              return json(
+                { ok: false, error: 'A file or folder already exists there' },
+                { status: 409 },
+              )
+            } catch (err) {
+              if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+                throw err
+              }
+            }
             await fs.mkdir(path.dirname(toPath), { recursive: true })
             await fs.rename(fromPath, toPath)
             return json({ ok: true, path: toRelative(toPath, workspaceRoot) })

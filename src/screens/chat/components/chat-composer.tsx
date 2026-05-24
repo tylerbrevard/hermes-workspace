@@ -2068,7 +2068,7 @@ function ChatComposerComponent({
                 'bg-surface border-t border-primary-200/60',
               ].join(' ')
             : [
-                'fixed z-[70] transition-all duration-200',
+                'fixed z-[70] transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200',
                 chatNavMode === 'dock'
                   ? [
                       // iMessage-style: edge-to-edge, docked to bottom
@@ -2113,7 +2113,7 @@ function ChatComposerComponent({
         disabled={disabled}
         maxHeight={isMobileViewport ? 120 : 240}
         className={cn(
-          'relative z-50 transition-all duration-300',
+          'relative z-50 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-300',
           // On mobile: remove PromptInput's built-in rounded/bg/padding — outer wrapper owns the container
           isMobileViewport &&
             'py-0 gap-0 !rounded-none !bg-transparent shadow-none outline-none',
@@ -2260,7 +2260,7 @@ function ChatComposerComponent({
                     type="button"
                     onClick={handleAbort}
                     aria-label="Stop generation"
-                    className="size-9 rounded-full bg-red-500 flex items-center justify-center text-white transition-all duration-150"
+                    className="size-9 rounded-full bg-red-500 flex items-center justify-center text-white transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150"
                   >
                     <HugeiconsIcon icon={StopIcon} size={18} strokeWidth={2} />
                   </button>
@@ -2272,7 +2272,7 @@ function ChatComposerComponent({
                     onClick={handleSubmit}
                     disabled={submitDisabled}
                     aria-label="Send message"
-                    className="size-9 rounded-full bg-accent-500 flex items-center justify-center text-white transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                    className="size-9 rounded-full bg-accent-500 flex items-center justify-center text-white transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                   >
                     <HugeiconsIcon
                       icon={ArrowUp02Icon}
@@ -2304,7 +2304,7 @@ function ChatComposerComponent({
                     }
                     disabled={disabled}
                     className={cn(
-                      'size-9 rounded-full flex items-center justify-center relative transition-all duration-150 select-none',
+                      'size-9 rounded-full flex items-center justify-center relative transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150 select-none',
                       voiceRecorder.isRecording
                         ? 'text-red-600 bg-red-100 animate-pulse'
                         : voiceInput.isListening
@@ -2330,7 +2330,7 @@ function ChatComposerComponent({
                     onClick={handleSubmit}
                     disabled={submitDisabled}
                     aria-label="Send message"
-                    className="size-9 rounded-full bg-accent-500 flex items-center justify-center text-white transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="size-9 rounded-full bg-accent-500 flex items-center justify-center text-white transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <HugeiconsIcon
                       icon={ArrowUp02Icon}

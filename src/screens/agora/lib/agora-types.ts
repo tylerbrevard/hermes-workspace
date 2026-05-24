@@ -1,8 +1,7 @@
 /**
  * Agora — shared types for the Hermes Workspace community surface.
  *
- * v0.0: local mock lobby with fake users.
- * v0.1+: same types will be used for real WebSocket multiplayer.
+ * Shared types for WebSocket-backed multiplayer presence.
  */
 
 export type AgoraFacing = 'up' | 'down' | 'left' | 'right'

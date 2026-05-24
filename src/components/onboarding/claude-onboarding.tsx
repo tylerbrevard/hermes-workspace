@@ -695,7 +695,7 @@ export function ClaudeOnboarding() {
                         setSaveError('')
                       }}
                       className={cn(
-                        'flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all',
+                        'flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                         selectedProvider === p.id ? 'ring-2 ring-accent-500' : '',
                       )}
                       style={cardStyle}

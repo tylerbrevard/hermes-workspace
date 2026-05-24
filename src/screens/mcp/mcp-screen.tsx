@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { McpServerCard } from './components/mcp-server-card'
@@ -17,6 +17,16 @@ type Tab = 'installed' | 'marketplace'
 
 const TOOLBAR_FIELD =
   'h-9 w-full min-w-0 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none transition-colors focus:border-primary sm:min-w-[220px]'
+
+function formatRefreshTime(updatedAt: number): string {
+  if (!updatedAt) return 'not loaded yet'
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(updatedAt)
+}
 
 export function McpScreen() {
   const queryClient = useQueryClient()
@@ -37,6 +47,21 @@ export function McpScreen() {
   const query = useMcpServers({ tab: serverListTab, category, search })
   const servers = query.data?.servers ?? []
   const categories = query.data?.categories ?? ['All']
+  const serverCounts = useMemo(
+    () =>
+      servers.reduce(
+        (counts, server) => {
+          counts.total += 1
+          if (server.enabled) counts.enabled += 1
+          if (server.status === 'connected') counts.connected += 1
+          if (server.status === 'failed') counts.failed += 1
+          if (server.source === 'preset') counts.presets += 1
+          return counts
+        },
+        { total: 0, enabled: 0, connected: 0, failed: 0, presets: 0 },
+      ),
+    [servers],
+  )
 
   const hubQuery = useMcpHub(tab === 'marketplace' ? search : '')
 
@@ -79,6 +104,44 @@ export function McpScreen() {
             >
               Add Server
             </Button>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+            {[
+              ['Total', serverCounts.total],
+              ['Enabled', serverCounts.enabled],
+              ['Connected', serverCounts.connected],
+              ['Failed', serverCounts.failed],
+              ['Presets', serverCounts.presets],
+            ].map(([label, value]) => (
+              <div
+                key={String(label)}
+                className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2"
+              >
+                <span className="text-primary-500">{label}</span>
+                <p className="mt-1 text-lg font-semibold text-ink">
+                  {String(value)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-primary-500">
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Source: Hermes Agent MCP endpoints
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Owner: Hermes MCP
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Last refreshed: {formatRefreshTime(query.dataUpdatedAt)}
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Health:{' '}
+              {query.isError
+                ? 'server list unavailable'
+                : serverCounts.failed > 0
+                  ? `${serverCounts.failed} failing`
+                  : 'no failures reported'}
+            </span>
           </div>
           {capabilityMode === 'fallback' ? (
             <div
@@ -161,7 +224,7 @@ export function McpScreen() {
               </div>
 
               {hubQuery.data?.warnings && hubQuery.data.warnings.length > 0 ? (
-                hubQuery.data.results && hubQuery.data.results.length > 0 ? (
+                hubQuery.data.results.length > 0 ? (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     ⚠ One or more sources unavailable; showing local results.
                     <span className="ml-1 text-[11px] text-primary-500">
@@ -268,7 +331,7 @@ function ServerList({ query, onEdit }: ServerListProps) {
     return (
       <EmptyCard
         title="No MCP servers configured"
-        description="Add a server from the My Presets tab or click Add Server above."
+        description="Add a server manually, or use Marketplace to install from a known source."
       />
     )
   }
@@ -435,7 +498,7 @@ function MarketplaceGrid({
                     size="sm"
                     onClick={() => onInstall(entry)}
                   >
-                    Install
+                    Review install
                   </Button>
                 )}
               </div>

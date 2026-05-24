@@ -37,6 +37,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConductorRouteImport } from './routes/conductor'
 import { Route as BarryRouteImport } from './routes/barry'
 import { Route as AgoraRouteImport } from './routes/agora'
+import { Route as R75TrackerRouteImport } from './routes/75-tracker'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
@@ -92,6 +93,10 @@ import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiMediaRouteImport } from './routes/api/media'
 import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiLocalProvidersRouteImport } from './routes/api/local-providers'
+<<<<<<< HEAD
+=======
+import { Route as ApiIotRouteImport } from './routes/api/iot'
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 import { Route as ApiIntegrationsRouteImport } from './routes/api/integrations'
 import { Route as ApiHistoryRouteImport } from './routes/api/history'
 import { Route as ApiHermesTasksRouteImport } from './routes/api/hermes-tasks'
@@ -309,6 +314,11 @@ const BarryRoute = BarryRouteImport.update({
 const AgoraRoute = AgoraRouteImport.update({
   id: '/agora',
   path: '/agora',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const R75TrackerRoute = R75TrackerRouteImport.update({
+  id: '/75-tracker',
+  path: '/75-tracker',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SplatRoute = SplatRouteImport.update({
@@ -587,6 +597,14 @@ const ApiLocalProvidersRoute = ApiLocalProvidersRouteImport.update({
   path: '/api/local-providers',
   getParentRoute: () => rootRouteImport,
 } as any)
+<<<<<<< HEAD
+=======
+const ApiIotRoute = ApiIotRouteImport.update({
+  id: '/api/iot',
+  path: '/api/iot',
+  getParentRoute: () => rootRouteImport,
+} as any)
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 const ApiIntegrationsRoute = ApiIntegrationsRouteImport.update({
   id: '/api/integrations',
   path: '/api/integrations',
@@ -985,6 +1003,7 @@ const ApiHermesworldReservationsConfirmRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/75-tracker': typeof R75TrackerRoute
   '/agora': typeof AgoraRoute
   '/barry': typeof BarryRoute
   '/conductor': typeof ConductorRoute
@@ -1037,6 +1056,10 @@ export interface FileRoutesByFullPath {
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
+<<<<<<< HEAD
+=======
+  '/api/iot': typeof ApiIotRouteWithChildren
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
@@ -1148,6 +1171,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/75-tracker': typeof R75TrackerRoute
   '/agora': typeof AgoraRoute
   '/barry': typeof BarryRoute
   '/conductor': typeof ConductorRoute
@@ -1199,6 +1223,10 @@ export interface FileRoutesByTo {
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
+<<<<<<< HEAD
+=======
+  '/api/iot': typeof ApiIotRouteWithChildren
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
@@ -1311,6 +1339,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/75-tracker': typeof R75TrackerRoute
   '/agora': typeof AgoraRoute
   '/barry': typeof BarryRoute
   '/conductor': typeof ConductorRoute
@@ -1363,6 +1392,10 @@ export interface FileRoutesById {
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
+<<<<<<< HEAD
+=======
+  '/api/iot': typeof ApiIotRouteWithChildren
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
@@ -1476,6 +1509,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$'
+    | '/75-tracker'
     | '/agora'
     | '/barry'
     | '/conductor'
@@ -1528,6 +1562,10 @@ export interface FileRouteTypes {
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
+<<<<<<< HEAD
+=======
+    | '/api/iot'
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
@@ -1639,6 +1677,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$'
+    | '/75-tracker'
     | '/agora'
     | '/barry'
     | '/conductor'
@@ -1690,6 +1729,10 @@ export interface FileRouteTypes {
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
+<<<<<<< HEAD
+=======
+    | '/api/iot'
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
@@ -1801,6 +1844,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$'
+    | '/75-tracker'
     | '/agora'
     | '/barry'
     | '/conductor'
@@ -1853,6 +1897,10 @@ export interface FileRouteTypes {
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
+<<<<<<< HEAD
+=======
+    | '/api/iot'
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
@@ -1965,6 +2013,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
+  R75TrackerRoute: typeof R75TrackerRoute
   AgoraRoute: typeof AgoraRoute
   BarryRoute: typeof BarryRoute
   ConductorRoute: typeof ConductorRoute
@@ -2017,6 +2066,10 @@ export interface RootRouteChildren {
   ApiHermesTasksRoute: typeof ApiHermesTasksRouteWithChildren
   ApiHistoryRoute: typeof ApiHistoryRoute
   ApiIntegrationsRoute: typeof ApiIntegrationsRoute
+<<<<<<< HEAD
+=======
+  ApiIotRoute: typeof ApiIotRouteWithChildren
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   ApiLocalProvidersRoute: typeof ApiLocalProvidersRoute
   ApiMcpRoute: typeof ApiMcpRouteWithChildren
   ApiMediaRoute: typeof ApiMediaRoute
@@ -2292,6 +2345,13 @@ declare module '@tanstack/react-router' {
       path: '/agora'
       fullPath: '/agora'
       preLoaderRoute: typeof AgoraRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/75-tracker': {
+      id: '/75-tracker'
+      path: '/75-tracker'
+      fullPath: '/75-tracker'
+      preLoaderRoute: typeof R75TrackerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$': {
@@ -2679,6 +2739,16 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiLocalProvidersRouteImport
       parentRoute: typeof rootRouteImport
     }
+<<<<<<< HEAD
+=======
+    '/api/iot': {
+      id: '/api/iot'
+      path: '/api/iot'
+      fullPath: '/api/iot'
+      preLoaderRoute: typeof ApiIotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     '/api/integrations': {
       id: '/api/integrations'
       path: '/api/integrations'
@@ -3441,6 +3511,7 @@ const ApiHermesworldReservationsRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
+  R75TrackerRoute: R75TrackerRoute,
   AgoraRoute: AgoraRoute,
   BarryRoute: BarryRoute,
   ConductorRoute: ConductorRoute,
@@ -3493,6 +3564,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHermesTasksRoute: ApiHermesTasksRouteWithChildren,
   ApiHistoryRoute: ApiHistoryRoute,
   ApiIntegrationsRoute: ApiIntegrationsRoute,
+<<<<<<< HEAD
+=======
+  ApiIotRoute: ApiIotRouteWithChildren,
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   ApiLocalProvidersRoute: ApiLocalProvidersRoute,
   ApiMcpRoute: ApiMcpRouteWithChildren,
   ApiMediaRoute: ApiMediaRoute,

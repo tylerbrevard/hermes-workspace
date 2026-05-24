@@ -172,6 +172,4 @@ const SlashCommandMenu = forwardRef(function SlashCommandMenu(
 
 export {
   SlashCommandMenu,
-  type SlashCommandDefinition,
-  type SlashCommandMenuHandle,
 }

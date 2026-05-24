@@ -1,15 +1,12 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import {  useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { seedAgentPresets } from './agent-presets'
 import {
   AiBrain03Icon,
-  Settings01Icon,
   PlusSignIcon,
+  Settings01Icon,
 } from '@hugeicons/core-free-icons'
-import { cn } from '@/lib/utils'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Button } from '@/components/ui/button'
-import { formatRelativeTime } from '@/screens/dashboard/lib/formatters'
+import { seedAgentPresets } from './agent-presets'
 import { OrchestratorCard } from './components/orchestrator-card'
 import { OperationsAgentCard } from './components/operations-agent-card'
 import { OperationsAgentDetail } from './components/operations-agent-detail'
@@ -17,6 +14,10 @@ import { OperationsNewAgentModal } from './components/operations-new-agent-modal
 import { OperationsSettingsModal } from './components/operations-settings-modal'
 import { FullOutputsView } from './components/full-outputs-view'
 import { useOperations } from './hooks/use-operations'
+import type {CSSProperties} from 'react';
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { formatRelativeTime } from '@/screens/dashboard/lib/formatters'
 
 export const THEME_STYLE: CSSProperties = {
   ['--theme-bg' as string]: 'var(--color-surface)',
@@ -63,6 +64,7 @@ export function OperationsScreen() {
     isSavingAgent,
     deleteAgent,
     isDeletingAgent,
+    refreshAll,
   } = useOperations()
 
   const isLoading =
@@ -73,6 +75,32 @@ export function OperationsScreen() {
     (cronJobsQuery.error instanceof Error && cronJobsQuery.error.message) ||
     null
   const settingsAgent = agents.find((agent) => agent.id === settingsAgentId) ?? null
+  const fleetCounts = useMemo(
+    () =>
+      agents.reduce(
+        (counts, agent) => {
+          counts.total += 1
+          counts[agent.status] += 1
+          if (agent.needsSetup) counts.needsSetup += 1
+          counts.jobs += agent.jobs.length
+          return counts
+        },
+        { total: 0, active: 0, idle: 0, error: 0, needsSetup: 0, jobs: 0 },
+      ),
+    [agents],
+  )
+  const newestActivityAt = useMemo(
+    () => {
+      let newest: number | null = null
+      for (const agent of agents) {
+        if (agent.lastActivityAt && (!newest || agent.lastActivityAt > newest)) {
+          newest = agent.lastActivityAt
+        }
+      }
+      return newest
+    },
+    [agents],
+  )
 
   return (
     <main
@@ -98,7 +126,7 @@ export function OperationsScreen() {
                 type="button"
                 onClick={() => setView('overview')}
                 className={cn(
-                  'rounded-lg px-4 py-2 text-sm font-medium transition-all',
+                  'rounded-lg px-4 py-2 text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                   view === 'overview'
                     ? 'bg-[var(--theme-accent)] text-primary-950'
                     : 'text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',
@@ -110,7 +138,7 @@ export function OperationsScreen() {
                 type="button"
                 onClick={() => setView('outputs')}
                 className={cn(
-                  'rounded-lg px-4 py-2 text-sm font-medium transition-all',
+                  'rounded-lg px-4 py-2 text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                   view === 'outputs'
                     ? 'bg-[var(--theme-accent)] text-primary-950'
                     : 'text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',
@@ -129,11 +157,56 @@ export function OperationsScreen() {
             <Button
               variant="secondary"
               className="border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+              onClick={() => void refreshAll()}
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="secondary"
+              className="border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={() => setSettingsOpen(true)}
             >
               <HugeiconsIcon icon={Settings01Icon} size={16} strokeWidth={1.8} />
               Settings
             </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs md:basis-full lg:grid-cols-6">
+            {[
+              ['Agents', fleetCounts.total],
+              ['Active', fleetCounts.active],
+              ['Idle', fleetCounts.idle],
+              ['Errors', fleetCounts.error],
+              ['Needs setup', fleetCounts.needsSetup],
+              ['Jobs', fleetCounts.jobs],
+            ].map(([label, value]) => (
+              <div
+                key={String(label)}
+                data-testid={`operations-fleet-${String(label).toLowerCase().replace(/\s+/g, '-')}`}
+                className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2"
+              >
+                <span className="text-[var(--theme-muted)]">{label}</span>
+                <p className="mt-1 text-lg font-semibold text-[var(--theme-text)]">
+                  {String(value)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-[var(--theme-muted)] md:basis-full">
+            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
+              Source: Hermes profiles, gateway sessions, cron jobs
+            </span>
+            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
+              Last activity:{' '}
+              {newestActivityAt ? formatRelativeTime(newestActivityAt) : 'none yet'}
+            </span>
+            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
+              Health:{' '}
+              {error
+                ? 'data source degraded'
+                : fleetCounts.error > 0
+                  ? `${fleetCounts.error} agent issue${fleetCounts.error === 1 ? '' : 's'}`
+                  : 'no agent errors reported'}
+            </span>
           </div>
         </header>
 
@@ -143,7 +216,13 @@ export function OperationsScreen() {
           </section>
         ) : error ? (
           <section className="rounded-3xl border border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] px-6 py-12 text-center text-sm text-[var(--theme-text)] shadow-[0_24px_80px_var(--theme-shadow)]">
-            {error}
+            <p>{error}</p>
+            <Button
+              className="mt-4 bg-[var(--theme-accent)] text-primary-950 hover:bg-[var(--theme-accent-strong)]"
+              onClick={() => void refreshAll()}
+            >
+              Retry Operations data
+            </Button>
           </section>
         ) : view === 'outputs' ? (
           <FullOutputsView />
@@ -160,19 +239,38 @@ export function OperationsScreen() {
             </motion.div>
 
             <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {agents.map((agent, index) => (
-                <motion.div
-                  key={agent.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.04, duration: 0.22 }}
-                >
-                  <OperationsAgentCard
-                    agent={agent}
-                    onOpenSettings={(agentId) => setSettingsAgentId(agentId)}
-                  />
-                </motion.div>
-              ))}
+              {agents.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-5 py-8 text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)] sm:col-span-2 xl:col-span-3">
+                  <p className="font-medium text-[var(--theme-text)]">
+                    No operations agents configured
+                  </p>
+                  <p className="mt-1">
+                    Create a Hermes profile-backed agent before launching
+                    recurring work or routing sessions through Operations.
+                  </p>
+                  <Button
+                    className="mt-4 bg-[var(--theme-accent)] text-primary-950 hover:bg-[var(--theme-accent-strong)]"
+                    onClick={() => setNewAgentOpen(true)}
+                  >
+                    <HugeiconsIcon icon={PlusSignIcon} size={16} strokeWidth={1.8} />
+                    Create first agent
+                  </Button>
+                </div>
+              ) : (
+                agents.map((agent, index) => (
+                  <motion.div
+                    key={agent.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.04, duration: 0.22 }}
+                  >
+                    <OperationsAgentCard
+                      agent={agent}
+                      onOpenSettings={(agentId) => setSettingsAgentId(agentId)}
+                    />
+                  </motion.div>
+                ))
+              )}
               <motion.button
                 type="button"
                 initial={{ opacity: 0, y: 12 }}

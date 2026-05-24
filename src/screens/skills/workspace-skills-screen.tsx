@@ -297,7 +297,7 @@ export function WorkspaceSkillsScreen() {
                       <div
                         key={skill.id}
                         className={cn(
-                          'overflow-hidden rounded-xl border bg-primary-50/60 transition-all',
+                          'overflow-hidden rounded-xl border bg-primary-50/60 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                           expanded
                             ? 'border-accent-500/40 bg-accent-500/5'
                             : 'border-primary-200 hover:border-primary-300',

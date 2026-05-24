@@ -699,7 +699,7 @@ function HermesContent() {
                   if (action === 'select') selectProvider(p.id)
                 }}
                 className={cn(
-                  'flex flex-col items-start gap-1 rounded-xl px-3 py-2.5 text-left transition-all',
+                  'flex flex-col items-start gap-1 rounded-xl px-3 py-2.5 text-left transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                   isActive
                     ? 'ring-2 ring-accent-500 shadow-md'
                     : 'hover:brightness-110',
@@ -850,7 +850,7 @@ function HermesContent() {
                             setActiveModel(model.id)
                           }}
                           className={cn(
-                            'rounded-lg px-3 py-1.5 text-xs font-medium transition-all hover:brightness-110',
+                            'rounded-lg px-3 py-1.5 text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:brightness-110',
                             activeProvider === provider.id &&
                               activeModel === model.id
                               ? 'ring-2 ring-accent-500'
@@ -915,7 +915,7 @@ function HermesContent() {
                 aria-pressed={activeModel === model}
                 onClick={() => setActiveModel(model)}
                 className={cn(
-                  'rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
+                  'rounded-lg px-3 py-1.5 text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                   activeModel === model
                     ? 'ring-2 ring-accent-500'
                     : 'hover:brightness-110',

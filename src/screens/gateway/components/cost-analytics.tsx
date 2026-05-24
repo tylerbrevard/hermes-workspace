@@ -49,7 +49,7 @@ function CSSBarChart({ entries, unit = '', color = 'bg-accent-500' }: { entries:
           <span className="w-24 shrink-0 truncate text-[11px] text-neutral-600 dark:text-neutral-400 text-right">{e.label}</span>
           <div className="flex-1 h-5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all', color)}
+              className={cn('h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]', color)}
               style={{ width: `${Math.max(e.pct, 2)}%` }}
             />
           </div>

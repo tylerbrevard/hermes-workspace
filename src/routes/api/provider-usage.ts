@@ -45,15 +45,12 @@ export const Route = createFileRoute('/api/provider-usage')({
           )
           return json(payload)
         } catch (err) {
-          return json(
-            {
-              ok: false,
-              updatedAt: Date.now(),
-              providers: [],
-              error: err instanceof Error ? err.message : String(err),
-            },
-            { status: 503 },
-          )
+          return json({
+            ok: false,
+            updatedAt: Date.now(),
+            providers: [],
+            error: err instanceof Error ? err.message : String(err),
+          })
         }
       },
     },

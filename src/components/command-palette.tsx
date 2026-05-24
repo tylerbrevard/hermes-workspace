@@ -8,14 +8,20 @@ import {
   ArrowUp01Icon,
   BrainIcon,
   Building01Icon,
+  Castle02Icon,
   Chat01Icon,
-  CommandLineIcon,
+  CheckListIcon,
   Clock01Icon,
+  CommandLineIcon,
+  DashboardSquare01Icon,
+  Dumbbell01Icon,
   File01Icon,
   McpServerIcon,
   MessageMultiple01Icon,
   PuzzleIcon,
+  Rocket01Icon,
   Settings01Icon,
+  UserGroupIcon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
 import type React from 'react'
@@ -39,6 +45,10 @@ import {
   CHAT_RUN_COMMAND_EVENT,
 } from '@/screens/chat/chat-events'
 import { cn } from '@/lib/utils'
+<<<<<<< HEAD
+=======
+import { WORKSPACE_IMPROVEMENT_OPEN_EVENT } from '@/lib/workspace-improvement-progress'
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 
 type CommandPaletteProps = {
   pathname: string
@@ -51,9 +61,7 @@ type CommandAction = {
   label: string
   keywords: string
   shortcut?: string
-  icon: React.ComponentProps<
-    typeof import('@hugeicons/react').HugeiconsIcon
-  >['icon']
+  icon: typeof Chat01Icon
   onSelect: () => void
 }
 
@@ -172,6 +180,15 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
   const screenActions = useMemo<Array<CommandAction>>(
     () => [
       {
+        id: 'screen-dashboard',
+        group: 'Screens',
+        label: 'Dashboard',
+        keywords: 'home metrics overview freshness usage status',
+        shortcut: 'Go',
+        icon: DashboardSquare01Icon,
+        onSelect: () => void navigate({ to: '/dashboard' }),
+      },
+      {
         id: 'screen-chat',
         group: 'Screens',
         label: 'Chat',
@@ -181,6 +198,36 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         onSelect: () => void navigate({ to: '/chat' }),
       },
       {
+<<<<<<< HEAD
+=======
+        id: 'screen-lily',
+        group: 'Screens',
+        label: 'LILY',
+        keywords: 'voice livekit assistant orb conversation',
+        shortcut: 'Go',
+        icon: Chat01Icon,
+        onSelect: () => void navigate({ to: '/lily' }),
+      },
+      {
+        id: 'screen-phone',
+        group: 'Screens',
+        label: 'Phone Cockpit',
+        keywords: 'home capture mobile voice inbox meeting prep',
+        shortcut: 'Go',
+        icon: DashboardSquare01Icon,
+        onSelect: () => void navigate({ to: '/phone' }),
+      },
+      {
+        id: 'screen-playground',
+        group: 'Screens',
+        label: 'HermesWorld',
+        keywords: 'playground world game scene',
+        shortcut: 'Go',
+        icon: Castle02Icon,
+        onSelect: () => void navigate({ to: '/playground' }),
+      },
+      {
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
         id: 'screen-files',
         group: 'Screens',
         label: 'Files',
@@ -199,15 +246,78 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         onSelect: () => void navigate({ to: '/terminal' }),
       },
       {
-        id: 'screen-life-os',
+        id: 'screen-jobs',
         group: 'Screens',
+<<<<<<< HEAD
         label: 'Life OS',
         keywords: 'pai pulse life operating system terminal dashboard',
+=======
+        label: 'Jobs',
+        keywords: 'automation cron heartbeat schedule runs',
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
         shortcut: 'Go',
-        icon: CommandLineIcon,
-        onSelect: () => void navigate({ to: '/life-os' }),
+        icon: Clock01Icon,
+        onSelect: () => void navigate({ to: '/jobs' }),
       },
       {
+<<<<<<< HEAD
+=======
+        id: 'screen-tasks',
+        group: 'Screens',
+        label: 'Tasks',
+        keywords: 'todo backlog action items work',
+        shortcut: 'Go',
+        icon: CheckListIcon,
+        onSelect: () => void navigate({ to: '/tasks' }),
+      },
+      {
+        id: 'screen-75-tracker',
+        group: 'Screens',
+        label: '75 Hard/Soft',
+        keywords:
+          '75 hard soft challenge habit tracker workout water reading diet progress',
+        shortcut: 'Go',
+        icon: Dumbbell01Icon,
+        onSelect: () => void navigate({ to: '/75-tracker' }),
+      },
+      {
+        id: 'screen-conductor',
+        group: 'Screens',
+        label: 'Conductor',
+        keywords: 'missions orchestrator templates approvals outputs',
+        shortcut: 'Go',
+        icon: Rocket01Icon,
+        onSelect: () => void navigate({ to: '/conductor' }),
+      },
+      {
+        id: 'screen-operations',
+        group: 'Screens',
+        label: 'Operations',
+        keywords: 'agents fleet workers outputs activity',
+        shortcut: 'Go',
+        icon: UserMultipleIcon,
+        onSelect: () => void navigate({ to: '/operations' }),
+      },
+      {
+        id: 'screen-ops-intelligence',
+        group: 'Screens',
+        label: 'Ops Intel',
+        keywords: 'readiness incidents dependencies recommendations reports',
+        shortcut: 'Go',
+        icon: DashboardSquare01Icon,
+        onSelect: () => void navigate({ to: '/ops-intelligence' }),
+      },
+      {
+        id: 'screen-swarm',
+        group: 'Screens',
+        label: 'Swarm',
+        keywords: 'workers mission dispatch runtime router',
+        shortcut: 'Go',
+        icon: UserGroupIcon,
+        onSelect: () => void navigate({ to: '/swarm' }),
+      },
+      {
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
         id: 'screen-memory',
         group: 'Screens',
         label: 'Memory',
@@ -233,6 +343,15 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         shortcut: 'Go',
         icon: McpServerIcon,
         onSelect: () => void navigate({ to: '/mcp' }),
+      },
+      {
+        id: 'screen-profiles',
+        group: 'Screens',
+        label: 'Profiles',
+        keywords: 'personas settings profile monitoring',
+        shortcut: 'Go',
+        icon: UserMultipleIcon,
+        onSelect: () => void navigate({ to: '/profiles' }),
       },
       {
         id: 'screen-settings',
@@ -264,11 +383,39 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
       {
         id: 'screen-it-ops',
         group: 'Screens',
+<<<<<<< HEAD
         label: 'IT Ops / ConnectWise',
         keywords: 'connectwise tickets standups analytics support service board sla',
+=======
+        label: 'ConnectWise',
+        keywords:
+          'connectwise tickets standups analytics support service board sla',
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
         shortcut: 'Go',
         icon: Building01Icon,
         onSelect: () => void navigate({ to: '/it-ops' }),
+      },
+      {
+        id: 'screen-barry',
+        group: 'Screens',
+        label: 'Barry',
+        keywords: 'barry one on one manager meetings checkins notes followups',
+        shortcut: 'Go',
+        icon: Chat01Icon,
+        onSelect: () => void navigate({ to: '/barry' }),
+      },
+      {
+        id: 'screen-current-improvements',
+        group: 'Screens',
+        label: 'Current Page Improvements',
+        keywords:
+          'recommendations improvements backlog optimize current page checklist',
+        shortcut: 'Open',
+        icon: CheckListIcon,
+        onSelect: () =>
+          window.dispatchEvent(
+            new CustomEvent(WORKSPACE_IMPROVEMENT_OPEN_EVENT),
+          ),
       },
     ],
     [navigate],

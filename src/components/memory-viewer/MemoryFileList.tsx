@@ -24,7 +24,6 @@ type MemoryFileListProps = {
   selectedPath: string | null
   loading: boolean
   error: string | null
-  isDemo: boolean
   collapsed: boolean
   onToggleCollapse: () => void
   onRefresh: () => void
@@ -54,7 +53,6 @@ function MemoryFileList({
   selectedPath,
   loading,
   error,
-  isDemo,
   collapsed,
   onToggleCollapse,
   onRefresh,
@@ -105,9 +103,7 @@ function MemoryFileList({
           </div>
         </div>
         <p className="text-xs text-primary-600 text-pretty">
-          {isDemo
-            ? 'Demo mode enabled because memory API data is unavailable.'
-            : 'Browse MEMORY.md and daily notes in memory/ or memories/.'}
+          Browse MEMORY.md and daily notes in memory/ or memories/.
         </p>
       </div>
 

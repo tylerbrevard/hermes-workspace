@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>75 Day Tracker</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="kicker">Hermes local tracker</p>
+          <h1>75 Day Tracker</h1>
+        </div>
+        <div class="top-actions">
+          <button id="exportButton" class="secondary" type="button">
+            Export
+          </button>
+          <label class="file-button">
+            Import
+            <input id="importInput" type="file" accept="application/json" />
+          </label>
+        </div>
+      </header>
+
+      <section class="setup-panel" aria-label="Attempt setup">
+        <div class="field">
+          <label for="challengeSelect">Challenge</label>
+          <select id="challengeSelect"></select>
+        </div>
+        <div class="field">
+          <label for="startDate">Start date</label>
+          <input id="startDate" type="date" />
+        </div>
+        <div class="field grow">
+          <label for="attemptName">Attempt name</label>
+          <input
+            id="attemptName"
+            type="text"
+            placeholder="Spring reset, travel run, etc."
+          />
+        </div>
+        <button id="newAttemptButton" type="button">Start Attempt</button>
+      </section>
+
+      <section class="summary-grid" aria-label="Attempt summary">
+        <article>
+          <span class="metric-label">Current day</span>
+          <strong id="currentDay">-</strong>
+        </article>
+        <article>
+          <span class="metric-label">Completed days</span>
+          <strong id="completedDays">0</strong>
+        </article>
+        <article>
+          <span class="metric-label">Streak</span>
+          <strong id="streak">0</strong>
+        </article>
+        <article>
+          <span class="metric-label">Status</span>
+          <strong id="statusText">No attempt</strong>
+        </article>
+      </section>
+
+      <section class="progress-panel" aria-label="Progress overview">
+        <div class="progress-copy">
+          <strong id="progressTitle">No progress yet</strong>
+          <span id="progressDetail"
+            >Start an attempt, then check off the daily tasks.</span
+          >
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <span id="progressBar"></span>
+        </div>
+        <div
+          id="trackerNotice"
+          class="tracker-notice"
+          role="status"
+          aria-live="polite"
+        ></div>
+      </section>
+
+      <section class="workspace">
+        <aside class="day-rail" aria-label="Day list">
+          <div class="rail-header">
+            <div>
+              <h2>Days</h2>
+              <div class="legend" aria-label="Calendar legend">
+                <span><i class="legend-dot done"></i>Done</span>
+                <span><i class="legend-dot partial"></i>Partial</span>
+                <span><i class="legend-dot failed"></i>Failed</span>
+              </div>
+            </div>
+            <button
+              id="todayButton"
+              class="icon-button"
+              type="button"
+              title="Jump to today"
+            >
+              Today
+            </button>
+          </div>
+          <div id="dayGrid" class="day-grid"></div>
+        </aside>
+
+        <section class="daily-panel" aria-label="Selected day">
+          <div class="day-header">
+            <div>
+              <p id="selectedDate" class="kicker">-</p>
+              <h2 id="selectedDay">Select a day</h2>
+            </div>
+            <div id="dayCompletion" class="completion-pill">0%</div>
+          </div>
+
+          <p id="dayHint" class="day-hint">
+            Select a day to log tasks, notes, and photo reference.
+          </p>
+
+          <div id="taskList" class="task-list"></div>
+
+          <div class="notes-grid">
+            <label>
+              Notes
+              <textarea
+                id="dayNotes"
+                rows="5"
+                placeholder="Training, meals, book, blockers, recovery notes..."
+              ></textarea>
+            </label>
+            <label>
+              Progress photo reference
+              <input
+                id="photoRef"
+                type="text"
+                placeholder="/path/to/photo.jpg or private album note"
+              />
+            </label>
+          </div>
+
+          <div class="daily-actions">
+            <button id="saveDayButton" type="button">Save Day</button>
+            <button id="markFailedButton" class="danger" type="button">
+              Mark Failed
+            </button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <template id="taskTemplate">
+      <label class="task-row">
+        <input type="checkbox" />
+        <span>
+          <strong></strong>
+          <small></small>
+        </span>
+      </label>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>

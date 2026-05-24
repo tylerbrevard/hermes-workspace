@@ -10,9 +10,9 @@ type BarryMeeting = {
   id: string
   date: string
   status: BarryMeetingStatus
-  agenda: AgendaItem[]
-  winsDiscussed: string[]
-  actionItems: ActionItem[]
+  agenda: Array<AgendaItem>
+  winsDiscussed: Array<string>
+  actionItems: Array<ActionItem>
   notes: string
 }
 
@@ -24,8 +24,8 @@ type BarryWin = {
 }
 
 type BarryPayload = {
-  meetings: BarryMeeting[]
-  wins: BarryWin[]
+  meetings: Array<BarryMeeting>
+  wins: Array<BarryWin>
   currentUser: string
   refreshedAt?: string
   error?: string
@@ -52,6 +52,24 @@ function formatDate(iso: string) {
   }
 }
 
+function formatFreshness(value?: string | null) {
+  if (!value) return 'Last synced unknown'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Last synced unknown'
+  return `Last synced ${date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`
+}
+
+function stripTone(state: 'ok' | 'warn') {
+  return state === 'ok'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200'
+    : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200'
+}
+
 function statusTone(status: BarryMeetingStatus) {
   if (status === 'upcoming') {
     return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200'
@@ -68,6 +86,10 @@ export function BarryScreen() {
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | BarryMeetingStatus>(
+    'all',
+  )
   const [selectedId, setSelectedId] = useState('')
   const [newAgendaText, setNewAgendaText] = useState('')
   const [newActionText, setNewActionText] = useState('')
@@ -88,12 +110,15 @@ export function BarryScreen() {
         setError(null)
         setNewActionOwner(payload.currentUser || 'Tyler')
         const firstVisible =
-          payload.meetings.find((meeting) => meeting.status !== 'archived') ||
-          payload.meetings[0]
+          payload.meetings.length === 0
+            ? null
+            : payload.meetings.find(
+                (meeting) => meeting.status !== 'archived',
+              ) || payload.meetings[0]
         setSelectedId((current) =>
           current && payload.meetings.some((meeting) => meeting.id === current)
             ? current
-            : (firstVisible?.id ?? '')
+            : (firstVisible?.id ?? ''),
         )
       })
     } catch (err) {
@@ -116,11 +141,47 @@ export function BarryScreen() {
     [meetings, selectedId],
   )
 
-  const visibleMeetings = useMemo(
-    () =>
-      meetings.filter((meeting) => (showArchived ? true : meeting.status !== 'archived')),
-    [meetings, showArchived],
+  const visibleMeetings = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return meetings.filter((meeting) => {
+      if (!showArchived && meeting.status === 'archived') return false
+      if (statusFilter !== 'all' && meeting.status !== statusFilter)
+        return false
+      if (!q) return true
+      return [
+        meeting.status,
+        meeting.notes,
+        ...meeting.agenda.map((item) => item.text),
+        ...meeting.actionItems.map((item) => `${item.text} ${item.owner}`),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    })
+  }, [meetings, search, showArchived, statusFilter])
+  const nextMeeting = useMemo(
+    () => meetings.find((meeting) => meeting.status === 'upcoming') || null,
+    [meetings],
   )
+  const openActionCount = useMemo(
+    () =>
+      meetings.reduce(
+        (count, meeting) =>
+          count + meeting.actionItems.filter((item) => !item.done).length,
+        0,
+      ),
+    [meetings],
+  )
+  const selectedProgress = useMemo(() => {
+    if (!selectedMeeting) return { agendaDone: 0, actionDone: 0 }
+    const agendaDone = selectedMeeting.agenda.filter(
+      (item) => item.discussed,
+    ).length
+    const actionDone = selectedMeeting.actionItems.filter(
+      (item) => item.done,
+    ).length
+    return { agendaDone, actionDone }
+  }, [selectedMeeting])
 
   useEffect(() => {
     setNotesDraft(selectedMeeting?.notes || '')
@@ -131,8 +192,8 @@ export function BarryScreen() {
     if (notesDraft === (selectedMeeting.notes || '')) return
     const timer = setTimeout(() => {
       setSavingNotes(true)
-      void updateMeeting(selectedMeeting.id, { notes: notesDraft }).finally(() =>
-        setSavingNotes(false),
+      void updateMeeting(selectedMeeting.id, { notes: notesDraft }).finally(
+        () => setSavingNotes(false),
       )
     }, 500)
     return () => clearTimeout(timer)
@@ -145,11 +206,16 @@ export function BarryScreen() {
   ) {
     setWorking(true)
     try {
-      const response = await fetch(id ? apiPath(`/api/ops/barry?id=${encodeURIComponent(id)}`) : apiPath('/api/ops/barry'), {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      })
+      const response = await fetch(
+        id
+          ? apiPath(`/api/ops/barry?id=${encodeURIComponent(id)}`)
+          : apiPath('/api/ops/barry'),
+        {
+          method,
+          headers: body ? { 'Content-Type': 'application/json' } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        },
+      )
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string
       }
@@ -204,10 +270,12 @@ export function BarryScreen() {
   }
 
   async function archiveMeeting(id: string) {
+    if (!window.confirm('Archive this completed Barry 1-on-1?')) return
     await updateMeeting(id, { status: 'archived' })
   }
 
   async function completeMeeting(id: string) {
+    if (!window.confirm('Mark this Barry 1-on-1 complete?')) return
     await updateMeeting(id, { status: 'completed' })
   }
 
@@ -235,9 +303,7 @@ export function BarryScreen() {
     if (!selectedMeeting) return
     await updateMeeting(selectedMeeting.id, {
       agenda: selectedMeeting.agenda.map((item, currentIndex) =>
-        currentIndex === index
-          ? { ...item, discussed: !item.discussed }
-          : item,
+        currentIndex === index ? { ...item, discussed: !item.discussed } : item,
       ),
     })
   }
@@ -245,7 +311,9 @@ export function BarryScreen() {
   async function removeAgenda(index: number) {
     if (!selectedMeeting) return
     await updateMeeting(selectedMeeting.id, {
-      agenda: selectedMeeting.agenda.filter((_, currentIndex) => currentIndex !== index),
+      agenda: selectedMeeting.agenda.filter(
+        (_, currentIndex) => currentIndex !== index,
+      ),
     })
   }
 
@@ -281,6 +349,36 @@ export function BarryScreen() {
     await updateMeeting(selectedMeeting.id, { winsDiscussed })
   }
 
+  function exportSelectedSummary() {
+    if (!selectedMeeting) return
+    const lines = [
+      `# Barry 1-on-1 - ${formatDate(selectedMeeting.date)}`,
+      '',
+      `Status: ${selectedMeeting.status}`,
+      `Private: yes`,
+      '',
+      '## Agenda',
+      ...selectedMeeting.agenda.map(
+        (item) => `- [${item.discussed ? 'x' : ' '}] ${item.text}`,
+      ),
+      '',
+      '## Action Items',
+      ...selectedMeeting.actionItems.map(
+        (item) => `- [${item.done ? 'x' : ' '}] ${item.text} (${item.owner})`,
+      ),
+      '',
+      '## Notes',
+      selectedMeeting.notes || '',
+    ]
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `barry-1on1-${selectedMeeting.id}.md`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-1 pb-6 sm:px-2">
       <div className={shellClassName()}>
@@ -296,7 +394,7 @@ export function BarryScreen() {
               Workspace-native 1-on-1 planning, wins review, and follow-through.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <label className="flex items-center gap-2 text-xs text-primary-600 dark:text-neutral-400">
               <input
                 type="checkbox"
@@ -305,6 +403,29 @@ export function BarryScreen() {
               />
               Show archived
             </label>
+            <input
+              type="search"
+              aria-label="Search Barry meetings"
+              value={search}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+              placeholder="Search Barry"
+              className="min-w-0 flex-1 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 sm:min-w-44 sm:flex-none"
+            />
+            <select
+              aria-label="Filter Barry meetings by status"
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(
+                  event.currentTarget.value as typeof statusFilter,
+                )
+              }
+              className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+            >
+              <option value="all">All statuses</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="completed">Completed</option>
+              <option value="archived">Archived</option>
+            </select>
             <button
               type="button"
               onClick={() => void createMeeting()}
@@ -315,11 +436,38 @@ export function BarryScreen() {
             </button>
           </div>
         </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-4">
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(nextMeeting ? 'ok' : 'warn')}`}
+          >
+            Next 1-on-1{' '}
+            {nextMeeting ? formatDate(nextMeeting.date) : 'not scheduled'}
+          </span>
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(openActionCount > 0 ? 'warn' : 'ok')}`}
+          >
+            {openActionCount} open action item(s)
+          </span>
+          <span className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200">
+            Private 1-on-1 notes
+          </span>
+          <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+            {formatFreshness(data?.refreshedAt)}
+          </span>
+        </div>
       </div>
 
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-          {error}
+          <div className="font-semibold">Barry data is unavailable</div>
+          <div className="mt-1">{error}</div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-3 rounded-xl border border-red-300 bg-red-100/60 px-3 py-2 text-xs font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-100"
+          >
+            Retry Barry refresh
+          </button>
         </div>
       ) : null}
 
@@ -341,14 +489,29 @@ export function BarryScreen() {
           <div className="mt-3 grid gap-2">
             {visibleMeetings.length === 0 ? (
               <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-4 text-sm text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-                No meetings yet.
+                <div className="font-medium text-primary-800 dark:text-neutral-200">
+                  No Barry meetings in this view.
+                </div>
+                <div className="mt-1">
+                  Create a 1-on-1 agenda or show archived records.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void createMeeting()}
+                  disabled={working}
+                  className="mt-3 rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+                >
+                  New 1-on-1
+                </button>
               </div>
             ) : null}
             {visibleMeetings.map((meeting) => (
               <button
                 key={meeting.id}
+                data-testid="barry-meeting"
                 type="button"
                 onClick={() => setSelectedId(meeting.id)}
+                aria-current={selectedId === meeting.id ? 'true' : undefined}
                 className={`rounded-xl border px-3 py-3 text-left transition-colors ${
                   selectedId === meeting.id
                     ? 'border-primary-400 bg-primary-100 text-primary-900 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100'
@@ -356,14 +519,18 @@ export function BarryScreen() {
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-sm font-medium">{formatDate(meeting.date)}</div>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] ${statusTone(meeting.status)}`}>
+                  <div className="text-sm font-medium">
+                    {formatDate(meeting.date)}
+                  </div>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] ${statusTone(meeting.status)}`}
+                  >
                     {meeting.status}
                   </span>
                 </div>
                 <div className="mt-2 text-xs text-primary-600 dark:text-neutral-400">
-                  {meeting.agenda.length} agenda · {meeting.actionItems.length} actions ·{' '}
-                  {meeting.winsDiscussed.length} wins
+                  {meeting.agenda.length} agenda · {meeting.actionItems.length}{' '}
+                  actions · {meeting.winsDiscussed.length} wins
                 </div>
               </button>
             ))}
@@ -372,8 +539,24 @@ export function BarryScreen() {
 
         <section className={shellClassName()}>
           {!selectedMeeting ? (
-            <div className="flex min-h-[320px] items-center justify-center text-sm text-primary-500 dark:text-neutral-400">
-              Select a meeting or create a new one.
+            <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center text-sm text-primary-500 dark:text-neutral-400">
+              <div>
+                <div className="font-medium text-primary-800 dark:text-neutral-200">
+                  Select a meeting or create a new one.
+                </div>
+                <div className="mt-1">
+                  Barry agenda templates are applied automatically to new
+                  1-on-1s.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void createMeeting()}
+                disabled={working}
+                className="rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+              >
+                New 1-on-1
+              </button>
             </div>
           ) : (
             <div className="grid gap-4">
@@ -385,6 +568,21 @@ export function BarryScreen() {
                   <h2 className="mt-1 text-xl font-semibold text-primary-900 dark:text-neutral-100">
                     {formatDate(selectedMeeting.date)}
                   </h2>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-primary-600 dark:text-neutral-400">
+                    <span
+                      className={`rounded-full border px-2 py-1 ${statusTone(selectedMeeting.status)}`}
+                    >
+                      {selectedMeeting.status}
+                    </span>
+                    <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                      Agenda {selectedProgress.agendaDone}/
+                      {selectedMeeting.agenda.length}
+                    </span>
+                    <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                      Actions {selectedProgress.actionDone}/
+                      {selectedMeeting.actionItems.length}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {selectedMeeting.status === 'upcoming' ? (
@@ -407,6 +605,24 @@ export function BarryScreen() {
                       Archive
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={exportSelectedSummary}
+                    disabled={working}
+                    className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-700 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
+                  >
+                    Export summary
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigator.clipboard.writeText(selectedMeeting.id)
+                    }
+                    disabled={working}
+                    className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-700 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
+                  >
+                    Copy source id
+                  </button>
                   <button
                     type="button"
                     onClick={() => void deleteMeeting(selectedMeeting.id)}
@@ -487,7 +703,9 @@ export function BarryScreen() {
                       </div>
                     ) : null}
                     {wins.map((win) => {
-                      const discussed = selectedMeeting.winsDiscussed.includes(win.id)
+                      const discussed = selectedMeeting.winsDiscussed.includes(
+                        win.id,
+                      )
                       return (
                         <button
                           key={win.id}
@@ -559,7 +777,9 @@ export function BarryScreen() {
                     />
                     <select
                       value={newActionOwner}
-                      onChange={(event) => setNewActionOwner(event.target.value)}
+                      onChange={(event) =>
+                        setNewActionOwner(event.target.value)
+                      }
                       className="rounded-xl border border-primary-200 bg-white px-3 py-2 text-sm text-primary-900 outline-none focus:border-primary-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                     >
                       <option value={currentUser}>{currentUser}</option>

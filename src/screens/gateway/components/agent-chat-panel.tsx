@@ -345,7 +345,7 @@ export function AgentChatPanel({
               disabled={!draft.trim() || !sessionKey || sending}
               onClick={() => void handleSend()}
               className={cn(
-                'rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all',
+                'rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                 'bg-accent-500 hover:bg-accent-600 disabled:opacity-40 disabled:cursor-not-allowed',
               )}
             >

@@ -39,7 +39,7 @@ function CollapsiblePanel({
     <BaseCollapsible.Panel
       keepMounted
       className={cn(
-        'flex h-(--collapsible-panel-height) flex-col overflow-hidden text-sm transition-all duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0',
+        'flex h-(--collapsible-panel-height) flex-col overflow-hidden text-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0',
         className,
       )}
       {...props}

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { MOBILE_HAMBURGER_NAV_ITEMS } from './mobile-hamburger-menu'
 import { MOBILE_NAV_TABS } from './mobile-tab-bar'
-import { DESKTOP_SIDEBAR_BACKDROP_CLASS } from './workspace-shell'
+import {
+  DESKTOP_SIDEBAR_BACKDROP_CLASS,
+  getWorkspaceMobilePageTitle,
+} from './workspace-shell'
 
 describe('workspace shell sidebar backdrop', () => {
   it('only spans the desktop sidebar width, not the full viewport', () => {
@@ -10,10 +13,22 @@ describe('workspace shell sidebar backdrop', () => {
   })
 })
 
+describe('workspace mobile page titles', () => {
+  it('covers every secondary visible workspace menu page', () => {
+    expect(getWorkspaceMobilePageTitle('/tasks')).toBe('Tasks')
+    expect(getWorkspaceMobilePageTitle('/meetings')).toBe('Meetings')
+    expect(getWorkspaceMobilePageTitle('/presence')).toBe('Presence')
+    expect(getWorkspaceMobilePageTitle('/it-ops')).toBe('ConnectWise')
+    expect(getWorkspaceMobilePageTitle('/barry')).toBe('Barry')
+  })
+})
+
 describe('swarm2 navigation alias handling', () => {
   it('keeps /swarm as the only user-visible swarm entry in the mobile hamburger menu', () => {
     const swarm = MOBILE_HAMBURGER_NAV_ITEMS.find((item) => item.id === 'swarm')
-    const swarm2 = MOBILE_HAMBURGER_NAV_ITEMS.find((item) => item.id === 'swarm2')
+    const swarm2 = MOBILE_HAMBURGER_NAV_ITEMS.find(
+      (item) => item.id === 'swarm2',
+    )
 
     expect(swarm?.to).toBe('/swarm')
     expect(swarm2).toBeUndefined()
@@ -25,5 +40,22 @@ describe('swarm2 navigation alias handling', () => {
 
     expect(swarm?.to).toBe('/swarm')
     expect(swarm2).toBeUndefined()
+  })
+
+  it('keeps the mobile tab bar compact and leaves secondary pages in the drawer', () => {
+    expect(MOBILE_NAV_TABS.map((item) => item.id)).toEqual([
+      'phone',
+      'chat',
+      'lily',
+      'files',
+      'terminal',
+      'swarm',
+    ])
+    expect(MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'files')).toBe(
+      true,
+    )
+    expect(
+      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === '75-tracker'),
+    ).toBe(true)
   })
 })

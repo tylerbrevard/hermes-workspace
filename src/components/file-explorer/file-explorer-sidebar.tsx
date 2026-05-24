@@ -371,10 +371,10 @@ export function FileExplorerSidebar({
   return (
     <aside
       className={cn(
-        'border-r border-primary-200 bg-primary-100 h-full flex flex-col transition-all duration-200 ease-out',
+        'border-r border-primary-200 bg-primary-100 h-full flex flex-col transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 ease-out',
         collapsed
           ? 'w-0 opacity-0 pointer-events-none'
-          : 'w-[260px] opacity-100',
+          : 'w-full opacity-100 md:w-[260px]',
         className,
       )}
     >

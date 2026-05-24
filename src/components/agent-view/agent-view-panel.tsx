@@ -358,7 +358,7 @@ function OrchestratorCard({
     <div
       ref={cardRef}
       className={cn(
-        'relative rounded-2xl border bg-gradient-to-br from-primary-100/80 via-primary-100/60 to-primary-200/40 transition-all duration-500',
+        'relative rounded-2xl border bg-gradient-to-br from-primary-100/80 via-primary-100/60 to-primary-200/40 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-500',
         compact ? 'p-2' : 'p-3',
         glowClass,
       )}
@@ -499,7 +499,7 @@ function OrchestratorCard({
                   </div>
                   <div className="h-1 w-full rounded-full bg-primary-200/70">
                     <div
-                      className={cn('h-full rounded-full transition-all duration-500', ocBarColor(row.pct))}
+                      className={cn('h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-500', ocBarColor(row.pct))}
                       style={{ width: `${row.pct}%` }}
                     />
                   </div>
@@ -1229,7 +1229,7 @@ export function AgentViewPanel() {
                                 <div className="mt-1 ml-3 h-1 overflow-hidden rounded-full bg-primary-200">
                                   <div
                                     className={cn(
-                                      'h-full rounded-full transition-all duration-500',
+                                      'h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-500',
                                       agent.status === 'finished'
                                         ? 'bg-primary-400'
                                         : 'bg-emerald-400',

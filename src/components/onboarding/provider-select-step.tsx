@@ -220,7 +220,7 @@ export function ProviderSelectStep({
                 setError(null)
               }}
               className={cn(
-                'group relative flex items-start gap-3 rounded-xl border p-4 text-left transition-all duration-150',
+                'group relative flex items-start gap-3 rounded-xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150',
                 isSelected
                   ? 'border-accent-500 bg-accent-50/50 ring-1 ring-accent-500/30'
                   : 'border-primary-200 bg-primary-50 hover:border-primary-300 hover:bg-primary-100/50',

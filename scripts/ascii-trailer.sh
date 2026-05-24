@@ -4,12 +4,12 @@
 # installed. Output: ascii-trailer/ with per-frame .txt + a single combined .gif.
 #
 # Usage:
-#   ./scripts/ascii-trailer.sh ~/Movies/hermesworld-demo.mov
+#   ./scripts/ascii-trailer.sh ~/Movies/hermesworld-preview.mov
 set -euo pipefail
 INPUT="${1:-}"
 if [[ -z "$INPUT" || ! -f "$INPUT" ]]; then
   echo "Usage: $0 <video-file>"
-  echo "Example: $0 ~/Movies/hermesworld-demo.mov"
+  echo "Example: $0 ~/Movies/hermesworld-preview.mov"
   exit 1
 fi
 

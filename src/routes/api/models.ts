@@ -66,14 +66,14 @@ function normalizeModel(entry: unknown): ModelEntry | null {
   }
 }
 
-export function mergeModelEntries(...sources: Array<Array<ModelEntry>>): Array<ModelEntry> {
+export function mergeModelEntries(...sources: Array<Array<unknown>>): Array<ModelEntry> {
   const merged: Array<ModelEntry> = []
   const seen = new Set<string>()
 
   for (const source of sources) {
     for (const model of source) {
       const normalized = normalizeModel(model)
-      if (!normalized || seen.has(normalized.id)) continue
+      if (!normalized?.id || seen.has(normalized.id)) continue
       merged.push(normalized)
       seen.add(normalized.id)
     }

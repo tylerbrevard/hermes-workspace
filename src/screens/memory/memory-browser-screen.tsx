@@ -3,12 +3,14 @@ import {
   ArrowDown01Icon,
   ArrowUp01Icon,
   BrainIcon,
+  Copy01Icon,
   PencilEdit02Icon,
   Search01Icon,
 } from '@hugeicons/core-free-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '@/components/ui/toast'
+import { writeTextToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
 
 type MemoryFileMeta = {
@@ -52,6 +54,37 @@ function formatModified(value: string): string {
     day: 'numeric',
     year: 'numeric',
   }).format(parsed)
+}
+
+function formatDateTime(value?: string): string {
+  if (!value) return 'unknown'
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) return value
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
+function daysSince(value?: string): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) return null
+  return Math.max(0, Math.floor((Date.now() - parsed) / 86_400_000))
+}
+
+function downloadTextFile(filename: string, content: string) {
+  if (typeof document === 'undefined') return
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 function isDailyMemoryPath(pathValue: string): boolean {
@@ -179,6 +212,24 @@ export function MemoryBrowserScreen() {
     () => fileItems.find((file) => file.path === selectedPath) ?? null,
     [fileItems, selectedPath],
   )
+  const memoryStats = useMemo(() => {
+    const newest = fileItems.reduce<MemoryFileMeta | null>((current, file) => {
+      if (!current) return file
+      return Date.parse(file.modified) > Date.parse(current.modified)
+        ? file
+        : current
+    }, null)
+    const totalBytes = fileItems.reduce((sum, file) => sum + file.size, 0)
+    return {
+      newest,
+      totalBytes,
+      staleCount: fileItems.filter((file) => {
+        const age = daysSince(file.modified)
+        return age != null && age > 30
+      }).length,
+    }
+  }, [fileItems])
+  const selectedAgeDays = daysSince(selectedFileMeta?.modified)
 
   const searchResults = searchQuery.data?.results ?? []
 
@@ -243,6 +294,21 @@ export function MemoryBrowserScreen() {
     }
   }
 
+  async function handleCopySelected() {
+    if (!selectedPath) return
+    try {
+      await writeTextToClipboard(content)
+      toast(`Copied ${selectedPath}`, { type: 'success' })
+    } catch {
+      toast('Clipboard unavailable', { type: 'warning' })
+    }
+  }
+
+  function handleExportSelected() {
+    if (!selectedPath) return
+    downloadTextFile(selectedPath.split('/').pop() || 'memory.md', content)
+  }
+
   return (
     <div
       className="flex h-full min-h-0 flex-col"
@@ -288,6 +354,22 @@ export function MemoryBrowserScreen() {
               />
             </div>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-primary-500 dark:text-neutral-400">
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Source: local memory registry
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Owner: Hermes Knowledge
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Last indexed: {formatDateTime(memoryStats.newest?.modified)}
+          </span>
+          {memoryStats.staleCount > 0 ? (
+            <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              {memoryStats.staleCount} stale over 30d
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -411,7 +493,7 @@ export function MemoryBrowserScreen() {
               {selectedPath ? (
                 <div className="text-xs text-primary-400 dark:text-neutral-500">
                   {selectedFileMeta?.size != null
-                    ? `${formatBytes(selectedFileMeta.size)} · ${formatModified(selectedFileMeta.modified)}`
+                    ? `${formatBytes(selectedFileMeta.size)} · modified ${formatDateTime(selectedFileMeta.modified)}${selectedAgeDays != null && selectedAgeDays > 30 ? ` · stale ${selectedAgeDays}d` : ''}`
                     : 'Loading metadata...'}
                 </div>
               ) : null}
@@ -444,21 +526,42 @@ export function MemoryBrowserScreen() {
                     ) : null}
                   </>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleStartEditing}
-                    className="relative inline-flex items-center gap-1.5 rounded-md border border-primary-200 px-3 py-1.5 text-xs font-semibold transition-colors hover:border-primary-300 hover:bg-primary-200 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-neutral-800"
-                  >
-                    <HugeiconsIcon
-                      icon={PencilEdit02Icon}
-                      size={14}
-                      strokeWidth={1.7}
-                    />
-                    Edit
-                    {hasUnsavedChanges ? (
-                      <span className="absolute -right-1 -top-1 size-2 rounded-full bg-amber-400" />
-                    ) : null}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleCopySelected}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-primary-200 px-3 py-1.5 text-xs font-semibold transition-colors hover:border-primary-300 hover:bg-primary-200 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-neutral-800"
+                    >
+                      <HugeiconsIcon
+                        icon={Copy01Icon}
+                        size={14}
+                        strokeWidth={1.7}
+                      />
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportSelected}
+                      className="rounded-md border border-primary-200 px-3 py-1.5 text-xs font-semibold transition-colors hover:border-primary-300 hover:bg-primary-200 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-neutral-800"
+                    >
+                      Export
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartEditing}
+                      className="relative inline-flex items-center gap-1.5 rounded-md border border-primary-200 px-3 py-1.5 text-xs font-semibold transition-colors hover:border-primary-300 hover:bg-primary-200 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-neutral-800"
+                    >
+                      <HugeiconsIcon
+                        icon={PencilEdit02Icon}
+                        size={14}
+                        strokeWidth={1.7}
+                      />
+                      Edit
+                      {hasUnsavedChanges ? (
+                        <span className="absolute -right-1 -top-1 size-2 rounded-full bg-amber-400" />
+                      ) : null}
+                    </button>
+                  </>
                 )}
               </div>
             ) : null}

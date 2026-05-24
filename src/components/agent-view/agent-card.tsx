@@ -657,7 +657,7 @@ export function AgentCard({
       )}
 
       {!isCompact ? (
-        <div className="mt-2 max-h-0 overflow-hidden text-primary-700 tabular-nums opacity-0 transition-all duration-200 group-hover:max-h-48 group-hover:opacity-100">
+        <div className="mt-2 max-h-0 overflow-hidden text-primary-700 tabular-nums opacity-0 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 group-hover:max-h-48 group-hover:opacity-100">
           <p className="line-clamp-2 text-pretty text-[11px] text-primary-700">{node.task}</p>
           <p className="mt-0.5 truncate text-[10px] tabular-nums text-primary-600">
             {formatRuntime(node.runtimeSeconds)} · {node.tokenCount.toLocaleString()} tokens · {formatCost(node.cost)}

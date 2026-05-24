@@ -176,7 +176,7 @@ function TemplateCard({
       type="button"
       onClick={() => onSelect(template)}
       className={cn(
-        'group w-full rounded-xl border p-3 text-left transition-all',
+        'group w-full rounded-xl border p-3 text-left transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
         'border-neutral-200 bg-neutral-50 hover:border-sky-300 hover:bg-sky-50/50',
         'dark:border-neutral-700 dark:bg-neutral-800/50 dark:hover:border-sky-700 dark:hover:bg-sky-950/30',
       )}

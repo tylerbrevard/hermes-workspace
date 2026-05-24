@@ -265,7 +265,7 @@ export function ApprovalsPage({ approvals, onApprove, onDeny }: ApprovalsPagePro
                       <article
                         key={row.key}
                         className={cn(
-                          'rounded-xl border p-3 transition-all sm:p-4',
+                          'rounded-xl border p-3 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] sm:p-4',
                           row.source === 'gateway'
                             ? 'border-violet-200 bg-violet-50/40 dark:border-violet-800/40 dark:bg-violet-900/10'
                             : 'border-amber-200 bg-amber-50/40 dark:border-amber-800/40 dark:bg-amber-900/10',

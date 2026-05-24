@@ -117,7 +117,7 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={cn(
-        'rounded-xl px-3.5 py-2 text-sm font-medium transition-all',
+        'rounded-xl px-3.5 py-2 text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
         active
           ? 'bg-[var(--theme-accent)] text-primary-950'
           : 'border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',

@@ -1,0 +1,91 @@
+[
+  {
+    "route": "/dashboard",
+    "smokeText": "Hermes Workspace",
+    "screenshotName": "dashboard"
+  },
+  {
+    "route": "/phone",
+    "smokeText": "Phone Cockpit",
+    "screenshotName": "phone-cockpit",
+    "mobileOnly": true
+  },
+  { "route": "/lily", "smokeText": "Start LILY", "screenshotName": "lily" },
+  {
+    "route": "/chat/main",
+    "smokeText": "SESSIONS",
+    "visualText": "HERMES WORKSPACE",
+    "screenshotName": "chat-main"
+  },
+  {
+    "route": "/playground",
+    "smokeText": "OPEN FULL",
+    "screenshotName": "hermesworld"
+  },
+  { "route": "/files", "smokeText": "Files", "screenshotName": "files" },
+  {
+    "route": "/terminal",
+    "smokeText": "Terminal",
+    "screenshotName": "terminal"
+  },
+  { "route": "/jobs", "smokeText": "Jobs", "screenshotName": "jobs" },
+  { "route": "/tasks", "smokeText": "Tasks", "screenshotName": "tasks" },
+  {
+    "route": "/75-tracker",
+    "smokeText": "75 Hard/Soft",
+    "screenshotName": "75-tracker"
+  },
+  {
+    "route": "/conductor",
+    "smokeText": "Launch a mission",
+    "screenshotName": "conductor"
+  },
+  {
+    "route": "/operations",
+    "smokeText": "Operations",
+    "screenshotName": "operations"
+  },
+  {
+    "route": "/ops-intelligence",
+    "smokeText": "Ops Intelligence",
+    "screenshotName": "ops-intelligence"
+  },
+  { "route": "/swarm", "smokeText": "Swarm", "screenshotName": "swarm" },
+  {
+    "route": "/memory",
+    "smokeText": "MEMORY FILES",
+    "screenshotName": "memory"
+  },
+  {
+    "route": "/skills",
+    "smokeText": "Skills Browser",
+    "screenshotName": "skills"
+  },
+  { "route": "/mcp", "smokeText": "MCP Servers", "screenshotName": "mcp" },
+  {
+    "route": "/profiles",
+    "smokeText": "Profiles",
+    "screenshotName": "profiles"
+  },
+  {
+    "route": "/meetings",
+    "smokeText": "Meetings",
+    "screenshotName": "meetings"
+  },
+  {
+    "route": "/presence",
+    "smokeText": "Presence",
+    "screenshotName": "presence"
+  },
+  {
+    "route": "/it-ops",
+    "smokeText": "ConnectWise",
+    "screenshotName": "connectwise"
+  },
+  { "route": "/barry", "smokeText": "Barry", "screenshotName": "barry" },
+  {
+    "route": "/settings",
+    "smokeText": "Settings",
+    "screenshotName": "settings"
+  }
+]

@@ -540,7 +540,7 @@ export function ChatScreen({
     if (typeof window === 'undefined') return 'low'
     const key = `claude-thinking-${activeFriendlyId || 'new'}`
     const stored = window.sessionStorage.getItem(key)
-    if (stored === 'off' || stored === 'low' || stored === 'adaptive')
+    if (stored === 'off' || stored === 'low' || stored === 'medium' || stored === 'high')
       return stored
     return 'low'
   })
@@ -1049,7 +1049,7 @@ export function ChatScreen({
           : null
       // Only auto-set if not explicitly configured
       if (!stored) {
-        setThinkingLevel('adaptive')
+        setThinkingLevel('high')
       }
     }
   }, [currentModel, activeFriendlyId])

@@ -9,16 +9,18 @@ import {
   Clock01Icon,
   CommandLineIcon,
   DashboardSquare01Icon,
+  Dumbbell01Icon,
   File01Icon,
   McpServerIcon,
   Menu01Icon,
   PuzzleIcon,
   Rocket01Icon,
+  Search01Icon,
   Settings01Icon,
   UserGroupIcon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { hapticTap } from '@/lib/haptics'
 import { getTheme, getThemeVariant, isDarkTheme, setTheme } from '@/lib/theme'
@@ -27,7 +29,23 @@ import {
   useChatSettingsStore,
 } from '@/hooks/use-chat-settings'
 
+<<<<<<< HEAD
 export const MOBILE_HAMBURGER_NAV_ITEMS = [
+=======
+const HERMESWORLD_ENABLED =
+  (import.meta as any).env?.VITE_HERMESWORLD_ENABLED !== '0'
+
+type MobileHamburgerNavItem = {
+  id: string
+  label: string
+  icon: typeof Chat01Icon
+  to: string
+  match: (path: string) => boolean
+  external?: boolean
+}
+
+export const MOBILE_HAMBURGER_NAV_ITEMS: Array<MobileHamburgerNavItem> = [
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   {
     id: 'chat',
     label: 'Chat',
@@ -50,6 +68,13 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     match: (p: string) => p.startsWith('/playground'),
   },
   {
+    id: 'files',
+    label: 'Files',
+    icon: File01Icon,
+    to: '/files',
+    match: (p: string) => p.startsWith('/files'),
+  },
+  {
     id: 'terminal',
     label: 'Terminal',
     icon: CommandLineIcon,
@@ -57,6 +82,7 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     match: (p: string) => p.startsWith('/terminal'),
   },
   {
+<<<<<<< HEAD
     id: 'life-os',
     label: 'Life OS',
     icon: Castle02Icon,
@@ -64,11 +90,20 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     match: (p: string) => p.startsWith('/life-os'),
   },
   {
+=======
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     id: 'jobs',
     label: 'Jobs',
     icon: Clock01Icon,
     to: '/jobs',
     match: (p: string) => p.startsWith('/jobs'),
+  },
+  {
+    id: '75-tracker',
+    label: '75 Hard/Soft',
+    icon: Dumbbell01Icon,
+    to: '/75-tracker',
+    match: (p: string) => p.startsWith('/75-tracker'),
   },
   {
     id: 'conductor',
@@ -175,7 +210,7 @@ export function HamburgerTrigger({ className }: { className?: string }) {
       onClick={openHamburgerMenu}
       className={cn(
         'flex items-center justify-center size-9 rounded-xl',
-        'text-primary-400 hover:text-primary-200 active:scale-90 transition-all duration-150',
+        'text-primary-400 hover:text-primary-200 active:scale-90 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150',
         'touch-manipulation select-none',
         className,
       )}
@@ -188,6 +223,7 @@ export function HamburgerTrigger({ className }: { className?: string }) {
 /** Mount once in WorkspaceShell — renders the drawer + backdrop */
 export function MobileHamburgerMenu() {
   const [open, setOpen] = useState(false)
+  const [navQuery, setNavQuery] = useState('')
   _setOpen = setOpen
 
   // Add/remove body class to push main content
@@ -201,12 +237,26 @@ export function MobileHamburgerMenu() {
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const profileDisplayName = useChatSettingsStore(selectChatProfileDisplayName)
-  const isChatRoute =
-    pathname.startsWith('/chat') || pathname === '/new' || pathname === '/'
+  const filteredNavItems = useMemo(() => {
+    const q = navQuery.trim().toLowerCase()
+    if (!q) return MOBILE_HAMBURGER_NAV_ITEMS
+    return MOBILE_HAMBURGER_NAV_ITEMS.filter((item) =>
+      [item.id, item.label, item.to].join(' ').toLowerCase().includes(q),
+    )
+  }, [navQuery])
 
   function handleNav(to: string) {
     hapticTap()
+<<<<<<< HEAD
     void navigate({ to })
+=======
+    if (external) {
+      window.location.assign(withBasePath(to))
+    } else {
+      void navigate({ to })
+    }
+    setNavQuery('')
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     setOpen(false)
   }
 
@@ -225,7 +275,7 @@ export function MobileHamburgerMenu() {
         {/* Main content overlay — dims and shifts right when sidebar is open */}
         <div
           className={cn(
-            'absolute inset-0 transition-all duration-300 ease-in-out',
+            'absolute inset-0 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-300 ease-in-out',
             open
               ? 'translate-x-72 opacity-40 scale-[0.92] rounded-2xl overflow-hidden'
               : 'translate-x-0 opacity-100 scale-100',
@@ -240,7 +290,7 @@ export function MobileHamburgerMenu() {
         className={cn(
           'fixed top-0 left-0 bottom-0 z-[96] w-72 md:hidden',
           'shadow-2xl',
-          'flex flex-col pt-[max(env(safe-area-inset-top,20px),20px)] pb-[max(env(safe-area-inset-bottom,20px),20px)]',
+          'flex max-h-[100dvh] flex-col pt-[max(env(safe-area-inset-top,20px),20px)] pb-[max(env(safe-area-inset-bottom,20px),20px)]',
           'transition-transform duration-300 ease-in-out',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
@@ -279,16 +329,39 @@ export function MobileHamburgerMenu() {
             type="button"
             aria-label="Close menu"
             onClick={() => setOpen(false)}
-            className="flex items-center justify-center size-8 rounded-full active:scale-90 transition-all"
+            className="flex items-center justify-center size-8 rounded-full active:scale-90 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]"
             style={{ color: 'var(--color-muted, #888)' }}
           >
             <HugeiconsIcon icon={Cancel01Icon} size={18} strokeWidth={1.8} />
           </button>
         </div>
 
+        <div className="px-3 pt-3">
+          <label className="relative block">
+            <span className="sr-only">Search workspace pages</span>
+            <HugeiconsIcon
+              icon={Search01Icon}
+              size={16}
+              strokeWidth={1.6}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+              style={{ color: 'var(--color-muted, #888)' }}
+            />
+            <input
+              value={navQuery}
+              onChange={(event) => setNavQuery(event.target.value)}
+              placeholder="Search pages"
+              className="h-10 w-full rounded-xl border bg-transparent pl-9 pr-3 text-[14px] outline-none"
+              style={{
+                borderColor: 'var(--color-border, #e5e7eb)',
+                color: 'var(--color-ink, #111)',
+              }}
+            />
+          </label>
+        </div>
+
         {/* Nav items */}
-        <nav className="flex flex-col gap-1 px-3 pt-4 flex-1">
-          {MOBILE_HAMBURGER_NAV_ITEMS.map((item) => {
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pt-3">
+          {filteredNavItems.map((item) => {
             const isActive = item.match(pathname)
             return (
               <button
@@ -297,7 +370,7 @@ export function MobileHamburgerMenu() {
                 onClick={() => handleNav(item.to)}
                 className={cn(
                   'flex items-center gap-3 px-3 py-3 rounded-xl text-left w-full',
-                  'transition-all duration-150 active:scale-[0.98]',
+                  'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150 active:scale-[0.98]',
                 )}
                 style={
                   isActive
@@ -322,6 +395,17 @@ export function MobileHamburgerMenu() {
               </button>
             )
           })}
+          {filteredNavItems.length === 0 ? (
+            <div
+              className="rounded-xl border px-3 py-4 text-center text-[13px]"
+              style={{
+                borderColor: 'var(--color-border, #e5e7eb)',
+                color: 'var(--color-muted, #888)',
+              }}
+            >
+              No pages found
+            </div>
+          ) : null}
         </nav>
 
         {/* Bottom — user profile + settings + theme toggle */}

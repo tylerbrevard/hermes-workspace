@@ -129,7 +129,7 @@ function ContextBarComponent({
         <div className={cn('w-full h-[3px]', barBg)}>
           <div
             className={cn(
-              'h-full transition-all duration-700 ease-out',
+              'h-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-700 ease-out',
               barColor,
             )}
             style={{ width: `${clampedPct}%` }}
@@ -161,7 +161,7 @@ function ContextBarComponent({
         >
           <div
             className={cn(
-              'h-full transition-all duration-700 ease-out',
+              'h-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-700 ease-out',
               barColor,
             )}
             style={{ width: `${clampedPct}%` }}
@@ -192,7 +192,7 @@ function ContextBarComponent({
           <div className={cn('w-full h-2 rounded-full overflow-hidden', barBg)}>
             <div
               className={cn(
-                'h-full rounded-full transition-all duration-500',
+                'h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-500',
                 barColor,
               )}
               style={{ width: `${clampedPct}%` }}

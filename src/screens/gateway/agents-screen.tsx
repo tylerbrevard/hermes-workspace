@@ -1253,7 +1253,7 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
         {/* Pull-to-refresh indicator (mobile) */}
         {isMobile && agentHubPulling ? (
           <div
-            className="pointer-events-none absolute left-1/2 top-2 z-50 -translate-x-1/2 transition-all duration-150"
+            className="pointer-events-none absolute left-1/2 top-2 z-50 -translate-x-1/2 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150"
             style={agentHubPullIndicatorStyle}
             aria-hidden
           >

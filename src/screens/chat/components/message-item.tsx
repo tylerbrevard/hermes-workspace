@@ -1651,7 +1651,7 @@ function InlineToolSectionItem({
     <div>
       <div
         className={cn(
-          'overflow-hidden rounded-lg border text-[12px] transition-all',
+          'overflow-hidden rounded-lg border text-[12px] transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
           'cursor-pointer hover:border-[var(--theme-accent)]/40',
         )}
         style={{
@@ -2709,7 +2709,7 @@ function MessageItemComponent({
                     <MessageContent
                       markdown
                       className={cn(
-                        'text-primary-900 bg-transparent w-full text-pretty transition-all duration-100',
+                        'text-primary-900 bg-transparent w-full text-pretty transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-100',
                         effectiveIsStreaming && 'chat-streaming-content',
                       )}
                     >

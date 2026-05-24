@@ -11,6 +11,7 @@ import {
   Clock01Icon,
   ComputerTerminal01Icon,
   DashboardSquare01Icon,
+  Dumbbell01Icon,
   File01Icon,
   McpServerIcon,
   MessageMultiple01Icon,
@@ -134,6 +135,7 @@ type ChatSidebarProps = {
   sessionsFetching: boolean
   sessionsError: string | null
   onRetrySessions: () => void
+  showSessions?: boolean
 }
 
 // ── Reusable nav item ───────────────────────────────────────────────────
@@ -254,7 +256,7 @@ function NavItem({
               render={
                 <Link
                   to={item.to}
-                  search={item.search}
+                  search={item.search as any}
                   hash={item.hash}
                   onClick={handleSelect}
                   className={cls}
@@ -272,7 +274,7 @@ function NavItem({
     return (
       <Link
         to={item.to}
-        search={item.search}
+        search={item.search as any}
         hash={item.hash}
         onClick={handleSelect}
         className={cls}
@@ -527,6 +529,7 @@ function ChatSidebarComponent({
   sessionsFetching,
   sessionsError,
   onRetrySessions,
+  showSessions = true,
 }: ChatSidebarProps) {
   const { settingsOpen, settingsSection, setSettingsOpen, handleOpenSettings } =
     useSidebarSettings()
@@ -581,14 +584,18 @@ function ChatSidebarComponent({
   const isPlaygroundActive = pathname === '/playground'
   const isAgoraActive = pathname === '/agora'
   const isTerminalActive = pathname === '/terminal'
-  const isLifeOsActive = pathname === '/life-os'
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
   const isTasksActive = pathname === '/tasks'
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
+<<<<<<< HEAD
   const mainRoutes = ['/chat', '/new', '/files', '/terminal', '/life-os']
+=======
+  const isSeventyFiveTrackerActive = pathname === '/75-tracker'
+  const mainRoutes = ['/chat', '/new', '/lily', '/files', '/terminal']
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   const knowledgeRoutes = ['/memory', '/skills']
   const systemRoutes = ['/settings', '/logs']
 
@@ -813,6 +820,7 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
+<<<<<<< HEAD
       to: '/life-os',
       icon: Castle02Icon,
       label: 'Life OS',
@@ -820,6 +828,8 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
+=======
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
       to: '/jobs',
       icon: Clock01Icon,
       label: t('nav.jobs'),
@@ -831,6 +841,13 @@ function ChatSidebarComponent({
       icon: CheckListIcon,
       label: 'Tasks',
       active: isTasksActive,
+    },
+    {
+      kind: 'link',
+      to: '/75-tracker',
+      icon: Dumbbell01Icon,
+      label: '75 Hard/Soft',
+      active: isSeventyFiveTrackerActive,
     },
     {
       kind: 'link',
@@ -1165,7 +1182,7 @@ function ChatSidebarComponent({
         {/* Sessions list */}
         <div className={cn('shrink-0 mt-1', isMobile && 'order-1')}>
           <AnimatePresence initial={false}>
-            {!isVisuallyCollapsed && (
+            {!isVisuallyCollapsed && showSessions && (
               <motion.div
                 key="content"
                 initial={{ opacity: 0 }}
@@ -1346,6 +1363,7 @@ function areSidebarPropsEqual(
   if (prevProps.sessionsLoading !== nextProps.sessionsLoading) return false
   if (prevProps.sessionsFetching !== nextProps.sessionsFetching) return false
   if (prevProps.sessionsError !== nextProps.sessionsError) return false
+  if (prevProps.showSessions !== nextProps.showSessions) return false
   if (prevProps.onRetrySessions !== nextProps.onRetrySessions) return false
   if (!areSessionsEqual(prevProps.sessions, nextProps.sessions)) return false
   return true

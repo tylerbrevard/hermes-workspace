@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { DialogContent, DialogRoot, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
+import { writeTextToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
 
 type ProfileSummary = {
@@ -66,6 +67,16 @@ function formatDate(value?: string): string {
     hour: 'numeric',
     minute: '2-digit',
   }).format(parsed)
+}
+
+function formatRefreshTime(updatedAt: number): string {
+  if (!updatedAt) return 'not loaded yet'
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(updatedAt)
 }
 
 function StatChip({ label, value }: { label: string; value: string | number }) {
@@ -142,6 +153,20 @@ export function ProfilesScreen() {
   const activeProfile = profilesQuery.data?.activeProfile ?? 'default'
 
   const sorted = useMemo(() => profiles, [profiles])
+  const profileStats = useMemo(
+    () =>
+      profiles.reduce(
+        (counts, profile) => {
+          counts.skills += profile.skillCount
+          counts.sessions += profile.sessionCount
+          if (profile.hasEnv) counts.withEnv += 1
+          if (!profile.provider) counts.missingProvider += 1
+          return counts
+        },
+        { skills: 0, sessions: 0, withEnv: 0, missingProvider: 0 },
+      ),
+    [profiles],
+  )
 
   async function refreshProfiles() {
     await queryClient.invalidateQueries({ queryKey: ['profiles'] })
@@ -183,8 +208,8 @@ export function ProfilesScreen() {
   }, [createOpen, wizardStep, allModels.length, fetchAllModels])
 
   useEffect(() => {
-    setDescriptionDraft(detailQuery.data?.profile?.description ?? '')
-  }, [detailQuery.data?.profile?.description, detailsName])
+    setDescriptionDraft(detailQuery.data?.profile.description ?? '')
+  }, [detailQuery.data?.profile.description, detailsName])
 
   const nameValid =
     /^[A-Za-z0-9_-]+$/.test(newProfileName.trim()) &&
@@ -295,7 +320,9 @@ export function ProfilesScreen() {
       toast(`Saved description for ${detailsName}`, { type: 'success' })
       await Promise.all([
         refreshProfiles(),
-        queryClient.invalidateQueries({ queryKey: ['profiles', 'read', detailsName] }),
+        queryClient.invalidateQueries({
+          queryKey: ['profiles', 'read', detailsName],
+        }),
       ])
       await detailQuery.refetch()
     } catch (error) {
@@ -320,12 +347,48 @@ export function ProfilesScreen() {
             Browse and manage Hermes profiles stored under{' '}
             <span className="font-mono">~/.hermes/profiles</span>.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-primary-500">
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Source: ~/.hermes/profiles
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Owner: Hermes Profiles
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Last refreshed: {formatRefreshTime(profilesQuery.dataUpdatedAt)}
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Health:{' '}
+              {profilesQuery.isError
+                ? 'profile list unavailable'
+                : profileStats.missingProvider > 0
+                  ? `${profileStats.missingProvider} without provider`
+                  : 'profiles reachable'}
+            </span>
+          </div>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.8} />
           Create profile
         </Button>
       </div>
+
+      <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+        <StatChip label="profiles" value={profiles.length} />
+        <StatChip label="skills" value={profileStats.skills} />
+        <StatChip label="sessions" value={profileStats.sessions} />
+        <StatChip label="with env" value={profileStats.withEnv} />
+      </div>
+
+      {profilesQuery.isLoading ? (
+        <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-8 text-center text-sm text-primary-600">
+          Loading profiles...
+        </div>
+      ) : profilesQuery.error instanceof Error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+          {profilesQuery.error.message}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {sorted.map((profile) => {
@@ -643,8 +706,8 @@ export function ProfilesScreen() {
                     </div>
                   ) : allModels.length === 0 ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
-                      No models found. Make sure Hermes Agent is running and
-                      has models configured.
+                      No models found. Make sure Hermes Agent is running and has
+                      models configured.
                     </div>
                   ) : (
                     <select
@@ -910,6 +973,31 @@ export function ProfilesScreen() {
                   value={detailQuery.data.profile.path}
                   mono
                 />
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const pathValue = detailQuery.data.profile.path
+                      void writeTextToClipboard(pathValue).then(
+                        () => toast('Copied profile path', { type: 'success' }),
+                        () =>
+                          toast(pathValue, {
+                            type: 'warning',
+                            duration: 7000,
+                          }),
+                      )
+                    }}
+                    className="gap-1.5"
+                  >
+                    <HugeiconsIcon
+                      icon={Copy01Icon}
+                      size={14}
+                      strokeWidth={1.8}
+                    />
+                    Copy path
+                  </Button>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <DetailField
                     label="Env file"
@@ -945,12 +1033,15 @@ export function ProfilesScreen() {
                   </div>
                   <textarea
                     value={descriptionDraft}
-                    onChange={(event) => setDescriptionDraft(event.target.value)}
+                    onChange={(event) =>
+                      setDescriptionDraft(event.target.value)
+                    }
                     placeholder="What this profile is for, how it should behave, or what makes it different"
                     className="min-h-[96px] w-full rounded-lg border border-primary-200 bg-primary-100/70 p-3 text-sm text-primary-900 outline-none transition-colors focus:border-accent-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                   />
                   <p className="mt-2 text-xs text-primary-400 dark:text-neutral-500">
-                    Saved into the profile config, so manual file edits show up here after refresh.
+                    Saved into the profile config, so manual file edits show up
+                    here after refresh.
                   </p>
                 </div>
                 <div className="rounded-xl border border-primary-200 bg-primary-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">

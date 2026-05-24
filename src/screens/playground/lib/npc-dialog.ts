@@ -7,8 +7,7 @@
  * - advance/complete a quest
  * - teach a skill (grants XP)
  *
- * For hackathon, dialog is fully scripted with Hermes-themed lore so we
- * can demo the loop without a live agent backend. v0.2 ports this to a
+ * Dialog is authored with Hermes-themed lore and can be upgraded to a
  * live Hermes/Kimi agent call per node.
  */
 
@@ -57,7 +56,7 @@ export const NPC_DIALOG: Record<string, NpcDialogTree> = {
       'These Training Grounds teach the Hermes loop: move, equip, speak, remember, and build.',
       'Long before Hermes Workspace, agents were tools. We invited them into a world instead.',
       'Start here, then walk through the Forge Gate when you are ready to build with Hermes for real.',
-      'I am scripted for this hackathon. Soon a real Hermes agent will speak through me with deeper memory.',
+      'I hold the current Grove lore. A live Hermes agent can deepen this voice as the world grows.',
     ],
     choices: [
       {
@@ -194,8 +193,8 @@ export const NPC_DIALOG: Record<string, NpcDialogTree> = {
         grantSkillXp: { worldsmithing: 20, oracle: 20 },
       },
       {
-        id: 'forge-demo',
-        label: '[Build] Forge a demo tool',
+        id: 'forge-tool',
+        label: '[Build] Forge a tool',
         reply:
           'Name the thing you want to make and the Forge will start from there. This is where Hermes turns prompts into products, so keep the loop small, concrete, and shippable.',
         grantSkillXp: { engineering: 25, worldsmithing: 15 },
@@ -319,7 +318,6 @@ export const NPC_DIALOG: Record<string, NpcDialogTree> = {
       },
     ],
   },
-
 
   shopkeeper: {
     id: 'shopkeeper',
@@ -447,7 +445,7 @@ export const NPC_DIALOG: Record<string, NpcDialogTree> = {
       'Every MMO hub needs a warm room where nobody is optimizing anything. Sit down. The next quest can wait thirty seconds.',
     lore: [
       'The tavern should become social glue: ambient chat, stories, music generation, voice rooms, screenshots, and launch parties.',
-      'You cannot fake community with dashboards alone. You need spaces where people linger without a task.',
+      'You cannot manufacture community with dashboards alone. You need spaces where people linger without a task.',
     ],
     choices: [
       {
@@ -465,7 +463,6 @@ export const NPC_DIALOG: Record<string, NpcDialogTree> = {
       },
     ],
   },
-
 
   innkeeper: {
     id: 'innkeeper',
@@ -488,7 +485,8 @@ export const NPC_DIALOG: Record<string, NpcDialogTree> = {
       {
         id: 'lore-inn',
         label: 'What is this Inn for?',
-        reply: 'Login lobby, save point, party finder, and the place new builders meet veterans without pressure.',
+        reply:
+          'Login lobby, save point, party finder, and the place new builders meet veterans without pressure.',
       },
     ],
   },
@@ -508,14 +506,16 @@ export const NPC_DIALOG: Record<string, NpcDialogTree> = {
       {
         id: 'first-vial',
         label: 'Buy a starter vial',
-        reply: 'Take this vial. Use it before a hard quest and your skill XP gain doubles.',
+        reply:
+          'Take this vial. Use it before a hard quest and your skill XP gain doubles.',
         grantItems: ['oracle-crystal'],
         grantSkillXp: { promptcraft: 40 },
       },
       {
         id: 'lore-shelves',
         label: 'What goes on these shelves?',
-        reply: 'Skill recipes, agent personas, prompt templates. The store catalogue maps to your real Hermes capabilities.',
+        reply:
+          'Skill recipes, agent personas, prompt templates. The store catalogue maps to your real Hermes capabilities.',
       },
     ],
   },

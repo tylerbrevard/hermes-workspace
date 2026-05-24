@@ -83,7 +83,7 @@ export function LoginScreen() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
-                className="w-full rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-primary-900 placeholder-primary-400 outline-none transition-all focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20"
+                className="w-full rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-primary-900 placeholder-primary-400 outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20"
                 disabled={loading}
                 autoFocus
               />
@@ -98,7 +98,7 @@ export function LoginScreen() {
             <button
               type="submit"
               disabled={loading || !password}
-              className="w-full rounded-lg bg-accent-500 px-4 py-2.5 font-medium text-white transition-all hover:bg-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-lg bg-accent-500 px-4 py-2.5 font-medium text-white transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:bg-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500/50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? 'Authenticating...' : 'Continue'}
             </button>

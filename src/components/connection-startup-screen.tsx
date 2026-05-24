@@ -245,7 +245,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
         {/* Failure state — setup guide */}
         <div
           className={[
-            'w-full overflow-hidden transition-all duration-500 ease-out',
+            'w-full overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-500 ease-out',
             showFailureState
               ? 'mt-6 max-h-[60rem] translate-y-0 opacity-100'
               : 'max-h-0 translate-y-2 opacity-0',
@@ -317,7 +317,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
             {/* Manual setup steps */}
             <div
               className={[
-                'overflow-hidden transition-all duration-300',
+                'overflow-hidden transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-300',
                 showManual ? 'max-h-[40rem] opacity-100' : 'max-h-0 opacity-0',
               ].join(' ')}
             >

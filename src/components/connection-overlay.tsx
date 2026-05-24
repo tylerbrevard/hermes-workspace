@@ -1,4 +1,4 @@
-// Stub — connection overlay (not used in Hermes Workspace)
+// Compatibility wrapper for the legacy connection overlay.
 export function useConnectionRestart() {
   return {
     triggerRestart: async (fn: () => Promise<void>) => {

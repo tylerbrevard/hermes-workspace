@@ -1,6 +1,6 @@
 // use-agent-outputs.ts
 //
-// Claude-Workspace stub for the Operations "Outputs" tab.
+// Compatibility hook for the Operations "Outputs" tab.
 // ControlSuite ships a richer implementation backed by the Codex agent
 // activity feed. Claude does not have that surface yet, so this returns
 // an empty list and a no-op refresher. Replace with a real hook when we

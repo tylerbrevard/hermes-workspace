@@ -1,5 +1,5 @@
-import { formatModelName } from '@/screens/dashboard/lib/formatters'
 import type { DashboardOverview } from '@/server/dashboard-aggregator'
+import { formatModelName } from '@/screens/dashboard/lib/formatters'
 
 function formatCount(n: number): string {
   if (!n || n <= 0) return '0'
@@ -21,13 +21,39 @@ function formatCount(n: number): string {
 export function ActiveModelKpi({
   modelInfo,
   analytics,
+  lastProbeAt,
+  loading,
+  error,
+  onRetry,
 }: {
   modelInfo: DashboardOverview['modelInfo']
   analytics: DashboardOverview['analytics']
+  lastProbeAt?: string | null
+  loading?: boolean
+  error?: string | null
+  onRetry?: () => void
 }) {
   const connected = !!modelInfo
   const display = modelInfo ? formatModelName(modelInfo.model) : '—'
   const provider = modelInfo?.provider ?? '—'
+  const offlineReason = error
+    ? error
+    : loading
+      ? 'Gateway probe in progress'
+      : 'No active model reported by the gateway overview.'
+  const probeLabel = (() => {
+    if (!lastProbeAt) return 'No successful gateway probe yet'
+    const time = Date.parse(lastProbeAt)
+    if (!Number.isFinite(time)) return 'Gateway probe time unknown'
+    const diff = Date.now() - time
+    if (diff < 60_000) return 'Gateway probe just now'
+    if (diff < 3_600_000)
+      return `Gateway probe ${Math.floor(diff / 60_000)}m ago`
+    return `Gateway probe ${new Date(time).toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+    })}`
+  })()
 
   // Routing share (proxy): % of calls in the analytics window that hit
   // the active model. Hermes Agent confirmed this is the closest
@@ -86,7 +112,10 @@ export function ActiveModelKpi({
             color: tone,
           }}
         >
-          <span className="size-1.5 rounded-full" style={{ background: tone }} />
+          <span
+            className="size-1.5 rounded-full"
+            style={{ background: tone }}
+          />
           {connected ? 'Online' : 'Offline'}
         </span>
       </div>
@@ -103,7 +132,8 @@ export function ActiveModelKpi({
           <span
             className="rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em]"
             style={{
-              background: 'color-mix(in srgb, var(--theme-accent) 12%, transparent)',
+              background:
+                'color-mix(in srgb, var(--theme-accent) 12%, transparent)',
               color: 'var(--theme-accent)',
             }}
             title="Share of API calls in the analytics window."
@@ -118,10 +148,9 @@ export function ActiveModelKpi({
           className="truncate font-mono uppercase tracking-[0.12em]"
           style={{ color: 'var(--theme-muted)' }}
         >
-          {provider}
-          {sessionsForModel !== null
-            ? ` · ${formatCount(sessionsForModel)} sessions`
-            : ''}
+          {connected
+            ? `${provider}${sessionsForModel !== null ? ` · ${formatCount(sessionsForModel)} sessions` : ''}`
+            : offlineReason}
         </span>
         {modelInfo?.effectiveContextLength ? (
           <span
@@ -130,6 +159,28 @@ export function ActiveModelKpi({
           >
             ctx {formatCount(modelInfo.effectiveContextLength)}
           </span>
+        ) : null}
+      </div>
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--theme-border)]/70 pt-2 text-[10px]">
+        <span
+          className="truncate font-mono uppercase tracking-[0.1em]"
+          style={{ color: 'var(--theme-muted)' }}
+          title={probeLabel}
+        >
+          {probeLabel}
+        </span>
+        {onRetry ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="shrink-0 rounded border px-1.5 py-0.5 font-mono uppercase tracking-[0.1em] transition hover:bg-[var(--theme-card2)]"
+            style={{
+              borderColor: 'var(--theme-border)',
+              color: connected ? 'var(--theme-muted)' : 'var(--theme-danger)',
+            }}
+          >
+            Retry
+          </button>
         ) : null}
       </div>
     </div>

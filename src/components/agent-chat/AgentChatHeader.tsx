@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils'
 type AgentChatHeaderProps = {
   agentName: string
   statusLabel: string
-  isDemoMode: boolean
   onClose: () => void
 }
 
@@ -26,7 +25,6 @@ function getStatusClassName(statusLabel: string): string {
 export function AgentChatHeader({
   agentName,
   statusLabel,
-  isDemoMode,
   onClose,
 }: AgentChatHeaderProps) {
   return (
@@ -45,11 +43,6 @@ export function AgentChatHeader({
           >
             {statusLabel}
           </span>
-          {isDemoMode ? (
-            <span className="inline-flex items-center rounded-full border border-accent-500/35 bg-accent-500/10 px-2 py-0.5 text-accent-300">
-              Demo Mode
-            </span>
-          ) : null}
         </div>
       </div>
       <Button

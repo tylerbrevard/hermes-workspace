@@ -26,14 +26,14 @@ function DialogContent({ className, children, style }: DialogContentProps) {
   return (
     <Dialog.Portal>
       <Dialog.Backdrop
-        className="fixed inset-0 transition-all duration-150 data-[state=open]:opacity-100 data-[state=closed]:opacity-0"
+        className="fixed inset-0 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150 data-[state=open]:opacity-100 data-[state=closed]:opacity-0"
         style={{ background: 'rgba(0,0,0,0.5)' }}
       />
       <Dialog.Popup
         className={cn(
           'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
           'w-[min(400px,92vw)] max-h-[90vh] rounded-[10px] p-0 overflow-hidden flex flex-col',
-          'transition-all duration-150',
+          'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150',
           'data-[state=open]:opacity-100 data-[state=closed]:opacity-0',
           'data-[state=open]:scale-100 data-[state=closed]:scale-95',
           className,

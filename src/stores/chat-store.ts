@@ -1135,7 +1135,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Clear streaming state immediately — tool calls are preserved via
         // __streamToolCalls embedded on completeMessage above, so pills survive
         // in the history message without needing streaming state alive.
-        // DO NOT keep a stub here — it keeps isRealtimeStreaming=true which
+        // DO NOT keep a placeholder here — it keeps isRealtimeStreaming=true which
         // injects an invisible streaming placeholder that causes a blank gap.
         streamingMap.delete(sessionKey)
         set({ streamingState: streamingMap, lastEventAt: now })

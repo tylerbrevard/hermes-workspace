@@ -506,7 +506,7 @@ export function updateLegacyIotConfig(body: Record<string, unknown>) {
   const configs = readIotConfigs()
   const index = configs.findIndex(([id]) => id === deviceId)
   const current = index >= 0 ? configs[index][1] : {}
-  const nextConfig = {
+  const nextConfig: Record<string, unknown> = {
     ...current,
     ...configUpdates,
     updatedAt: Date.now(),

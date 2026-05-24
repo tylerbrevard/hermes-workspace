@@ -85,7 +85,7 @@ function ContextAlertModalComponent({
           <div className="w-full h-2.5 rounded-full bg-primary-100 overflow-hidden mb-4">
             <div
               className={cn(
-                'h-full rounded-full transition-all duration-500',
+                'h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-500',
                 barColor,
               )}
               style={{ width: `${Math.min(contextPercent, 100)}%` }}

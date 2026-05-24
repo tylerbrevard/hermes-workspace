@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Editor } from '@monaco-editor/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -6,6 +6,7 @@ import { Folder01Icon } from '@hugeicons/core-free-icons'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { FileExplorerSidebar } from '@/components/file-explorer'
 import { resolveTheme, useSettings } from '@/hooks/use-settings'
+import { cn } from '@/lib/utils'
 
 const INITIAL_EDITOR_VALUE = `// Files workspace
 // Use the file tree on the left to browse and manage project files.
@@ -54,25 +55,11 @@ export const Route = createFileRoute('/files')({
 function FilesRoute() {
   usePageTitle('Files')
   const { settings } = useSettings()
-  const [isMobile, setIsMobile] = useState(false)
   const [fileExplorerCollapsed, setFileExplorerCollapsed] = useState(false)
   const [editorValue, setEditorValue] = useState(INITIAL_EDITOR_VALUE)
   const resolvedTheme = resolveTheme(settings.theme)
 
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 767px)')
-    const update = () => setIsMobile(media.matches)
-    update()
-    media.addEventListener('change', update)
-    return () => media.removeEventListener('change', update)
-  }, [])
-
-  useEffect(() => {
-    if (!isMobile) return
-    setFileExplorerCollapsed(true)
-  }, [isMobile])
-
-  const handleInsertReference = useCallback(function handleInsertReference(
+  const handleInsertReference = useCallback(function insertReference(
     reference: string,
   ) {
     setEditorValue((prev) => `${prev}\n${reference}\n`)
@@ -80,15 +67,19 @@ function FilesRoute() {
 
   return (
     <div className="h-full min-h-0 overflow-hidden bg-surface text-primary-900">
-      <div className="flex h-full min-h-0 overflow-hidden">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden md:flex-row">
         <FileExplorerSidebar
           collapsed={fileExplorerCollapsed}
           onToggle={function onToggleFileExplorer() {
             setFileExplorerCollapsed((prev) => !prev)
           }}
           onInsertReference={handleInsertReference}
+          className={cn(
+            'h-[min(42dvh,360px)] shrink-0 border-b border-r-0 md:h-full md:border-b-0 md:border-r',
+            fileExplorerCollapsed ? 'hidden md:flex' : '',
+          )}
         />
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <main className="flex min-h-[260px] min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex items-center gap-3 border-b border-primary-200 px-3 py-2 md:px-4 md:py-3">
             <button
               type="button"
@@ -110,7 +101,7 @@ function FilesRoute() {
               </p>
             </div>
           </header>
-          <div className="min-h-0 flex-1 pb-24 md:pb-0">
+          <div className="min-h-0 flex-1 pb-[calc(var(--tabbar-h,80px)+0.75rem)] md:pb-0">
             <Editor
               height="100%"
               theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs-light'}

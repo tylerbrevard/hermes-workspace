@@ -365,7 +365,7 @@ export function OperationalWorkerCard({
       data-swarm2-worker-id={member.id}
       onClick={onSelect}
       className={cn(
-        'relative overflow-hidden flex min-h-[30rem] flex-col rounded-[1.35rem] border bg-[var(--theme-card)] p-3 text-[var(--theme-text)] shadow-[0_18px_44px_color-mix(in_srgb,var(--theme-shadow)_13%,transparent)] transition-all',
+        'relative overflow-hidden flex min-h-[30rem] flex-col rounded-[1.35rem] border bg-[var(--theme-card)] p-3 text-[var(--theme-text)] shadow-[0_18px_44px_color-mix(in_srgb,var(--theme-shadow)_13%,transparent)] transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
         'hover:-translate-y-[1px] hover:shadow-[0_22px_58px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]',
         selected
           ? 'border-[var(--theme-accent)] ring-1 ring-[var(--theme-accent-soft-strong)]'

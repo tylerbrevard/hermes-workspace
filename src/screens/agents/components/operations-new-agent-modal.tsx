@@ -235,7 +235,7 @@ export function OperationsNewAgentModal({
                 type="button"
                 onClick={() => applyPreset(preset.id)}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all',
+                  'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                   presetId === preset.id
                     ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-text)]'
                     : 'border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',

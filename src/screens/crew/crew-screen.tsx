@@ -134,7 +134,7 @@ function AgentCard({ member }: { member: CrewMember }) {
     <div
       className={cn(
         'rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] overflow-hidden',
-        'transition-all duration-200 hover:shadow-[0_4px_16px_rgba(0,0,0,0.35)]',
+        'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 hover:shadow-[0_4px_16px_rgba(0,0,0,0.35)]',
         status === 'offline' && 'opacity-70',
       )}
     >
@@ -334,7 +334,7 @@ export function CrewScreen() {
             onClick={handleRefresh}
             disabled={isLoading}
             className={cn(
-              'inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-xs font-medium text-[var(--theme-muted)] shadow-sm transition-all',
+              'inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-xs font-medium text-[var(--theme-muted)] shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
               'hover:border-[#B87333]/40 hover:text-[#f59e0b] hover:shadow-[0_0_0_1px_rgba(184,115,51,0.12)]',
               'disabled:cursor-not-allowed disabled:opacity-40',
             )}

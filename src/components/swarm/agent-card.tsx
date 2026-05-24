@@ -162,7 +162,7 @@ export function AgentCard({
     <article
       onClick={onSelect}
       className={cn(
-        'group relative flex min-h-[24rem] flex-col gap-3 overflow-hidden rounded-[1.45rem] border bg-gradient-to-b p-3.5 backdrop-blur-xl transition-all',
+        'group relative flex min-h-[24rem] flex-col gap-3 overflow-hidden rounded-[1.45rem] border bg-gradient-to-b p-3.5 backdrop-blur-xl transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
         'cursor-pointer hover:-translate-y-[1px] hover:shadow-[0_18px_30px_rgba(0,0,0,0.32)]',
         roleAccent(role),
         selected

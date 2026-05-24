@@ -137,7 +137,7 @@ function ProviderLineRenderer({ line }: { line: UsageLine }) {
         </div>
         <div className="h-2 w-full rounded-full bg-primary-100">
           <div
-            className={`h-2 rounded-full transition-all ${progressColor(line.used, line.limit)}`}
+            className={`h-2 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] ${progressColor(line.used, line.limit)}`}
             style={{ width: `${pct}%` }}
           />
         </div>

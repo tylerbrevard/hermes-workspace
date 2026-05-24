@@ -358,17 +358,18 @@ export function usePlaygroundRpg() {
       completedQuest = quest
       return completeQuestState(next, quest)
     })
-    if (completedQuest) {
-      pushToast('quest', 'Quest Complete', completedQuest.title)
-      pushToast('xp', '+ XP', `+${completedQuest.reward.xp} XP`)
-      if (completedQuest.reward.items?.length) {
-        for (const itemId of completedQuest.reward.items) {
+    const notifiedCompletedQuest = completedQuest as PlaygroundQuest | null
+    if (notifiedCompletedQuest) {
+      pushToast('quest', 'Quest Complete', notifiedCompletedQuest.title)
+      pushToast('xp', '+ XP', `+${notifiedCompletedQuest.reward.xp} XP`)
+      if (notifiedCompletedQuest.reward.items?.length) {
+        for (const itemId of notifiedCompletedQuest.reward.items) {
           const item = itemById(itemId)
           if (item) pushToast('item', '+ Item', item.name)
         }
       }
-      if (completedQuest.reward.title) {
-        pushToast('title', 'Title Unlocked', completedQuest.reward.title)
+      if (notifiedCompletedQuest.reward.title) {
+        pushToast('title', 'Title Unlocked', notifiedCompletedQuest.reward.title)
       }
     }
   }, [pushToast])

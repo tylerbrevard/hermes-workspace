@@ -24,7 +24,7 @@ type ItOpsData = {
     recurringIssues?: Array<{
       label: string
       count: number
-      dates: string[]
+      dates: Array<string>
       firstSeen?: string | null
       lastSeen?: string | null
     }>
@@ -32,11 +32,11 @@ type ItOpsData = {
       id: string
       date: string
       title: string
-      attendees?: string[]
-      absentDirectReports?: string[]
-      actionItems?: string[]
-      issues?: string[]
-      decisions?: string[]
+      attendees?: Array<string>
+      absentDirectReports?: Array<string>
+      actionItems?: Array<string>
+      issues?: Array<string>
+      decisions?: Array<string>
     }>
     generatedAt?: string
     warning?: string
@@ -81,7 +81,7 @@ type ItOpsData = {
       requiredDate: string | null
     }>
     briefing: string
-    errors?: string[]
+    errors?: Array<string>
     fetchedAt: string
   }
   refreshedAt?: string
@@ -92,10 +92,36 @@ function shellClassName() {
   return 'rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/92'
 }
 
+function formatFreshness(value?: string | null) {
+  if (!value) return 'Last pull unknown'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Last pull unknown'
+  return `Last pull ${date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`
+}
+
+function stripTone(state: 'ok' | 'warn' | 'bad') {
+  if (state === 'ok') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200'
+  }
+  if (state === 'warn') {
+    return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200'
+  }
+  return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200'
+}
+
 export function ItOpsScreen() {
   const [data, setData] = useState<ItOpsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [ticketSearch, setTicketSearch] = useState('')
+  const [boardFilter, setBoardFilter] = useState('All')
+  const [priorityFilter, setPriorityFilter] = useState('All')
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -127,6 +153,79 @@ export function ItOpsScreen() {
       ),
     [data],
   )
+  const connectWiseErrors = data?.analytics?.errors || []
+  const ticketBoards = useMemo(
+    () => [
+      'All',
+      ...Array.from(
+        new Set((data?.analytics?.recentTickets || []).map((ticket) => ticket.board).filter(Boolean)),
+      ).sort(),
+    ],
+    [data?.analytics?.recentTickets],
+  )
+  const ticketPriorities = useMemo(
+    () => [
+      'All',
+      ...Array.from(
+        new Set((data?.analytics?.recentTickets || []).map((ticket) => ticket.priority).filter(Boolean)),
+      ).sort(),
+    ],
+    [data?.analytics?.recentTickets],
+  )
+  const visibleTickets = useMemo(() => {
+    const q = ticketSearch.trim().toLowerCase()
+    return (data?.analytics?.recentTickets || []).filter((ticket) => {
+      const boardMatches = boardFilter === 'All' || ticket.board === boardFilter
+      const priorityMatches = priorityFilter === 'All' || ticket.priority === priorityFilter
+      if (!boardMatches) return false
+      if (!priorityMatches) return false
+      if (!q) return true
+      return [
+        String(ticket.id),
+        ticket.summary,
+        ticket.board,
+        ticket.status,
+        ticket.priority,
+        ticket.owner,
+        ticket.company,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    })
+  }, [boardFilter, data?.analytics?.recentTickets, priorityFilter, ticketSearch])
+  const selectedTicket = useMemo(
+    () =>
+      (data?.analytics?.recentTickets || []).find(
+        (ticket) => String(ticket.id) === selectedTicketId,
+      ) || null,
+    [data?.analytics?.recentTickets, selectedTicketId],
+  )
+
+  function exportExceptionReport() {
+    const lines = [
+      '# ConnectWise Exception Report',
+      '',
+      `Generated: ${new Date().toISOString()}`,
+      `Source pull: ${data?.analytics?.fetchedAt || data?.refreshedAt || 'unknown'}`,
+      '',
+      '## Errors',
+      ...(connectWiseErrors.length > 0 ? connectWiseErrors.map((item) => `- ${item}`) : ['- none reported']),
+      '',
+      '## Visible Tickets',
+      ...visibleTickets.map(
+        (ticket) =>
+          `- #${ticket.id} ${ticket.summary} | ${ticket.company} | ${ticket.board} | ${ticket.status} | ${ticket.priority} | ${ticket.owner}`,
+      ),
+    ]
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'connectwise-exception-report.md'
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-1 pb-6 sm:px-2">
@@ -143,20 +242,52 @@ export function ItOpsScreen() {
               ConnectWise ticket health, service-board load, standup patterns, and action ownership.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading}
-            className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
-          >
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={exportExceptionReport}
+              disabled={!data}
+              className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+            >
+              Export report
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-4">
+          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(error ? 'bad' : connectWiseErrors.length > 0 ? 'warn' : 'ok')}`}>
+            ConnectWise {error ? 'offline' : connectWiseErrors.length > 0 ? 'degraded' : 'healthy'}
+          </span>
+          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone((data?.analytics?.ticketStats.open ?? 0) > 0 ? 'ok' : 'warn')}`}>
+            Tickets {data?.analytics?.ticketStats.open ?? 0} open
+          </span>
+          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(data?.overview?.warning ? 'warn' : 'ok')}`}>
+            Standups {data?.overview?.totalMeetings ?? 0} tracked
+          </span>
+          <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+            {formatFreshness(data?.analytics?.fetchedAt || data?.overview?.generatedAt || data?.refreshedAt)}
+          </span>
         </div>
       </div>
 
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-          {error}
+          <div className="font-semibold">IT Ops data is unavailable</div>
+          <div className="mt-1">{error}</div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-3 rounded-xl border border-red-300 bg-red-100/60 px-3 py-2 text-xs font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-100"
+          >
+            Retry IT Ops refresh
+          </button>
         </div>
       ) : null}
 
@@ -263,23 +394,112 @@ export function ItOpsScreen() {
               </div>
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900 md:col-span-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                Recent open tickets
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                  Recent open tickets
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="search"
+                    aria-label="Search ConnectWise tickets"
+                    value={ticketSearch}
+                    onChange={(event) => setTicketSearch(event.currentTarget.value)}
+                    placeholder="Search tickets"
+                    className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+                  />
+                  <select
+                    aria-label="Filter tickets by service board"
+                    value={boardFilter}
+                    onChange={(event) => setBoardFilter(event.currentTarget.value)}
+                    className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+                  >
+                    {ticketBoards.map((board) => (
+                      <option key={board} value={board}>
+                        {board}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Filter tickets by priority"
+                    value={priorityFilter}
+                    onChange={(event) => setPriorityFilter(event.currentTarget.value)}
+                    className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+                  >
+                    {ticketPriorities.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priority}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="mt-3 grid gap-2">
-                {(data?.analytics?.recentTickets || []).slice(0, 8).map((ticket) => (
-                  <div key={String(ticket.id)} className="rounded-lg border border-primary-200 bg-primary-50/70 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950">
+                {visibleTickets.slice(0, 8).map((ticket) => (
+                  <div
+                    key={String(ticket.id)}
+                    data-testid="connectwise-ticket"
+                    className={`rounded-lg border px-3 py-2 text-sm dark:border-neutral-800 ${
+                      selectedTicketId === String(ticket.id)
+                        ? 'border-primary-400 bg-primary-100/80 dark:bg-neutral-900'
+                        : 'border-primary-200 bg-primary-50/70 dark:bg-neutral-950'
+                    }`}
+                  >
                     <div className="font-medium text-primary-900 dark:text-neutral-100">
                       #{ticket.id} {ticket.summary}
                     </div>
                     <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
                       {ticket.company} · {ticket.board} · {ticket.status} · {ticket.priority} · {ticket.owner}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedTicketId((current) =>
+                          current === String(ticket.id) ? null : String(ticket.id),
+                        )
+                      }
+                      className="mt-2 text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
+                    >
+                      {selectedTicketId === String(ticket.id) ? 'Hide details' : 'Show details'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(String(ticket.id))}
+                      className="ml-3 mt-2 text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
+                    >
+                      Copy ticket id
+                    </button>
                   </div>
                 ))}
-                {(data?.analytics?.recentTickets || []).length === 0 ? (
+                {selectedTicket ? (
+                  <div className="rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-3 text-sm dark:border-neutral-800 dark:bg-neutral-950">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                      Ticket detail
+                    </div>
+                    <div className="mt-2 font-medium text-primary-900 dark:text-neutral-100">
+                      #{selectedTicket.id} {selectedTicket.summary}
+                    </div>
+                    <div className="mt-2 grid gap-2 text-xs text-primary-600 dark:text-neutral-400 sm:grid-cols-2">
+                      <div>Company: {selectedTicket.company || 'unknown'}</div>
+                      <div>Owner: {selectedTicket.owner || 'unknown'}</div>
+                      <div>Board: {selectedTicket.board || 'unknown'}</div>
+                      <div>Status: {selectedTicket.status || 'unknown'}</div>
+                      <div>Priority: {selectedTicket.priority || 'unknown'}</div>
+                      <div>Entered: {selectedTicket.dateEntered || 'unknown'}</div>
+                      <div>Required: {selectedTicket.requiredDate || 'not set'}</div>
+                    </div>
+                  </div>
+                ) : null}
+                {visibleTickets.length === 0 ? (
                   <div className="text-sm text-primary-500 dark:text-neutral-400">
-                    No recent open tickets available.
+                    <div className="font-medium text-primary-700 dark:text-neutral-200">No recent open tickets available.</div>
+                    <div className="mt-1">Refresh ConnectWise to confirm this is a healthy empty state.</div>
+                    <button
+                      type="button"
+                      onClick={() => void load()}
+                      className="mt-3 rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                    >
+                      Refresh tickets
+                    </button>
                   </div>
                 ) : null}
               </div>

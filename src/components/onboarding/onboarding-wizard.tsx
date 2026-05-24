@@ -183,7 +183,7 @@ export function OnboardingWizard() {
                     }}
                     disabled={index > currentStep}
                     className={cn(
-                      'size-2.5 rounded-full transition-all duration-200',
+                      'size-2.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200',
                       index === currentStep
                         ? 'w-6 bg-accent-500'
                         : 'bg-primary-300',
@@ -215,7 +215,7 @@ export function OnboardingWizard() {
                   <Button
                     variant="default"
                     onClick={handleComplete}
-                    className="gap-2 bg-accent-500 px-6 py-2.5 text-base font-medium shadow-lg shadow-accent-500/25 ring-1 ring-accent-400/20 transition-all hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/30"
+                    className="gap-2 bg-accent-500 px-6 py-2.5 text-base font-medium shadow-lg shadow-accent-500/25 ring-1 ring-accent-400/20 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:bg-accent-600 hover:shadow-xl hover:shadow-accent-500/30"
                   >
                     {step.completeLabel ?? 'Get Started'}
                     <HugeiconsIcon icon={ArrowRight01Icon} className="size-5" />

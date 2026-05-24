@@ -21,7 +21,10 @@ import {
   useState,
 } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { fetchClaudeAuthStatus, type AuthStatus } from '@/lib/claude-auth'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { CheckListIcon } from '@hugeicons/core-free-icons'
+import type { AuthStatus } from '@/lib/claude-auth'
+import { fetchClaudeAuthStatus } from '@/lib/claude-auth'
 import { cn } from '@/lib/utils'
 import { ConnectionStartupScreen } from '@/components/connection-startup-screen'
 import { ChatSidebar } from '@/screens/chat/components/chat-sidebar'
@@ -41,8 +44,11 @@ import { ClaudeReconnectBanner } from '@/components/claude-reconnect-banner'
 import { useMobileKeyboard } from '@/hooks/use-mobile-keyboard'
 import { SystemMetricsFooter } from '@/components/system-metrics-footer'
 import { CommandPalette } from '@/components/command-palette'
+import { WorkspaceImprovementDrawer } from '@/components/workspace-improvement-drawer'
 import { useSettings } from '@/hooks/use-settings'
 import { apiPath } from '@/lib/base-path'
+import { WORKSPACE_IMPROVEMENT_OPEN_EVENT } from '@/lib/workspace-improvement-progress'
+import { findWorkspaceImprovementPage } from '@/lib/workspace-improvements'
 // ActivityTicker moved to dashboard-only (too noisy for global header)
 
 const TerminalWorkspace = lazy(() =>
@@ -53,6 +59,32 @@ const TerminalWorkspace = lazy(() =>
 
 export const DESKTOP_SIDEBAR_BACKDROP_CLASS =
   'fixed left-0 bottom-0 top-[var(--titlebar-h,0px)] w-[300px] z-10 bg-black/10 backdrop-blur-[1px]'
+
+export function getWorkspaceMobilePageTitle(pathname: string) {
+  if (pathname.startsWith('/phone')) return 'Phone Cockpit'
+  if (pathname.startsWith('/lily')) return 'LILY'
+  if (pathname.startsWith('/terminal')) return 'Terminal'
+  if (pathname.startsWith('/files')) return 'Files'
+  if (pathname.startsWith('/75-tracker')) return '75 Hard/Soft'
+  if (pathname.startsWith('/jobs')) return 'Jobs'
+  if (pathname.startsWith('/tasks')) return 'Tasks'
+  if (pathname.startsWith('/conductor')) return 'Conductor'
+  if (pathname.startsWith('/operations')) return 'Operations'
+  if (pathname.startsWith('/ops-intelligence')) return 'Ops Intelligence'
+  if (pathname.startsWith('/swarm2') || pathname === '/swarm') return 'Swarm'
+  if (pathname.startsWith('/memory')) return 'Memory'
+  if (pathname.startsWith('/skills')) return 'Skills'
+  if (pathname.startsWith('/mcp')) return 'MCP'
+  if (pathname.startsWith('/profiles')) return 'Profiles'
+  if (pathname.startsWith('/meetings')) return 'Meetings'
+  if (pathname.startsWith('/presence')) return 'Presence'
+  if (pathname.startsWith('/it-ops')) return 'ConnectWise'
+  if (pathname.startsWith('/barry')) return 'Barry'
+  if (pathname.startsWith('/settings')) return 'Settings'
+  if (pathname.startsWith('/debug')) return 'Debug'
+  if (pathname.startsWith('/activity')) return 'Activity'
+  return null
+}
 
 type WorkspaceShellProps = {
   children?: React.ReactNode
@@ -66,6 +98,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const search = useRouterState({
     select: (state) => state.location.search,
   })
+  const routeSearch = search as Record<string, unknown>
   const isElectron = useMemo(
     () =>
       typeof navigator !== 'undefined' && /Electron/.test(navigator.userAgent),
@@ -96,6 +129,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const getTabIndex = useCallback((path: string): number => {
     if (path === '/dashboard') return 0
     if (path.startsWith('/chat') || path === '/new' || path === '/') return 1
+<<<<<<< HEAD
     if (path.startsWith('/files')) return 2
     if (path.startsWith('/terminal')) return 3
     if (path.startsWith('/life-os')) return 4
@@ -106,6 +140,12 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     if (path.startsWith('/mcp')) return 9
     if (path.startsWith('/profiles')) return 10
     if (path.startsWith('/settings')) return 11
+=======
+    if (path.startsWith('/lily')) return 2
+    if (path.startsWith('/files')) return 3
+    if (path.startsWith('/terminal')) return 4
+    if (path === '/swarm' || path.startsWith('/swarm2')) return 5
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     return -1
   }, [])
 
@@ -152,7 +192,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
           chatReady?: boolean
           modelConfigured?: boolean
         }
-        if (data?.ok || (data?.chatReady && data?.modelConfigured)) {
+        if (data.ok || (data.chatReady && data.modelConfigured)) {
           setAuthStatus({ authenticated: true, authRequired: false })
           setConnectionVerified(true)
         }
@@ -168,6 +208,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   }, [connectionVerified])
 
   // Derive active session from URL
+<<<<<<< HEAD
   const mobilePageTitle = (() => {
     if (pathname.startsWith('/terminal')) return 'Terminal'
     if (pathname.startsWith('/life-os')) return 'Life OS'
@@ -185,6 +226,22 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     if (pathname.startsWith('/activity')) return 'Activity'
     return null
   })()
+=======
+  const mobilePageTitle = getWorkspaceMobilePageTitle(pathname)
+  const mobileImprovementPage = findWorkspaceImprovementPage(pathname)
+  const mobileImprovementAction = mobileImprovementPage ? (
+    <button
+      type="button"
+      aria-label={`Open ${mobileImprovementPage.label} improvements`}
+      onClick={() =>
+        window.dispatchEvent(new CustomEvent(WORKSPACE_IMPROVEMENT_OPEN_EVENT))
+      }
+      className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary-200 text-[11px] font-semibold text-primary-700 active:bg-primary-100 dark:border-neutral-800 dark:text-neutral-200 dark:active:bg-neutral-900"
+    >
+      <HugeiconsIcon icon={CheckListIcon} size={17} strokeWidth={1.8} />
+    </button>
+  ) : null
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 
   const chatMatch = pathname.match(/^\/chat\/(.+)$/)
   const activeFriendlyId = chatMatch ? chatMatch[1] : 'main'
@@ -193,13 +250,23 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const isOnPlaygroundRoute = pathname === '/playground' || pathname.startsWith('/playground/')
   const isOnHermesWorldLandingRoute = pathname === '/hermes-world' || pathname.startsWith('/hermes-world/') || pathname === '/world' || pathname.startsWith('/world/')
   const isEmbeddedSurface =
+<<<<<<< HEAD
     search?.embed === '1' || search?.embed === 'true' || search?.mode === 'embed'
+=======
+    routeSearch.embed === '1' ||
+    routeSearch.embed === 'true' ||
+    routeSearch.mode === 'embed'
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   const isChromeFreeSurface = isEmbeddedSurface || isOnHermesWorldLandingRoute
   const hideChatSidebar = isOnChatRoute && chatFocusMode
   const showDesktopSidebarBackdrop =
     !isChromeFreeSurface && !isMobile && !isOnChatRoute && !sidebarCollapsed
 
   const isNewChat = activeFriendlyId === 'new'
+  const showSidebarSessions =
+    isOnChatRoute ||
+    pathname.startsWith('/lily') ||
+    pathname.startsWith('/phone')
 
   // Sessions state — shared semantic source for sidebar and chat header
   const {
@@ -345,12 +412,16 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         <div
           className={cn(
             'grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden',
+<<<<<<< HEAD
             hideChatSidebar || isChromeFreeSurface ? 'md:grid-cols-1' : 'md:grid-cols-[auto_1fr]',
+=======
+            hideChatSidebar ? 'md:grid-cols-1' : 'md:grid-cols-[auto_1fr]',
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
           )}
         >
           {/* Activity ticker bar */}
           {/* Persistent sidebar */}
-          {!isChromeFreeSurface && !isMobile && !hideChatSidebar && (
+          {!isMobile && !hideChatSidebar && (
             <div className="relative z-30">
               <ChatSidebar
                 sessions={sessions}
@@ -365,6 +436,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                 sessionsFetching={sessionsFetching}
                 sessionsError={sessionsError}
                 onRetrySessions={refetchSessions}
+                showSessions={showSidebarSessions}
               />
             </div>
           )}
@@ -380,7 +452,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
               isMobile && !isOnChatRoute
                 ? 'pb-[calc(var(--tabbar-h,80px)+0.5rem)]'
                 : !isMobile &&
-                    !isChromeFreeSurface &&
                     !isOnChatRoute &&
                     settings.showSystemMetricsFooter
                   ? 'pb-7'
@@ -400,7 +471,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
               }}
             >
               {isMobile && isOnTerminalRoute && (
-                <MobilePageHeader title="Terminal" />
+                <MobilePageHeader
+                  title="Terminal"
+                  right={mobileImprovementAction}
+                />
               )}
               <div className="flex-1 min-h-0 overflow-hidden">
                 <Suspense fallback={null}>
@@ -419,7 +493,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
             <div
               className={[
                 'page-transition flex flex-col',
-                isChromeFreeSurface ? 'min-h-full' : 'h-full',
+                'h-full',
                 slideClass,
                 isOnTerminalRoute ? 'hidden' : '',
               ]
@@ -427,20 +501,34 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                 .join(' ')}
             >
               {isMobile &&
-                !isChromeFreeSurface &&
                 !isOnChatRoute &&
                 !isOnTerminalRoute &&
-                mobilePageTitle && <MobilePageHeader title={mobilePageTitle} />}
+                mobilePageTitle && (
+                  <MobilePageHeader
+                    title={mobilePageTitle}
+                    right={mobileImprovementAction}
+                  />
+                )}
               {children}
             </div>
           </main>
 
           {/* Chat panel — visible on non-chat routes (but not in HermesWorld, which has its own in-game chat) */}
+<<<<<<< HEAD
           {!isOnChatRoute && !isOnPlaygroundRoute && !isChromeFreeSurface && !isMobile && <ChatPanel />}
         </div>
 
         {/* Floating chat toggle — visible on non-chat routes (but not in HermesWorld) */}
         {!isChromeFreeSurface && !isOnChatRoute && !isOnPlaygroundRoute && !isMobile && <ChatPanelToggle />}
+=======
+          {!isOnChatRoute && !isOnPlaygroundRoute && !isMobile && <ChatPanel />}
+        </div>
+
+        {/* Floating chat toggle — visible on non-chat routes (but not in HermesWorld) */}
+        {!isOnChatRoute && !isOnPlaygroundRoute && !isMobile && (
+          <ChatPanelToggle />
+        )}
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 
         {showDesktopSidebarBackdrop ? (
           <button
@@ -456,12 +544,22 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         ) : null}
       </div>
 
+<<<<<<< HEAD
       {!isChromeFreeSurface ? <MobileHamburgerMenu /> : null}
       {!isChromeFreeSurface ? <MobileTabBar /> : null}
       {!isChromeFreeSurface && !isMobile && !isOnChatRoute && settings.showSystemMetricsFooter ? (
         <SystemMetricsFooter leftOffsetPx={sidebarCollapsed ? 48 : 300} />
       ) : null}
       {!isChromeFreeSurface ? <CommandPalette pathname={pathname} sessions={sessions} /> : null}
+=======
+      <MobileHamburgerMenu />
+      <MobileTabBar />
+      {!isMobile && !isOnChatRoute && settings.showSystemMetricsFooter ? (
+        <SystemMetricsFooter leftOffsetPx={sidebarCollapsed ? 48 : 300} />
+      ) : null}
+      <CommandPalette pathname={pathname} sessions={sessions} />
+      <WorkspaceImprovementDrawer pathname={pathname} />
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     </>
   )
 }

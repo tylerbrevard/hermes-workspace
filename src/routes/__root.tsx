@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   HeadContent,
   Outlet,
@@ -5,31 +6,35 @@ import {
   createRootRoute,
   useRouterState,
 } from '@tanstack/react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import appCss from '../styles.css?url'
-import { SearchModal } from '@/components/search/search-modal'
-import { UsageMeter } from '@/components/usage-meter'
-import { TerminalShortcutListener } from '@/components/terminal-shortcut-listener'
+import { getRootSurfaceState } from './-root-layout-state'
+import type { AuthStatus } from '@/lib/claude-auth'
+import { LoginScreen } from '@/components/auth/login-screen'
+import { DiagnosticBundleButton } from '@/components/diagnostic-bundle-button'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { GlobalShortcutListener } from '@/components/global-shortcut-listener'
-import { WorkspaceShell } from '@/components/workspace-shell'
-import { MobilePromptTrigger } from '@/components/mobile-prompt/MobilePromptTrigger'
-import { Toaster } from '@/components/ui/toast'
-import { OnboardingTour } from '@/components/onboarding/onboarding-tour'
 import { KeyboardShortcutsModal } from '@/components/keyboard-shortcuts-modal'
-import { UpdateCenterNotifier } from '@/components/update-center-notifier'
-import { initializeSettingsAppearance, useSettings } from '@/hooks/use-settings'
-import { useApplyChatWidth } from '@/hooks/use-chat-settings'
+import { MobilePromptTrigger } from '@/components/mobile-prompt/MobilePromptTrigger'
 import {
   ClaudeOnboarding,
   ONBOARDING_COMPLETE_EVENT,
   ONBOARDING_KEY,
 } from '@/components/onboarding/claude-onboarding'
-import { ErrorBoundary } from '@/components/error-boundary'
-import { LoginScreen } from '@/components/auth/login-screen'
-import { fetchClaudeAuthStatus, type AuthStatus } from '@/lib/claude-auth'
-import { getRootSurfaceState } from './-root-layout-state'
+import { OnboardingTour } from '@/components/onboarding/onboarding-tour'
+import { PageTelemetry } from '@/components/page-telemetry'
+import { RouteErrorFallback } from '@/components/route-error-fallback'
+import { RouteLoadingSkeleton } from '@/components/route-loading-skeleton'
+import { SearchModal } from '@/components/search/search-modal'
+import { TerminalShortcutListener } from '@/components/terminal-shortcut-listener'
+import { Toaster } from '@/components/ui/toast'
+import { UpdateCenterNotifier } from '@/components/update-center-notifier'
+import { UsageMeter } from '@/components/usage-meter'
+import { WorkspaceShell } from '@/components/workspace-shell'
+import { useApplyChatWidth } from '@/hooks/use-chat-settings'
+import { initializeSettingsAppearance, useSettings } from '@/hooks/use-settings'
 import { APP_BASE_PATH, apiPath, withBasePath } from '@/lib/base-path'
+import { fetchClaudeAuthStatus } from '@/lib/claude-auth'
 
 const APP_CSP = [
   "default-src 'self'",
@@ -75,12 +80,6 @@ const themeScript = `
     root.setAttribute('data-theme', theme)
     root.style.setProperty('color-scheme', isDark ? 'dark' : 'light')
 
-    // Demo mode
-    try {
-      if (new URLSearchParams(window.location.search).get('demo') === '1') {
-        document.documentElement.setAttribute('data-demo', 'true');
-      }
-    } catch {}
   } catch {}
 })()
 `
@@ -310,22 +309,15 @@ export const Route = createRootRoute({
 
   shellComponent: RootDocument,
   component: RootLayout,
-  errorComponent: function RootError({ error }) {
+  pendingComponent: RouteLoadingSkeleton,
+  errorComponent: function RootError({ error, reset }) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-primary-50">
-        <h1 className="text-2xl font-semibold text-primary-900 mb-4">
-          Something went wrong
-        </h1>
-        <pre className="p-4 bg-primary-100 rounded-lg text-sm text-primary-700 max-w-full overflow-auto mb-6">
-          {error instanceof Error ? error.message : String(error)}
-        </pre>
-        <button
-          onClick={() => (window.location.href = withBasePath('/'))}
-          className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 transition-colors"
-        >
-          Return Home
-        </button>
-      </div>
+      <RouteErrorFallback
+        error={error}
+        reset={reset}
+        title="Hermes Workspace failed to load"
+        description="Retry the route first. If this repeats, copy diagnostics before returning home."
+      />
     )
   },
 })
@@ -406,24 +398,6 @@ function RootLayout() {
 
     syncOnboardingCompletion()
 
-    void fetch(apiPath('/api/connection-status'))
-      .then((res) => (res.ok ? res.json() : null))
-      .then(
-        (
-          status: {
-            ok?: boolean
-            chatReady?: boolean
-            modelConfigured?: boolean
-          } | null,
-        ) => {
-          if (status?.ok || (status?.chatReady && status?.modelConfigured)) {
-            localStorage.setItem(ONBOARDING_KEY, 'true')
-            syncOnboardingCompletion()
-          }
-        },
-      )
-      .catch(() => undefined)
-
     const handleStorage = (event: StorageEvent) => {
       if (event.key && event.key !== ONBOARDING_KEY) return
       syncOnboardingCompletion()
@@ -455,6 +429,33 @@ function RootLayout() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (authStatus === null) return
+    if (authStatus?.authRequired && !authStatus.authenticated) return
+
+    void fetch(apiPath('/api/connection-status'))
+      .then((res) => (res.ok ? res.json() : null))
+      .then(
+        (
+          status: {
+            ok?: boolean
+            chatReady?: boolean
+            modelConfigured?: boolean
+          } | null,
+        ) => {
+          if (
+            status &&
+            (status.ok || (status.chatReady && status.modelConfigured))
+          ) {
+            localStorage.setItem(ONBOARDING_KEY, 'true')
+            setOnboardingComplete(true)
+          }
+        },
+      )
+      .catch(() => undefined)
+  }, [authStatus])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return undefined
     let cancelled = false
     fetchClaudeAuthStatus()
@@ -475,6 +476,7 @@ function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <PageTelemetry />
       <Toaster />
       {mounted && rootSurfaceState.showLogin ? <LoginScreen /> : null}
       {mounted && rootSurfaceState.showOnboarding ? <ClaudeOnboarding /> : null}
@@ -488,9 +490,12 @@ function RootLayout() {
               title="Something went wrong"
               description="This page failed to render. Reload to try again."
             >
-              <Outlet />
+              <Suspense fallback={<RouteLoadingSkeleton />}>
+                <Outlet />
+              </Suspense>
             </ErrorBoundary>
           </WorkspaceShell>
+          {!isGameSurfaceRoute ? <OpsDiagnosticAction /> : null}
           {!isHermesWorldLandingRoute ? <SearchModal /> : null}
           {/* Keep UsageMeter mounted so search-modal OPEN_USAGE still works even when the pill is hidden by default. */}
           {!isGameSurfaceRoute ? <UsageMeter visible={settings.showUsageMeter} /> : null}
@@ -505,6 +510,46 @@ function RootLayout() {
         </>
       ) : null}
     </QueryClientProvider>
+  )
+}
+
+function OpsDiagnosticAction() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const isWorkspaceMenuRoute =
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/chat') ||
+    pathname.startsWith('/lily') ||
+    pathname.startsWith('/playground') ||
+    pathname.startsWith('/files') ||
+    pathname.startsWith('/terminal') ||
+    pathname.startsWith('/jobs') ||
+    pathname.startsWith('/tasks') ||
+    pathname.startsWith('/75-tracker') ||
+    pathname.startsWith('/conductor') ||
+    pathname.startsWith('/operations') ||
+    pathname.startsWith('/ops-intelligence') ||
+    pathname.startsWith('/swarm') ||
+    pathname.startsWith('/memory') ||
+    pathname.startsWith('/skills') ||
+    pathname.startsWith('/mcp') ||
+    pathname.startsWith('/profiles') ||
+    pathname.startsWith('/meetings') ||
+    pathname.startsWith('/presence') ||
+    pathname.startsWith('/it-ops') ||
+    pathname.startsWith('/barry') ||
+    pathname.startsWith('/settings')
+
+  if (!isWorkspaceMenuRoute) return null
+
+  return (
+    <div className="pointer-events-none fixed bottom-4 right-4 z-40 hidden md:block">
+      <DiagnosticBundleButton
+        className="pointer-events-auto border-primary-300 bg-primary-100/90 shadow-sm backdrop-blur"
+        context={{ surface: 'workspace-menu-route-action', pathname }}
+      />
+    </div>
   )
 }
 

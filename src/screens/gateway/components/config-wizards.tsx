@@ -547,7 +547,7 @@ function TeamIconPicker({
             type="button"
             onClick={() => { onSelect(icon); onClose() }}
             className={cn(
-              'flex size-7 items-center justify-center rounded-md text-base transition-all hover:bg-accent-50 dark:hover:bg-accent-900/20 hover:scale-110',
+              'flex size-7 items-center justify-center rounded-md text-base transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:bg-accent-50 dark:hover:bg-accent-900/20 hover:scale-110',
               currentIcon === icon ? 'bg-accent-50 dark:bg-accent-900/20 ring-1 ring-accent-400' : '',
             )}
           >
@@ -918,7 +918,7 @@ export function AddTeamModal({ currentTeam, quickStartTemplates, existingIcons =
                   type="button"
                   onClick={() => setTeamIcon(ic)}
                   className={cn(
-                    'flex size-11 items-center justify-center rounded-xl text-2xl transition-all hover:scale-110',
+                    'flex size-11 items-center justify-center rounded-xl text-2xl transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:scale-110',
                     teamIcon === ic
                       ? 'bg-accent-100 dark:bg-accent-900/40 ring-2 ring-accent-400'
                       : 'hover:bg-neutral-100 dark:hover:bg-neutral-800',
@@ -965,7 +965,7 @@ export function AddTeamModal({ currentTeam, quickStartTemplates, existingIcons =
                       setSelectedTemplate(next)
                       applyTemplate(next ? tpl : null)
                     }}
-                    className={cn('flex items-center gap-2 rounded-xl border-2 px-3 py-3 text-left transition-all',
+                    className={cn('flex items-center gap-2 rounded-xl border-2 px-3 py-3 text-left transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                       selectedTemplate === tpl.id
                         ? 'border-accent-400 bg-accent-50 dark:bg-accent-900/15 shadow-sm'
                         : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600')}
@@ -1012,14 +1012,14 @@ export function AddTeamModal({ currentTeam, quickStartTemplates, existingIcons =
                       type="button"
                       onClick={() => toggleAgent(m.id)}
                       className={cn(
-                        'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-all',
+                        'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                         checked
                           ? 'border-accent-300 bg-accent-50/50 dark:border-accent-700/50 dark:bg-accent-900/10'
                           : 'border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/30 opacity-60 hover:opacity-80',
                       )}
                     >
                       <span className={cn(
-                        'flex size-4 shrink-0 items-center justify-center rounded border-2 transition-all',
+                        'flex size-4 shrink-0 items-center justify-center rounded border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                         checked ? 'border-accent-500 bg-accent-500' : 'border-neutral-300 dark:border-neutral-600',
                       )}>
                         {checked ? <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2 3-3" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> : null}

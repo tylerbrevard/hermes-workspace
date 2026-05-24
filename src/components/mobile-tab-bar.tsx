@@ -1,18 +1,11 @@
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  BrainIcon,
-  Building01Icon,
-  Castle02Icon,
   Chat01Icon,
-  Clock01Icon,
   CommandLineIcon,
   DashboardSquare01Icon,
   File01Icon,
-  McpServerIcon,
-  PuzzleIcon,
-  Rocket01Icon,
-  Settings01Icon,
+  Menu01Icon,
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import {
@@ -26,6 +19,7 @@ import type { TouchEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { hapticTap } from '@/lib/haptics'
 import { useSettings } from '@/hooks/use-settings'
+import { openHamburgerMenu } from '@/components/mobile-hamburger-menu'
 
 /** Height constant for consistent bottom insets on mobile routes with tab bar */
 export const MOBILE_TAB_BAR_OFFSET = 'var(--tabbar-h, 80px)'
@@ -83,6 +77,7 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     match: (p) => p.startsWith('/terminal'),
   },
   {
+<<<<<<< HEAD
     id: 'life-os',
     label: 'Life OS',
     icon: Castle02Icon,
@@ -97,47 +92,13 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     match: (p) => p.startsWith('/jobs'),
   },
   {
+=======
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     id: 'swarm',
     label: 'Swarm',
     icon: UserGroupIcon,
     to: '/swarm',
     match: (p) => p === '/swarm' || p.startsWith('/swarm2'),
-  },
-
-  {
-    id: 'memory',
-    label: 'Memory',
-    icon: BrainIcon,
-    to: '/memory',
-    match: (p) => p.startsWith('/memory'),
-  },
-  {
-    id: 'skills',
-    label: 'Skills',
-    icon: PuzzleIcon,
-    to: '/skills',
-    match: (p) => p.startsWith('/skills'),
-  },
-  {
-    id: 'mcp',
-    label: 'MCP',
-    icon: McpServerIcon,
-    to: '/mcp',
-    match: (p) => p.startsWith('/mcp'),
-  },
-  {
-    id: 'profiles',
-    label: 'Profiles',
-    icon: UserGroupIcon,
-    to: '/profiles',
-    match: (p) => p.startsWith('/profiles'),
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: Settings01Icon,
-    to: '/settings',
-    match: (p) => p.startsWith('/settings'),
   },
 ]
 
@@ -272,7 +233,7 @@ export function MobileTabBar() {
           // Inner padding
           'px-3 py-2',
           // Hide/show animation
-          'transition-all duration-300 ease-in-out',
+          'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-300 ease-in-out',
           isChatRoute
             ? 'translate-y-[200%] opacity-0 pointer-events-none'
             : 'translate-y-0 opacity-100',
@@ -307,7 +268,7 @@ export function MobileTabBar() {
                   // 40x40 touch target (slightly smaller to fit 5 tabs)
                   'flex items-center justify-center',
                   'size-10 rounded-full',
-                  'transition-all duration-200 active:scale-90',
+                  'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 active:scale-90',
                   'select-none touch-manipulation',
                   'outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0',
                 )}
@@ -315,7 +276,7 @@ export function MobileTabBar() {
               >
                 <span
                   className={cn(
-                    'flex items-center justify-center rounded-full transition-all duration-200',
+                    'flex items-center justify-center rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200',
                     circleSize,
                     isActive
                       ? 'bg-accent-500 text-white shadow-sm'
@@ -331,6 +292,23 @@ export function MobileTabBar() {
               </button>
             )
           })}
+          <button
+            type="button"
+            onClick={() => {
+              hapticTap()
+              openHamburgerMenu()
+            }}
+            aria-label="More workspace pages"
+            className={cn(
+              'flex size-10 items-center justify-center rounded-full',
+              'select-none touch-manipulation transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 active:scale-90',
+              'outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0',
+            )}
+          >
+            <span className="flex size-10 items-center justify-center rounded-full text-primary-500 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200">
+              <HugeiconsIcon icon={Menu01Icon} size={18} strokeWidth={1.6} />
+            </span>
+          </button>
         </div>
       </nav>
     </>

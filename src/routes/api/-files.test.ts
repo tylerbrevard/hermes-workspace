@@ -79,3 +79,51 @@ describe('ensureWorkspacePath (#121)', () => {
     expect(rel).toBe('')
   })
 })
+
+describe('rename safety', () => {
+  it('builds same-folder rename destinations from a name only', async () => {
+    const { getRenameDestination } = await import('./files')
+    const root = '/home/user/workspace'
+    const from = '/home/user/workspace/notes/today.md'
+
+    expect(getRenameDestination(from, 'tomorrow.md', root)).toBe(
+      '/home/user/workspace/notes/tomorrow.md',
+    )
+  })
+
+  it('trims safe rename names before building the destination', async () => {
+    const { getRenameDestination } = await import('./files')
+    const root = '/home/user/workspace'
+    const from = '/home/user/workspace/notes/today.md'
+
+    expect(getRenameDestination(from, ' tomorrow.md ', root)).toBe(
+      '/home/user/workspace/notes/tomorrow.md',
+    )
+  })
+
+  it('rejects path-like rename names', async () => {
+    const { validateWorkspaceFileName } = await import('./files')
+
+    expect(() => validateWorkspaceFileName('../secret.md')).toThrow(
+      'Name cannot include path separators',
+    )
+    expect(() => validateWorkspaceFileName('nested/secret.md')).toThrow(
+      'Name cannot include path separators',
+    )
+    expect(() => validateWorkspaceFileName('nested\\secret.md')).toThrow(
+      'Name cannot include path separators',
+    )
+  })
+
+  it('rejects empty, dot, and dot-dot rename names', async () => {
+    const { validateWorkspaceFileName } = await import('./files')
+
+    expect(() => validateWorkspaceFileName('   ')).toThrow('Name is required')
+    expect(() => validateWorkspaceFileName('.')).toThrow(
+      'Name cannot be . or ..',
+    )
+    expect(() => validateWorkspaceFileName('..')).toThrow(
+      'Name cannot be . or ..',
+    )
+  })
+})

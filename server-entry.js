@@ -18,9 +18,16 @@ const basePath = (() => {
 const port = parseInt(process.env.PORT || '3000', 10)
 const CLAWOS_PROXY_PREFIX =
   basePath === '/' ? '/legacy-clawos' : `${basePath}/legacy-clawos`
+<<<<<<< HEAD
 const CLAWOS_PROXY_ORIGIN = (
   process.env.CLAWOS_PROXY_ORIGIN || ''
 ).replace(/\/$/, '')
+=======
+const CLAWOS_PROXY_ORIGIN = (process.env.CLAWOS_PROXY_ORIGIN || '').replace(
+  /\/$/,
+  '',
+)
+>>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 const SESSION_STORE_FILE = join(
   process.env.HERMES_HOME ??
     process.env.CLAUDE_HOME ??
@@ -232,7 +239,10 @@ function rewriteClawosHtml(html, proxyPrefix) {
     const pattern = new RegExp(`${attr}="/(?!/)`, 'g')
     rewritten = rewritten.replace(pattern, `${attr}="${proxyPrefix}/`)
   }
-  rewritten = rewritten.replace(/url\((['"]?)\/(?!\/)/g, `url($1${proxyPrefix}/`)
+  rewritten = rewritten.replace(
+    /url\((['"]?)\/(?!\/)/g,
+    `url($1${proxyPrefix}/`,
+  )
   const injection = buildClawosRewriteScript(proxyPrefix)
   if (rewritten.includes('</head>')) {
     return rewritten.replace('</head>', `${injection}</head>`)
@@ -241,10 +251,18 @@ function rewriteClawosHtml(html, proxyPrefix) {
 }
 
 async function writeFetchResponse(res, response) {
-  res.writeHead(
-    response.status,
-    Object.fromEntries(response.headers.entries()),
-  )
+  const headers = new Headers(response.headers)
+  const contentType = headers.get('content-type') || ''
+  if (contentType.includes('text/html')) {
+    // Mobile Safari/PWA shells are prone to holding stale SSR HTML that points
+    // at old hashed chunks. Always force the shell back to the live server;
+    // hashed assets themselves remain immutable below.
+    headers.set(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, proxy-revalidate',
+    )
+  }
+  res.writeHead(response.status, Object.fromEntries(headers.entries()))
 
   if (response.body) {
     const reader = response.body.getReader()
@@ -293,8 +311,7 @@ async function maybeProxyClawos(req, res, incomingUrl) {
     return true
   }
 
-  const targetPath =
-    incomingPathname.slice(CLAWOS_PROXY_PREFIX.length) || '/'
+  const targetPath = incomingPathname.slice(CLAWOS_PROXY_PREFIX.length) || '/'
   const targetUrl = new URL(
     `${targetPath.startsWith('/') ? targetPath : `/${targetPath}`}${incomingUrl.search}`,
     CLAWOS_PROXY_ORIGIN,
@@ -302,7 +319,10 @@ async function maybeProxyClawos(req, res, incomingUrl) {
   const headers = new Headers()
   for (const [key, value] of Object.entries(req.headers)) {
     if (!value) continue
-    if (key.toLowerCase() === 'host' || key.toLowerCase() === 'content-length') {
+    if (
+      key.toLowerCase() === 'host' ||
+      key.toLowerCase() === 'content-length'
+    ) {
       continue
     }
     headers.set(key, Array.isArray(value) ? value.join(', ') : value)
@@ -336,18 +356,12 @@ async function maybeProxyClawos(req, res, incomingUrl) {
     const rewritten = rewriteClawosHtml(html, CLAWOS_PROXY_PREFIX)
     proxiedHeaders.set('content-type', contentType)
     proxiedHeaders.set('content-length', Buffer.byteLength(rewritten, 'utf8'))
-    res.writeHead(
-      response.status,
-      Object.fromEntries(proxiedHeaders.entries()),
-    )
+    res.writeHead(response.status, Object.fromEntries(proxiedHeaders.entries()))
     res.end(rewritten)
     return true
   }
 
-  res.writeHead(
-    response.status,
-    Object.fromEntries(proxiedHeaders.entries()),
-  )
+  res.writeHead(response.status, Object.fromEntries(proxiedHeaders.entries()))
   if (response.body) {
     const reader = response.body.getReader()
     while (true) {
@@ -383,8 +397,11 @@ async function tryServeStatic(req, res) {
   // Asset requests should never fall through to the SSR handler. If a browser
   // asks for a stale hashed JS/CSS chunk after a deploy or branch switch,
   // returning the HTML shell with 200 text/html makes the SPA fail as a black
-  // screen. Return a real 404 instead so clients reload/recover correctly and
-  // health checks can detect the broken asset reference.
+  // screen. For stale JavaScript chunks, return a tiny recovery module that
+  // clears service-worker/cache state and reloads the page. This is especially
+  // important for installed iOS PWAs, which can keep old HTML/chunk URLs after
+  // a new build. Non-JS missing assets still return a real 404 so health checks
+  // can detect broken references.
   if (pathname.startsWith('/assets/')) {
     const filePath = join(CLIENT_DIR, pathname)
     if (!filePath.startsWith(CLIENT_DIR)) return false
@@ -392,9 +409,36 @@ async function tryServeStatic(req, res) {
       const fileStat = await stat(filePath)
       if (!fileStat.isFile()) throw new Error('not a file')
     } catch {
+      if (pathname.endsWith('.js')) {
+        const recoveryModule = `
+try {
+  const registrations = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : [];
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+  if ('caches' in globalThis) {
+    const names = await caches.keys();
+    await Promise.all(names.map((name) => caches.delete(name)));
+  }
+} catch {}
+const url = new URL(globalThis.location.href);
+if (!url.searchParams.has('__hermes_recovered')) {
+  url.searchParams.set('__hermes_recovered', Date.now().toString());
+  globalThis.location.replace(url.toString());
+}
+export {};
+`
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Content-Length': Buffer.byteLength(recoveryModule),
+          'Cache-Control':
+            'no-store, no-cache, must-revalidate, proxy-revalidate',
+        })
+        res.end(recoveryModule)
+        return true
+      }
       res.writeHead(404, {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Cache-Control':
+          'no-store, no-cache, must-revalidate, proxy-revalidate',
       })
       res.end('Asset not found')
       return true
@@ -419,9 +463,18 @@ async function tryServeStatic(req, res) {
       'Content-Length': data.length,
     }
 
-    // Cache hashed assets aggressively (they have content hashes in filenames)
+    // Cache hashed assets aggressively (they have content hashes in filenames).
+    // Keep the service worker, manifest, and other top-level PWA control files
+    // non-cacheable so mobile clients notice deploys immediately.
     if (pathname.startsWith('/assets/')) {
       headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    } else if (
+      pathname === '/sw.js' ||
+      pathname === '/manifest.json' ||
+      pathname === '/apple-touch-icon.png'
+    ) {
+      headers['Cache-Control'] =
+        'no-store, no-cache, must-revalidate, proxy-revalidate'
     }
 
     res.writeHead(200, headers)

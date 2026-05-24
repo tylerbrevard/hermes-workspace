@@ -157,7 +157,13 @@ export type DashboardAnalyticsSection = {
   totalSessions: number
   /** API call count over the window. */
   totalApiCalls: number
-  topModels: Array<{ id: string; tokens: number; calls: number; cost: number; sessions: number }>
+  topModels: Array<{
+    id: string
+    tokens: number
+    calls: number
+    cost: number
+    sessions: number
+  }>
   /**
    * Per-day rollup for sparklines. ISO date string + tokens + sessions
    * + cost per day. Always returned, even when empty.
@@ -199,7 +205,7 @@ export type DashboardFetcher = (path: string) => Promise<Response>
 
 export type BuildOverviewOptions = {
   /**
-   * Pluggable HTTP client. Tests pass a stub; the live route hands in a
+   * Pluggable HTTP client. Tests pass a supplied client; the live route hands in a
    * function that wraps `dashboardFetch` and `claudeFetch` so auth and
    * base-URL handling stay in one place.
    */
@@ -359,8 +365,7 @@ function normalizeCron(raw: unknown): DashboardCronSection | null {
       failed += 1
       const id = readString(j.id) || readString(j.name) || 'unknown'
       const name = readString(j.name) || id
-      const lastRunAt =
-        typeof j.last_run_at === 'string' ? j.last_run_at : null
+      const lastRunAt = typeof j.last_run_at === 'string' ? j.last_run_at : null
       recentFailures.push({ id, name, lastError, lastRunAt })
     }
     const candidates = [
@@ -413,9 +418,7 @@ function normalizeAchievements(
   if (recentArr.length === 0 && (!all || typeof all !== 'object')) return null
   const recentUnlocks = recentArr
     .map(normalizeAchievementUnlock)
-    .filter(
-      (entry): entry is DashboardAchievementUnlock => entry !== null,
-    )
+    .filter((entry): entry is DashboardAchievementUnlock => entry !== null)
     .slice(0, limit)
 
   let totalUnlocked = 0
@@ -480,7 +483,9 @@ function normalizeSkillsUsage(
       }
     })
     .filter(
-      (e): e is {
+      (
+        e,
+      ): e is {
         skill: string
         totalCount: number
         percentage: number
@@ -489,10 +494,7 @@ function normalizeSkillsUsage(
     )
     .sort((a, b) => b.totalCount - a.totalCount)
     .slice(0, 5)
-  if (
-    !summary &&
-    topSkills.length === 0
-  ) {
+  if (!summary && topSkills.length === 0) {
     return null
   }
   return {
@@ -525,9 +527,7 @@ function normalizeAnalytics(
     totalsRaw?.total_output ?? r.total_output ?? r.output_tokens,
   )
   const cacheReadTokens = readNumber(
-    totalsRaw?.total_cache_read ??
-      r.total_cache_read ??
-      r.cache_read_tokens,
+    totalsRaw?.total_cache_read ?? r.total_cache_read ?? r.cache_read_tokens,
   )
   const reasoningTokens = readNumber(
     totalsRaw?.total_reasoning ?? r.total_reasoning ?? r.reasoning_tokens,
@@ -555,9 +555,7 @@ function normalizeAnalytics(
   // reasoning are exposed separately for the rich UI.
   const fallbackTotal = readNumber(r.total_tokens)
   const totalTokens =
-    inputTokens + outputTokens > 0
-      ? inputTokens + outputTokens
-      : fallbackTotal
+    inputTokens + outputTokens > 0 ? inputTokens + outputTokens : fallbackTotal
 
   const modelsRaw = Array.isArray(r.by_model)
     ? r.by_model
@@ -576,14 +574,19 @@ function normalizeAnalytics(
       const tokensOut = readNumber(e.output_tokens)
       return {
         id,
-        tokens: tokensIn + tokensOut > 0 ? tokensIn + tokensOut : readNumber(e.tokens),
+        tokens:
+          tokensIn + tokensOut > 0
+            ? tokensIn + tokensOut
+            : readNumber(e.tokens),
         calls: readNumber(e.api_calls ?? e.calls ?? e.requests),
         cost: readNumber(e.estimated_cost ?? e.cost),
         sessions: readNumber(e.sessions),
       }
     })
     .filter(
-      (entry): entry is {
+      (
+        entry,
+      ): entry is {
         id: string
         tokens: number
         calls: number
@@ -613,7 +616,9 @@ function normalizeAnalytics(
       }
     })
     .filter(
-      (entry): entry is {
+      (
+        entry,
+      ): entry is {
         day: string
         inputTokens: number
         outputTokens: number
@@ -797,16 +802,12 @@ function computeInsights(
   // glance.
   const ops: Array<string> = []
   if (cron && cron.failed > 0) {
-    ops.push(
-      `${cron.failed} failed cron job${cron.failed === 1 ? '' : 's'}`,
-    )
+    ops.push(`${cron.failed} failed cron job${cron.failed === 1 ? '' : 's'}`)
   }
   if (cron && cron.nextRunAt) {
     const nextMs = Date.parse(cron.nextRunAt)
     if (Number.isFinite(nextMs) && nextMs - Date.now() < -7 * 86_400_000) {
-      ops.push(
-        `${cron.total} stale cron job${cron.total === 1 ? '' : 's'}`,
-      )
+      ops.push(`${cron.total} stale cron job${cron.total === 1 ? '' : 's'}`)
     }
   }
   if (

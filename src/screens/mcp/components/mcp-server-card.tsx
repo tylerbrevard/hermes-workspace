@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import {
   useConfigureMcpServer,
   useDeleteMcpServer,
@@ -11,6 +9,10 @@ import { useMcpCapabilityMode } from '../hooks/use-mcp-capability-mode'
 import { useMcpOauth } from '../hooks/use-mcp-oauth'
 import { isArgPlaceholder, isUrlPlaceholder } from '../lib/placeholder-detect'
 import type { McpServer, McpTestResult } from '@/types/mcp'
+import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
+import { toast } from '@/components/ui/toast'
+import { writeTextToClipboard } from '@/lib/clipboard'
 
 interface Props {
   server: McpServer
@@ -22,8 +24,31 @@ const STATUS_COLORS: Record<McpServer['status'], string> = {
     'border border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200',
   failed:
     'border border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200',
-  unknown:
-    'border border-primary-200 bg-primary-100/60 text-primary-500',
+  unknown: 'border border-primary-200 bg-primary-100/60 text-primary-500',
+}
+
+function formatDateTime(value?: string): string {
+  if (!value) return 'Never tested'
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) return value
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
+function daysSince(value?: string): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) return null
+  return Math.max(0, Math.floor((Date.now() - parsed) / 86_400_000))
+}
+
+function serverLaunchText(server: McpServer): string {
+  if (server.transportType === 'http') return server.url || server.name
+  return [server.command, ...server.args].filter(Boolean).join(' ')
 }
 
 function Badge({
@@ -58,6 +83,9 @@ export function McpServerCard({ server, onEdit }: Props) {
   const qc = useQueryClient()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [testResult, setTestResult] = useState<McpTestResult | null>(null)
+  const lastTestAge = daysSince(server.lastTestedAt)
+  const staleTest =
+    !server.lastTestedAt || (lastTestAge != null && lastTestAge > 7)
 
   return (
     <article className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/85 p-4">
@@ -67,7 +95,9 @@ export function McpServerCard({ server, onEdit }: Props) {
             <h3 className="truncate text-sm font-medium text-ink">
               {server.name}
             </h3>
-            <Badge className={STATUS_COLORS[server.status]}>{server.status}</Badge>
+            <Badge className={STATUS_COLORS[server.status]}>
+              {server.status}
+            </Badge>
             <Badge className="border border-primary-200 bg-primary-100/60 text-primary-500">
               {server.transportType}
             </Badge>
@@ -97,7 +127,34 @@ export function McpServerCard({ server, onEdit }: Props) {
           <dt>Auth:</dt>
           <dd className="font-medium text-ink">{server.authType}</dd>
         </div>
+        <div className="flex items-center gap-1.5">
+          <dt>Source:</dt>
+          <dd className="font-medium text-ink">{server.source}</dd>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <dt>Last test:</dt>
+          <dd
+            className={
+              staleTest
+                ? 'font-medium text-amber-700 dark:text-amber-300'
+                : 'font-medium text-ink'
+            }
+            title={formatDateTime(server.lastTestedAt)}
+          >
+            {server.lastTestedAt
+              ? lastTestAge === 0
+                ? 'today'
+                : `${lastTestAge}d ago`
+              : 'never'}
+          </dd>
+        </div>
       </dl>
+
+      {staleTest ? (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          Last health check is stale. Run Test before relying on this server.
+        </p>
+      ) : null}
 
       {server.lastError ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200">
@@ -138,6 +195,22 @@ export function McpServerCard({ server, onEdit }: Props) {
         <Button variant="outline" size="sm" onClick={() => onEdit(server)}>
           Edit
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void writeTextToClipboard(serverLaunchText(server)).then(
+              () => toast('Copied MCP launch target', { type: 'success' }),
+              () =>
+                toast(serverLaunchText(server), {
+                  type: 'warning',
+                  duration: 7000,
+                }),
+            )
+          }}
+        >
+          Copy
+        </Button>
         {confirmDelete ? (
           <>
             <Button
@@ -175,27 +248,29 @@ export function McpServerCard({ server, onEdit }: Props) {
             : `Failed: ${testResult.error || 'unknown error'}`}
         </p>
       ) : null}
-      {testResult && !testResult.ok && testResult.error ? (
-        (() => {
-          const stdioErrorRe = /Connection closed|EACCES|ENOENT|exited unexpectedly/i
-          const httpErrorRe = /fetch failed|network error|ENOTFOUND/i
-          const hasStdioPlaceholder =
-            server.transportType === 'stdio' &&
-            server.args.some((a) => isArgPlaceholder(a))
-          const hasHttpPlaceholder =
-            server.transportType === 'http' &&
-            Boolean(server.url && isUrlPlaceholder(server.url))
-          const showHint =
-            (stdioErrorRe.test(testResult.error) && hasStdioPlaceholder) ||
-            (httpErrorRe.test(testResult.error) && hasHttpPlaceholder)
-          if (!showHint) return null
-          return (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-              Edit server args/url — looks like a placeholder. Click Edit to fix.
-            </p>
-          )
-        })()
-      ) : null}
+      {testResult && !testResult.ok && testResult.error
+        ? (() => {
+            const stdioErrorRe =
+              /Connection closed|EACCES|ENOENT|exited unexpectedly/i
+            const httpErrorRe = /fetch failed|network error|ENOTFOUND/i
+            const hasStdioPlaceholder =
+              server.transportType === 'stdio' &&
+              server.args.some((a) => isArgPlaceholder(a))
+            const hasHttpPlaceholder =
+              server.transportType === 'http' &&
+              Boolean(server.url && isUrlPlaceholder(server.url))
+            const showHint =
+              (stdioErrorRe.test(testResult.error) && hasStdioPlaceholder) ||
+              (httpErrorRe.test(testResult.error) && hasHttpPlaceholder)
+            if (!showHint) return null
+            return (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                Edit server args/url — looks like a placeholder. Click Edit to
+                fix.
+              </p>
+            )
+          })()
+        : null}
       {oauth.isError && oauth.error ? (
         <p className="text-xs text-red-700 dark:text-red-300">
           Reauth failed: {oauth.error.message}

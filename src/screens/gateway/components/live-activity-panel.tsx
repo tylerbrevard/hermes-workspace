@@ -97,7 +97,7 @@ function AgentCard({
   return (
     <div
       className={cn(
-        'rounded-2xl border bg-white/70 backdrop-blur dark:bg-neutral-900/50 dark:border-white/10 p-3 transition-all',
+        'rounded-2xl border bg-white/70 backdrop-blur dark:bg-neutral-900/50 dark:border-white/10 p-3 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
         isSelected
           ? 'border-emerald-200 ring-1 ring-emerald-500/30 dark:border-emerald-800/50'
           : 'border-neutral-200 dark:border-neutral-800',

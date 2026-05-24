@@ -60,90 +60,6 @@ const PANEL_WIDTH_PX = 288
 const MIN_DESKTOP_WIDTH = 1024
 const REFRESH_INTERVAL_MS = 5000
 
-function createDemoActiveAgents(): Array<ActiveAgent> {
-  const now = Date.now()
-  return [
-    {
-      id: 'demo-dashboard-infra',
-      name: '🎨 Roger — Frontend Developer',
-      task: 'Building dashboard widget grid with responsive layout',
-      model: 'gpt-5.3-codex',
-      status: 'running',
-      progress: 67,
-      startedAtMs: now - 204_000,
-      tokenCount: 38_240,
-      estimatedCost: 0.218,
-      isLive: false,
-    },
-    {
-      id: 'demo-skills-browser',
-      name: '🏗️ Sally — Backend Architect',
-      task: 'Creating API routes for skills marketplace',
-      model: 'gpt-5.3-codex',
-      status: 'thinking',
-      progress: 42,
-      startedAtMs: now - 131_000,
-      tokenCount: 21_915,
-      estimatedCost: 0.131,
-      isLive: false,
-    },
-    {
-      id: 'demo-terminal-integration',
-      name: '🔍 Ada — QA Engineer',
-      task: 'Running integration tests on terminal panel',
-      model: 'gpt-5.3-codex',
-      status: 'running',
-      progress: 85,
-      startedAtMs: now - 242_000,
-      tokenCount: 47_609,
-      estimatedCost: 0.286,
-      isLive: false,
-    },
-  ]
-}
-
-function createDemoQueue(): Array<QueuedAgentTask> {
-  return [
-    {
-      id: 'demo-queue-1',
-      name: 'release-notes',
-      description: 'Drafting release notes and migration checklist',
-      priority: 'high',
-    },
-    {
-      id: 'demo-queue-2',
-      name: 'theme-pass',
-      description: 'Applying dark theme polish to diagnostics screens',
-      priority: 'normal',
-    },
-  ]
-}
-
-function createDemoHistory(): Array<AgentHistoryItem> {
-  return [
-    {
-      id: 'demo-history-1',
-      name: 'api-telemetry',
-      description: 'Instrumented API telemetry dashboard',
-      model: 'gpt-5-codex',
-      status: 'success',
-      runtimeSeconds: 452,
-      tokenCount: 62_430,
-      cost: 0.348,
-    },
-    {
-      id: 'demo-history-2',
-      name: 'auth-hardening',
-      description: 'Added auth guardrails for session endpoints',
-      model: 'claude-3-5-sonnet',
-      status: 'success',
-      runtimeSeconds: 311,
-      tokenCount: 48_920,
-      cost: 0.284,
-    },
-  ]
-}
-
 function inferInitialOpenState(): boolean {
   return false
 }
@@ -495,7 +411,6 @@ export type AgentViewResult = {
   activeMissionState: string | null
   activeCount: number
   isLoading: boolean
-  isDemoMode: boolean
   isLiveConnected: boolean
   errorMessage: string | null
   setOpen: (isOpen: boolean) => void
@@ -529,7 +444,6 @@ export function useAgentView(): AgentViewResult {
     [],
   )
   const [isLoading, setIsLoading] = useState(true)
-  const [isDemoMode, setIsDemoMode] = useState(false)
   const [isLiveConnected, setIsLiveConnected] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -606,18 +520,14 @@ export function useAgentView(): AgentViewResult {
         setActiveAgents(dedupeById(nextActiveAgents))
         setQueuedAgents(dedupeById(nextQueuedAgents))
         setHistoryAgents(dedupeById(nextHistoryAgents).slice(0, 10))
-        setIsDemoMode(false)
         setIsLiveConnected(true)
         setErrorMessage(null)
       } catch (error) {
         if (isDisposed) return
 
-        // Gateway unreachable — leave the panel empty rather than show fake
-        // demo agents that look like real spawns. Show error message instead.
         setActiveAgents([])
         setQueuedAgents([])
         setHistoryAgents([])
-        setIsDemoMode(false)
         setIsLiveConnected(false)
         setErrorMessage(
           error instanceof Error ? error.message : 'Gateway unavailable',
@@ -717,7 +627,6 @@ export function useAgentView(): AgentViewResult {
       activeMissionState: activeMission?.state ?? null,
       activeCount: activeAgents.length,
       isLoading,
-      isDemoMode,
       isLiveConnected,
       errorMessage,
       setOpen,
@@ -736,7 +645,6 @@ export function useAgentView(): AgentViewResult {
       errorMessage,
       historyAgents,
       historyOpen,
-      isDemoMode,
       isDesktop,
       isLiveConnected,
       isLoading,

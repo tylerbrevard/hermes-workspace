@@ -7,6 +7,7 @@ import {
   TooltipRoot,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { withBasePath } from '@/lib/base-path'
 import { cn } from '@/lib/utils'
 
 /* ── Avatar types ─────────────────────────────────────── */
@@ -100,7 +101,7 @@ function makeGreekPNG(name: string, label: string) {
         }}
       >
         <img
-          src={`/avatars/${name}.png`}
+          src={withBasePath(`/avatars/${name}.png`)}
           alt={label}
           width={size}
           height={size}
@@ -1637,7 +1638,7 @@ function AvatarPicker({
                 type="button"
                 onClick={() => onSelect(opt.id)}
                 className={cn(
-                  'flex flex-col items-center gap-1 rounded-xl p-1.5 transition-all',
+                  'flex flex-col items-center gap-1 rounded-xl p-1.5 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                   active
                     ? 'bg-accent-500/20 ring-2 ring-accent-500'
                     : 'hover:bg-primary-200/60',
@@ -1669,7 +1670,7 @@ function AvatarPicker({
                 type="button"
                 onClick={() => onSelect(opt.id)}
                 className={cn(
-                  'flex flex-col items-center gap-1 rounded-xl p-2 transition-all',
+                  'flex flex-col items-center gap-1 rounded-xl p-2 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                   active
                     ? 'bg-accent-500/20 ring-2 ring-accent-500 scale-105'
                     : 'hover:bg-primary-200/60 hover:scale-105',
@@ -1743,7 +1744,7 @@ function OrchestratorAvatarComponent({ size = 48, compact = false }: Orchestrato
           <TooltipTrigger
             render={
               <div
-                className="relative flex items-center justify-center rounded-full transition-all duration-300"
+                className="relative flex items-center justify-center rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-300"
                 style={{ width: size + 4, height: size + 4 }}
               >
                 <Renderer state={state} size={size} />
@@ -1770,7 +1771,7 @@ function OrchestratorAvatarComponent({ size = 48, compact = false }: Orchestrato
       <button
         type="button"
         onClick={() => setShowPicker((v) => !v)}
-        className="absolute -right-1 -top-1 rounded-full border border-primary-300/70 bg-primary-100/90 p-1 text-primary-500 shadow-sm transition-all hover:bg-primary-200 hover:text-primary-800 hover:scale-110"
+        className="absolute -right-1 -top-1 rounded-full border border-primary-300/70 bg-primary-100/90 p-1 text-primary-500 shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:bg-primary-200 hover:text-primary-800 hover:scale-110"
         aria-label="Change avatar"
       >
         <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">

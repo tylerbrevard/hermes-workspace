@@ -66,10 +66,6 @@ function toChatMessages(messages: Array<ChatMessage>): Array<AgentChatMessage> {
     })
 }
 
-function buildDemoReply(agentName: string, text: string): string {
-  return `${agentName} (demo): Received "${text}". Hermes Agent is unavailable, so this is a simulated response.`
-}
-
 export function AgentChatModal({
   open,
   sessionKey,
@@ -81,16 +77,13 @@ export function AgentChatModal({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
-  const [isDemoMode, setIsDemoMode] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const typingExpectedAgentCountRef = useRef<number | null>(null)
   const messagesRef = useRef<Array<AgentChatMessage>>([])
-  const isDemoModeRef = useRef(false)
 
   // Keep refs in sync with state
   messagesRef.current = messages
-  isDemoModeRef.current = isDemoMode
 
   const agentMessageCount = useMemo(
     function getAgentMessageCount() {
@@ -103,7 +96,7 @@ export function AgentChatModal({
 
   const loadHistory = useCallback(
     async function loadHistory() {
-      if (!open || isDemoModeRef.current) return
+      if (!open) return
 
       try {
         setIsLoadingHistory((current) =>
@@ -137,17 +130,6 @@ export function AgentChatModal({
         const message =
           error instanceof Error ? error.message : 'Unable to load chat history'
         setErrorMessage(message)
-        if (messagesRef.current.length === 0) {
-          setIsDemoMode(true)
-          setMessages([
-            {
-              id: `demo-intro-${sessionKey}`,
-              role: 'agent',
-              text: 'Hermes Agent is unavailable. Running in demo mode with simulated responses.',
-              timestamp: Date.now(),
-            },
-          ])
-        }
       } finally {
         setIsLoadingHistory(false)
       }
@@ -185,7 +167,6 @@ export function AgentChatModal({
       setIsLoadingHistory(true)
       setIsSending(false)
       setIsTyping(false)
-      setIsDemoMode(false)
       setErrorMessage(null)
       typingExpectedAgentCountRef.current = null
       void loadHistoryRef.current()
@@ -195,7 +176,7 @@ export function AgentChatModal({
 
   useEffect(
     function pollLiveHistory() {
-      if (!open || isDemoMode) return
+      if (!open) return
 
       const timer = window.setInterval(function refreshHistory() {
         void loadHistoryRef.current()
@@ -205,27 +186,8 @@ export function AgentChatModal({
         window.clearInterval(timer)
       }
     },
-    [isDemoMode, open],
+    [open],
   )
-
-  function sendDemoReply(text: string) {
-    window.setTimeout(function deliverDemoReply() {
-      setMessages(function appendDemoReply(previous) {
-        return [
-          ...previous,
-          {
-            id: `demo-reply-${crypto.randomUUID()}`,
-            role: 'agent',
-            text: buildDemoReply(agentName, text),
-            timestamp: Date.now(),
-          },
-        ]
-      })
-      setIsTyping(false)
-      setIsSending(false)
-      typingExpectedAgentCountRef.current = null
-    }, 2000)
-  }
 
   async function handleSend(message: string) {
     const sentAt = Date.now()
@@ -248,17 +210,6 @@ export function AgentChatModal({
     setIsTyping(true)
     setErrorMessage(null)
     typingExpectedAgentCountRef.current = agentMessageCount + 1
-
-    if (isDemoMode) {
-      setMessages(function markSent(previous) {
-        return previous.map(function mapMessage(entry) {
-          if (entry.id !== optimisticId) return entry
-          return { ...entry, status: undefined }
-        })
-      })
-      sendDemoReply(message)
-      return
-    }
 
     try {
       const response = await fetch('/api/sessions/send', {
@@ -291,9 +242,9 @@ export function AgentChatModal({
       })
 
       setErrorMessage(messageText)
-      setIsDemoMode(true)
+      setIsTyping(false)
+      setIsSending(false)
       typingExpectedAgentCountRef.current = null
-      sendDemoReply(message)
       return
     }
 
@@ -311,7 +262,6 @@ export function AgentChatModal({
           <AgentChatHeader
             agentName={agentName}
             statusLabel={statusLabel}
-            isDemoMode={isDemoMode}
             onClose={function handleClose() {
               onOpenChange(false)
             }}

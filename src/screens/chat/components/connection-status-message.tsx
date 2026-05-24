@@ -112,7 +112,7 @@ export function ConnectionStatusMessage({
   return (
     <div
       className={cn(
-        'mx-auto max-w-lg rounded-lg border px-3 py-2 transition-all duration-300',
+        'mx-auto max-w-lg rounded-lg border px-3 py-2 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-300',
         isChecking
           ? 'border-primary-200 bg-primary-50 text-primary-600'
           : 'border-amber-200 bg-amber-50 text-amber-800',

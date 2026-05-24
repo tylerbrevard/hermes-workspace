@@ -24,7 +24,7 @@ export function InlineApprovalCard({ approval, onApprove, onDeny }: InlineApprov
   return (
     <div
       className={cn(
-        'my-2 rounded-lg border p-3 transition-all',
+        'my-2 rounded-lg border p-3 transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
         isPending
           ? 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-950/40 animate-pulse-subtle'
           : resolved === 'approved'

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, startTransition } from 'react'
+import { startTransition, useEffect, useMemo, useState } from 'react'
 
 type TeamsPreview = {
   status?: string
@@ -119,12 +119,21 @@ function syncTone(inSync?: boolean, driftReason?: string) {
   return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200'
 }
 
+function formatFreshness(value?: string | null) {
+  if (!value) return 'Last sync unknown'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Last sync unknown'
+  return `Last sync ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+}
+
 export function PresenceHubScreen() {
   const [data, setData] = useState<PresenceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null)
+  const [deviceSearch, setDeviceSearch] = useState('')
+  const [deviceFilter, setDeviceFilter] = useState<'all' | 'fresh' | 'stale' | 'mismatch'>('all')
 
   async function load() {
     setLoading(true)
@@ -207,6 +216,30 @@ export function PresenceHubScreen() {
     )
   }, [data])
 
+  const visibleDevices = useMemo(() => {
+    const q = deviceSearch.trim().toLowerCase()
+    return (data?.devices || []).filter((device) => {
+      const sync = perDeviceSync.get(device.id)
+      const isFresh = (device.lastSeenMinutesAgo ?? 9999) <= 5
+      if (deviceFilter === 'fresh' && !isFresh) return false
+      if (deviceFilter === 'stale' && isFresh) return false
+      if (deviceFilter === 'mismatch' && sync?.state !== 'mismatch') return false
+      if (!q) return true
+      return [
+        device.name,
+        device.id,
+        device.type,
+        device.status,
+        device.teamsStatus,
+        device.currentWord,
+        device.wordMode,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    })
+  }, [data?.devices, deviceFilter, deviceSearch, perDeviceSync])
+
   async function post(body: Record<string, unknown>) {
     setSaving(true)
     try {
@@ -225,6 +258,11 @@ export function PresenceHubScreen() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function confirmAndPost(message: string, body: Record<string, unknown>) {
+    if (!window.confirm(message)) return
+    await post(body)
   }
 
   return (
@@ -253,11 +291,33 @@ export function PresenceHubScreen() {
             </button>
           </div>
         </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-4">
+          <span className={`rounded-xl border px-3 py-2 text-xs ${statusTone(data?.presence?.availability)}`}>
+            Presence {data?.presence?.availability || 'unknown'}
+          </span>
+          <span className={`rounded-xl border px-3 py-2 text-xs ${syncTone(data?.syncDiagnostics?.inSync, data?.syncDiagnostics?.driftReason)}`}>
+            Devices {freshDeviceCount}/{data?.devices?.length || 0} fresh
+          </span>
+          <span className={`rounded-xl border px-3 py-2 text-xs ${data?.presence?.authRequired || data?.presence?.error ? syncTone(false, 'teams_unavailable') : syncTone(true)}`}>
+            Graph {data?.presence?.authRequired ? 'auth required' : data?.presence?.error ? 'degraded' : 'healthy'}
+          </span>
+          <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+            {formatFreshness(data?.refreshedAt)}
+          </span>
+        </div>
       </div>
 
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-          {error}
+          <div className="font-semibold">Presence controls are unavailable</div>
+          <div className="mt-1">{error}</div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-3 rounded-xl border border-red-300 bg-red-100/60 px-3 py-2 text-xs font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-100"
+          >
+            Retry presence load
+          </button>
         </div>
       ) : null}
       {data?.presence?.authRequired || data?.presence?.error ? (
@@ -359,7 +419,12 @@ export function PresenceHubScreen() {
                   key={option}
                   type="button"
                   disabled={saving}
-                  onClick={() => post({ kind: 'set-presence', availability: option })}
+                  onClick={() =>
+                    void confirmAndPost(`Apply Teams presence override: ${option}?`, {
+                      kind: 'set-presence',
+                      availability: option,
+                    })
+                  }
                   className="rounded-lg border border-primary-200 bg-primary-100/70 px-2 py-1.5 text-xs text-primary-800 transition-colors hover:bg-primary-200/80 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
                 >
                   {option}
@@ -464,7 +529,11 @@ export function PresenceHubScreen() {
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => post({ kind: 'teams-sync' })}
+                  onClick={() =>
+                    void confirmAndPost('Apply current Teams status to presence devices now?', {
+                      kind: 'teams-sync',
+                    })
+                  }
                   className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
                 >
                   Teams sync now
@@ -472,7 +541,11 @@ export function PresenceHubScreen() {
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => post({ kind: 'rotate-words' })}
+                  onClick={() =>
+                    void confirmAndPost('Rotate the active presence word pool now?', {
+                      kind: 'rotate-words',
+                    })
+                  }
                   className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
                 >
                   Rotate word
@@ -492,7 +565,12 @@ export function PresenceHubScreen() {
                     key={pool.id}
                     type="button"
                     disabled={saving || pool.active}
-                    onClick={() => post({ kind: 'activate-pool', poolId: pool.id })}
+                    onClick={() =>
+                      void confirmAndPost(`Activate presence word pool "${pool.name}"?`, {
+                        kind: 'activate-pool',
+                        poolId: pool.id,
+                      })
+                    }
                     className={`rounded-full px-3 py-1.5 text-xs ${
                       pool.active
                         ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200'
@@ -512,7 +590,7 @@ export function PresenceHubScreen() {
       </div>
 
       <section className={shellClassName()}>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
               M5 devices
@@ -522,13 +600,37 @@ export function PresenceHubScreen() {
             </p>
           </div>
           <div className="text-xs text-primary-500 dark:text-neutral-400">
-            {loading ? 'Loading…' : `${data?.devices?.length || 0} device(s)`}
+            {loading ? 'Loading…' : `${visibleDevices.length}/${data?.devices?.length || 0} device(s)`}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="search"
+              aria-label="Search M5 devices"
+              value={deviceSearch}
+              onChange={(event) => setDeviceSearch(event.currentTarget.value)}
+              placeholder="Search devices"
+              className="min-w-0 flex-1 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 sm:min-w-52 sm:flex-none"
+            />
+            <select
+              aria-label="Filter M5 devices"
+              value={deviceFilter}
+              onChange={(event) =>
+                setDeviceFilter(event.currentTarget.value as typeof deviceFilter)
+              }
+              className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+            >
+              <option value="all">All devices</option>
+              <option value="fresh">Fresh</option>
+              <option value="stale">Stale</option>
+              <option value="mismatch">Mismatched</option>
+            </select>
           </div>
         </div>
         <div className="mt-4 grid gap-3">
-          {(data?.devices || []).map((device) => (
+          {visibleDevices.map((device) => (
             <div
               key={device.id}
+              data-testid="presence-device"
               className="rounded-2xl border border-primary-200 bg-primary-50/70 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/70"
             >
               {(() => {
@@ -585,6 +687,13 @@ export function PresenceHubScreen() {
                   ) : null}
                 </div>
                 <div className="flex flex-col items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(device.id)}
+                    className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                  >
+                    Copy device id
+                  </button>
                   <button
                     type="button"
                     onClick={() =>
@@ -709,7 +818,30 @@ export function PresenceHubScreen() {
           ))}
           {!loading && (data?.devices?.length || 0) === 0 ? (
             <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-              No M5 devices are registered right now.
+              <div className="font-medium text-primary-700 dark:text-neutral-200">No M5 devices are registered right now.</div>
+              <div className="mt-1">Presence is still readable from Teams, but display sync has no target device.</div>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="mt-3 rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+              >
+                Recheck devices
+              </button>
+            </div>
+          ) : null}
+          {!loading && (data?.devices?.length || 0) > 0 && visibleDevices.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+              <div className="font-medium text-primary-700 dark:text-neutral-200">No devices match this view.</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeviceFilter('all')
+                  setDeviceSearch('')
+                }}
+                className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs font-medium text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+              >
+                Clear device filters
+              </button>
             </div>
           ) : null}
         </div>
