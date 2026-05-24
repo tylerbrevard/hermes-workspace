@@ -235,9 +235,9 @@ export async function getTeamsPresence(): Promise<TeamsPresence> {
       `/users/${TYLER_GUID}/presence`,
     )
     const availability = presence.availability || 'PresenceUnknown'
-    if (availability === 'PresenceUnknown' || availability === 'Offline') {
+    if (availability === 'PresenceUnknown') {
       const inferred = inferPresenceFromLocal()
-      if (inferred) return { ...inferred, fallback: availability === 'Offline' }
+      if (inferred) return { ...inferred, fallback: true, source: 'local-presence' }
     }
     return {
       availability,
