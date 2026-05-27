@@ -10,7 +10,7 @@ import {
   getSkillSearchSnippet,
   normalizeSkillUsageKey,
   resolveSkillDataSourceState,
-} from './skills-screen'
+} from './skills-workflow'
 
 describe('SkillsScreen helpers', () => {
   it('normalizes skill usage names for dashboard-to-skill matching', () => {
