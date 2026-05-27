@@ -78,7 +78,7 @@ export type DashboardStatusSection = {
   activeSessions: number
   /**
    * Canonical "currently running" number from gateway runtime status
-   * (​`/health/detailed` -> `active_agents`). Falls back to legacy
+   * (`/health/detailed` -> `active_agents`). Falls back to legacy
    * `active_sessions` when `/health/detailed` is unreachable.
    */
   activeAgents: number
@@ -346,7 +346,7 @@ function normalizeCron(raw: unknown): DashboardCronSection | null {
   const recentFailures: DashboardCronSection['recentFailures'] = []
   for (const job of jobs) {
     if (!job || typeof job !== 'object') continue
-    const j = job as Record<string, unknown>
+    const j = job
     const state = readString(j.state || j.status).toLowerCase()
     if (state === 'paused') paused += 1
     else if (state === 'running') running += 1
@@ -355,7 +355,7 @@ function normalizeCron(raw: unknown): DashboardCronSection | null {
       typeof j.last_error === 'string'
         ? j.last_error
         : typeof j.last_delivery_error === 'string'
-          ? (j.last_delivery_error as string)
+          ? j.last_delivery_error
           : null
     const isFailure =
       lastStatus === 'failed' ||
@@ -371,10 +371,8 @@ function normalizeCron(raw: unknown): DashboardCronSection | null {
     const candidates = [
       typeof j.next_run_at === 'string' ? Date.parse(j.next_run_at) : NaN,
       typeof j.next_run === 'string' ? Date.parse(j.next_run) : NaN,
-      typeof j.next_run_at === 'number'
-        ? (j.next_run_at as number) * 1000
-        : NaN,
-    ].filter((v) => Number.isFinite(v)) as Array<number>
+      typeof j.next_run_at === 'number' ? j.next_run_at * 1000 : NaN,
+    ].filter((v) => Number.isFinite(v))
     for (const ts of candidates) {
       if (nextRunMs === null || ts < nextRunMs) nextRunMs = ts
     }
@@ -404,8 +402,7 @@ function normalizeAchievementUnlock(
     category: readString(r.category) || 'General',
     icon: readString(r.icon) || 'Star',
     tier: typeof r.tier === 'string' ? r.tier : null,
-    unlockedAt:
-      typeof r.unlocked_at === 'number' ? (r.unlocked_at as number) : null,
+    unlockedAt: typeof r.unlocked_at === 'number' ? r.unlocked_at : null,
   }
 }
 
@@ -476,10 +473,7 @@ function normalizeSkillsUsage(
         skill,
         totalCount: readNumber(e.total_count),
         percentage: readNumber(e.percentage),
-        lastUsedAt:
-          typeof e.last_used_at === 'number'
-            ? (e.last_used_at as number)
-            : null,
+        lastUsedAt: typeof e.last_used_at === 'number' ? e.last_used_at : null,
       }
     })
     .filter(
@@ -723,7 +717,7 @@ function formatTokensCompact(n: number): string {
  */
 function shortSkillName(raw: string): string {
   if (!raw) return raw
-  const segments = raw.split(/[:\/]/)
+  const segments = raw.split(/[:/]/)
   return segments[segments.length - 1] || raw
 }
 
@@ -969,7 +963,22 @@ function normalizeLogs(
   for (const line of lines) {
     const lower = line.toLowerCase()
     if (
-      /\b(error|exception|traceback|failed|fatal)\b/.test(lower) ||
+      lower.includes('another gateway instance is already running') ||
+      lower.includes('gateway already running')
+    ) {
+      continue
+    }
+    const levelMatch = lower.match(
+      /(?:^|\s)(trace|debug|info|notice|warn|warning|error|fatal|critical)\b/,
+    )
+    const level = levelMatch?.[1] ?? null
+    if (level === 'warn' || level === 'warning') {
+      warnCount += 1
+    } else if (
+      level === 'error' ||
+      level === 'fatal' ||
+      level === 'critical' ||
+      /\b(exception|traceback|failed|fatal)\b/.test(lower) ||
       lower.includes('errno')
     ) {
       errorCount += 1

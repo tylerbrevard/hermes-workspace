@@ -5,22 +5,33 @@ import {
   SWARM2_OPERATIONS_REUSE,
   SWARM2_REAL_API_ENDPOINTS,
   SWARM2_SURFACE_CONTRACT,
-} from './swarm2-screen'
+  buildActiveMissionQueue,
+  buildWorkerOperatorStates,
+  chooseRecommendedWorker,
+  getSwarmSurfaceDistinction,
+} from './lib/swarm2-workflow'
+import { __runtimeTabInternals } from './swarm2-screen'
+
 
 describe('Swarm2 surface contract', () => {
   it('keeps Aurora as the primary hub above wired operational worker cards', () => {
     expect(SWARM2_INFORMATION_HIERARCHY[0]).toContain('Status header')
-    expect(SWARM2_INFORMATION_HIERARCHY[1]).toContain('Orchestrator hub card')
-    expect(SWARM2_INFORMATION_HIERARCHY[2]).toContain('Visible routing wires')
-    expect(SWARM2_INFORMATION_HIERARCHY[3]).toContain(
+    expect(SWARM2_INFORMATION_HIERARCHY[1]).toContain('Active missions strip')
+    expect(SWARM2_INFORMATION_HIERARCHY[2]).toContain('Orchestrator hub card')
+    expect(SWARM2_INFORMATION_HIERARCHY[3]).toContain('Visible routing wires')
+    expect(SWARM2_INFORMATION_HIERARCHY[4]).toContain(
       'Operations-style worker node cards',
     )
-    expect(SWARM2_INFORMATION_HIERARCHY[4]).toContain('Minimal attention rail')
-    expect(SWARM2_INFORMATION_HIERARCHY[5]).toContain(
+    expect(SWARM2_INFORMATION_HIERARCHY[5]).toContain('Minimal attention rail')
+    expect(SWARM2_INFORMATION_HIERARCHY[6]).toContain(
       'Central bottom router chat',
     )
-    expect(SWARM2_INFORMATION_HIERARCHY).toContainEqual(expect.stringContaining('Kanban view'))
-    expect(SWARM2_INFORMATION_HIERARCHY).toContainEqual(expect.stringContaining('Runtime view'))
+    expect(SWARM2_INFORMATION_HIERARCHY).toContainEqual(
+      expect.stringContaining('Kanban view'),
+    )
+    expect(SWARM2_INFORMATION_HIERARCHY).toContainEqual(
+      expect.stringContaining('Runtime view'),
+    )
   })
 
   it('documents the operational surfaces without replacing /swarm', () => {
@@ -39,6 +50,99 @@ describe('Swarm2 surface contract', () => {
     expect(SWARM2_SURFACE_CONTRACT.routerPlacement).toBe('bottom-center')
     expect(SWARM2_SURFACE_CONTRACT.cardInlineChat).toBe(true)
     expect(SWARM2_SURFACE_CONTRACT.routerDefaultOpen).toBe(false)
+  })
+
+  it('summarizes worker operator status, stale heartbeats, cost guard, and recommendation fit', () => {
+    const originalNow = Date.now
+    Date.now = () => 1_800_000
+    try {
+      const states = buildWorkerOperatorStates({
+        members: [
+          {
+            id: 'swarm1',
+            displayName: 'Swarm1',
+            role: 'Builder',
+            model: 'gpt-5.5',
+            provider: 'openai',
+          },
+          {
+            id: 'swarm2',
+            displayName: 'Swarm2',
+            role: 'Reviewer',
+            model: 'local',
+            provider: 'ollama',
+          },
+        ],
+        runtimes: [
+          {
+            workerId: 'swarm1',
+            currentTask: 'Build route',
+            recentLogTail: null,
+            pid: 123,
+            startedAt: null,
+            lastOutputAt: 1_700_000,
+            cwd: null,
+            blockedReason: null,
+            checkpointStatus: 'running',
+            state: 'active',
+            needsHuman: false,
+            assignedTaskCount: 2,
+            cronJobCount: 0,
+            tmuxSession: null,
+            tmuxAttachable: false,
+          },
+          {
+            workerId: 'swarm2',
+            currentTask: 'Review handoff',
+            recentLogTail: null,
+            pid: null,
+            startedAt: null,
+            lastOutputAt: 0,
+            cwd: null,
+            blockedReason: 'Missing token',
+            checkpointStatus: 'blocked',
+            state: 'blocked',
+            needsHuman: true,
+            assignedTaskCount: 1,
+            cronJobCount: 0,
+            tmuxSession: null,
+            tmuxAttachable: false,
+          },
+        ],
+        roster: [
+          {
+            id: 'swarm1',
+            name: 'Swarm1',
+            role: 'Builder',
+            capabilities: ['frontend'],
+          },
+          {
+            id: 'swarm2',
+            name: 'Swarm2',
+            role: 'Reviewer',
+            capabilities: ['review'],
+          },
+        ],
+      })
+
+      expect(getSwarmSurfaceDistinction()).toContain(
+        'Swarm coordinates live workers',
+      )
+      expect(states[0]).toMatchObject({
+        id: 'swarm1',
+        status: 'active',
+        queueDepth: 2,
+        costGuard: 'paid/model guard',
+      })
+      expect(states[1]).toMatchObject({
+        id: 'swarm2',
+        status: 'blocked',
+        assignment: 'Missing token',
+      })
+      expect(chooseRecommendedWorker(states, 'frontend')).toBe('swarm1')
+    } finally {
+      Date.now = originalNow
+    }
   })
 
   it('only depends on existing first-party APIs', () => {
@@ -75,13 +179,51 @@ describe('Swarm2 surface contract', () => {
   it('keeps the default control plane denser than a terminal wall on laptop screens', () => {
     expect(SWARM2_CARD_DENSITY_CONTRACT.defaultView).toBe('cards')
     expect(SWARM2_CARD_DENSITY_CONTRACT.runtimeView).toBe('separate-mode')
-    expect(SWARM2_CARD_DENSITY_CONTRACT.workerCardMinHeightRem).toBeLessThanOrEqual(30)
-    expect(SWARM2_CARD_DENSITY_CONTRACT.laptopGridColumns).toBeGreaterThanOrEqual(2)
+    expect(
+      SWARM2_CARD_DENSITY_CONTRACT.workerCardMinHeightRem,
+    ).toBeLessThanOrEqual(30)
+    expect(
+      SWARM2_CARD_DENSITY_CONTRACT.laptopGridColumns,
+    ).toBeGreaterThanOrEqual(2)
     expect(SWARM2_CARD_DENSITY_CONTRACT.duplicateEmptyStates).toBe(false)
   })
-})
 
-import { __runtimeTabInternals } from './swarm2-screen'
+  it('sorts active missions ahead of completed missions and prioritizes blockers', () => {
+    const rows = buildActiveMissionQueue([
+      {
+        id: 'done-1',
+        title: 'Done mission',
+        state: 'completed',
+        updatedAt: 300,
+        assignments: [],
+      },
+      {
+        id: 'run-1',
+        title: 'Running mission',
+        state: 'running',
+        updatedAt: 200,
+        assignments: [{ state: 'running', task: 'Keep building' }],
+      },
+      {
+        id: 'blocked-1',
+        title: 'Blocked mission',
+        state: 'running',
+        updatedAt: 100,
+        assignments: [
+          {
+            state: 'blocked',
+            task: 'Fix auth',
+            checkpoint: { blocker: 'Missing token' },
+          },
+        ],
+      },
+    ])
+
+    expect(rows.map((row) => row.id)).toEqual(['blocked-1', 'run-1'])
+    expect(rows[0]?.blockedCount).toBe(1)
+    expect(rows[0]?.nextAction).toContain('Missing token')
+  })
+})
 
 describe('Swarm2 runtime tab command resolution', () => {
   const { commandForRuntime } = __runtimeTabInternals
@@ -139,7 +281,13 @@ describe('Swarm2 runtime tab command resolution', () => {
       terminalKind: 'log-tail',
     })
     expect(result.kind).toBe('log-tail')
-    expect(result.command).toEqual(['tail', '-n', '200', '-F', '/tmp/agent.log'])
+    expect(result.command).toEqual([
+      'tail',
+      '-n',
+      '200',
+      '-F',
+      '/tmp/agent.log',
+    ])
   })
 
   it('falls back to a workspace shell when no tmux and no log file exist', () => {
@@ -209,4 +357,3 @@ describe('Swarm2 runtime tab command resolution', () => {
     expect(result.command[0]).toBe('zsh')
   })
 })
-

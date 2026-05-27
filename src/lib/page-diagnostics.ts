@@ -1,3 +1,5 @@
+import { findWorkspaceRouteRegistryEntry } from './workspace-route-registry'
+
 export type DiagnosticEvent = {
   id: string
   type:
@@ -205,6 +207,9 @@ export function installPageDiagnostics() {
 }
 
 export function buildDiagnosticBundle(extra?: Record<string, unknown>) {
+  const route = currentRoute()
+  const routePath = route.split('?')[0] || route
+  const routeRegistry = findWorkspaceRouteRegistryEntry(routePath)
   const performanceEntries =
     typeof performance === 'undefined'
       ? []
@@ -222,7 +227,8 @@ export function buildDiagnosticBundle(extra?: Record<string, unknown>) {
 
   return {
     capturedAt: nowIso(),
-    route: currentRoute(),
+    route,
+    routeRegistry,
     userAgent: typeof navigator === 'undefined' ? null : navigator.userAgent,
     viewport:
       typeof window === 'undefined'

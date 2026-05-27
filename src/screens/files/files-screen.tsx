@@ -6,7 +6,35 @@ import {
   useRef,
   useState,
 } from 'react'
+import {
+  FILE_BROWSER_MODE_LABEL,
+  FILE_BROWSER_REMOTE_HELP,
+  IGNORED_DIRS,
+  buildFilesDiagnosticBundle,
+  classifyFileOwnership,
+  filterEntries,
+  flattenRecentFiles,
+  getAbsoluteFileReference,
+  getExt,
+  getFileOperationStatus,
+  getPathSafetyMessage,
+  getPinnedWorkspaceRoots,
+  getSearchHighlightParts,
+  isCodeFile,
+  isEditableFile,
+  isHtmlFile,
+  isImageFile,
+  isMarkdownFile,
+  isOutsideWorkspaceBoundary,
+  summarizeFileHealth,
+} from './lib/file-workflow'
 import type { ReactNode } from 'react'
+import type {
+  FileEntry,
+  FileReadResponse,
+  FileTypeFilter,
+  FilesListResponse,
+} from './lib/file-workflow'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/hooks/use-page-title'
 import {
@@ -26,35 +54,6 @@ import {
 } from '@/components/ui/dialog'
 import { Markdown } from '@/components/prompt-kit/markdown'
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Types
-// ──────────────────────────────────────────────────────────────────────────────
-
-type FileEntry = {
-  name: string
-  path: string
-  type: 'file' | 'folder'
-  size?: number
-  modifiedAt?: string
-  children?: Array<FileEntry>
-}
-
-type FilesListResponse = {
-  root: string
-  base: string
-  entries: Array<FileEntry>
-}
-
-export const FILE_BROWSER_MODE_LABEL = 'Server workspace'
-export const FILE_BROWSER_REMOTE_HELP =
-  'Files are loaded from the Workspace server via /api/files, so remote deployments show files created by the agent.'
-
-type FileReadResponse = {
-  type: 'text' | 'image'
-  path: string
-  content: string
-}
-
 type PromptState = {
   mode: 'rename' | 'new-folder'
   targetPath: string
@@ -67,69 +66,6 @@ type ContextMenuState = {
   entry: FileEntry
 }
 
-type FileTypeFilter = 'all' | 'folders' | 'editable' | 'images'
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Constants
-// ──────────────────────────────────────────────────────────────────────────────
-
-const IGNORED_DIRS = new Set([
-  'node_modules',
-  '.git',
-  '.next',
-  '.turbo',
-  '.cache',
-  '__pycache__',
-  '.venv',
-  'dist',
-])
-
-const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'])
-const CODE_EXTS = new Set([
-  'ts',
-  'tsx',
-  'js',
-  'jsx',
-  'json',
-  'css',
-  'html',
-  'yml',
-  'yaml',
-  'sh',
-  'py',
-  'env',
-])
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────────────────────────────────────────
-
-function getExt(name: string): string {
-  const dot = name.lastIndexOf('.')
-  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : ''
-}
-
-function isImageFile(name: string): boolean {
-  return IMAGE_EXTS.has(getExt(name))
-}
-
-function isCodeFile(name: string): boolean {
-  return CODE_EXTS.has(getExt(name))
-}
-
-function isMarkdownFile(name: string): boolean {
-  const ext = getExt(name)
-  return ext === 'md' || ext === 'mdx'
-}
-
-function isHtmlFile(name: string): boolean {
-  const ext = getExt(name)
-  return ext === 'html' || ext === 'htm'
-}
-
-function isEditableFile(name: string): boolean {
-  return !isImageFile(name)
-}
 
 function getFileIcon(entry: FileEntry): string {
   if (entry.type === 'folder') return '📁'
@@ -138,7 +74,7 @@ function getFileIcon(entry: FileEntry): string {
   if (ext === 'json') return '📋'
   if (ext === 'ts' || ext === 'tsx' || ext === 'js' || ext === 'jsx')
     return '📜'
-  if (IMAGE_EXTS.has(ext)) return '🖼'
+  if (isImageFile(entry.name)) return '🖼'
   return '📃'
 }
 
@@ -204,73 +140,19 @@ async function getFetchErrorMessage(res: Response) {
   return `HTTP ${res.status}`
 }
 
-function countEntries(entries: Array<FileEntry>): {
-  files: number
-  folders: number
-  editable: number
-  images: number
-} {
-  return entries.reduce(
-    (counts, entry) => {
-      if (entry.type === 'folder') {
-        counts.folders += 1
-        if (entry.children) {
-          const childCounts = countEntries(entry.children)
-          counts.files += childCounts.files
-          counts.folders += childCounts.folders
-          counts.editable += childCounts.editable
-          counts.images += childCounts.images
-        }
-      } else {
-        counts.files += 1
-        if (isEditableFile(entry.name)) counts.editable += 1
-        if (isImageFile(entry.name)) counts.images += 1
-      }
-      return counts
-    },
-    { files: 0, folders: 0, editable: 0, images: 0 },
-  )
-}
+function formatRelativeModified(iso: string): string {
+  const modifiedAt = Date.parse(iso)
+  if (!Number.isFinite(modifiedAt)) return formatDate(iso)
 
-function entryMatchesFilter(
-  entry: FileEntry,
-  query: string,
-  typeFilter: FileTypeFilter,
-): boolean {
-  const q = query.trim().toLowerCase()
-  const matchesQuery =
-    !q ||
-    entry.name.toLowerCase().includes(q) ||
-    entry.path.toLowerCase().includes(q)
-  if (!matchesQuery) return false
-  switch (typeFilter) {
-    case 'all':
-      return true
-    case 'folders':
-      return entry.type === 'folder'
-    case 'editable':
-      return entry.type === 'file' && isEditableFile(entry.name)
-    case 'images':
-      return entry.type === 'file' && isImageFile(entry.name)
-  }
-}
-
-function filterEntries(
-  entries: Array<FileEntry>,
-  query: string,
-  typeFilter: FileTypeFilter,
-): Array<FileEntry> {
-  return entries
-    .filter((entry) => !IGNORED_DIRS.has(entry.name))
-    .map((entry) => {
-      const children = entry.children
-        ? filterEntries(entry.children, query, typeFilter)
-        : undefined
-      const selfMatches = entryMatchesFilter(entry, query, typeFilter)
-      if (!selfMatches && (!children || children.length === 0)) return null
-      return children ? { ...entry, children } : entry
-    })
-    .filter((entry): entry is FileEntry => Boolean(entry))
+  const diffMs = Date.now() - modifiedAt
+  if (diffMs < 60_000) return 'just now'
+  const minutes = Math.floor(diffMs / 60_000)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return formatDate(iso)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -689,6 +571,7 @@ type TreeNodeProps = {
   depth: number
   expanded: Set<string>
   selectedPath: string | null
+  searchQuery: string
   onToggle: (path: string) => void
   onSelect: (entry: FileEntry) => void
   onContextMenu: (e: React.MouseEvent, entry: FileEntry) => void
@@ -699,6 +582,7 @@ function TreeNode({
   depth,
   expanded,
   selectedPath,
+  searchQuery,
   onToggle,
   onSelect,
   onContextMenu,
@@ -743,7 +627,21 @@ function TreeNode({
           <span className="w-3 shrink-0" />
         )}
         <span className="shrink-0 text-base leading-none">{icon}</span>
-        <span className="truncate">{entry.name}</span>
+        <span className="truncate">
+          {getSearchHighlightParts(entry.name, searchQuery).map(
+            (part, index) =>
+              part.match ? (
+                <mark
+                  key={`${part.text}-${index}`}
+                  className="rounded bg-amber-200/80 px-0.5 text-primary-950 dark:bg-amber-400/30 dark:text-amber-100"
+                >
+                  {part.text}
+                </mark>
+              ) : (
+                <Fragment key={`${part.text}-${index}`}>{part.text}</Fragment>
+              ),
+          )}
+        </span>
       </button>
 
       {entry.type === 'folder' && isExpanded && entry.children ? (
@@ -757,6 +655,7 @@ function TreeNode({
                 depth={depth + 1}
                 expanded={expanded}
                 selectedPath={selectedPath}
+                searchQuery={searchQuery}
                 onToggle={onToggle}
                 onSelect={onSelect}
                 onContextMenu={onContextMenu}
@@ -805,9 +704,10 @@ function Breadcrumb({ path }: { path: string }) {
 
 type FilePanelProps = {
   selectedEntry: FileEntry | null
+  rootPath: string
 }
 
-function FilePanel({ selectedEntry }: FilePanelProps) {
+function FilePanel({ selectedEntry, rootPath }: FilePanelProps) {
   const [loadingFile, setLoadingFile] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
   const [content, setContent] = useState('')
@@ -817,6 +717,7 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
   const [saving, setSaving] = useState(false)
   const [savedOk, setSavedOk] = useState(false)
   const [rawMode, setRawMode] = useState(false)
+  const [imageFit, setImageFit] = useState<'fit' | 'actual'>('fit')
   const [showDiff, setShowDiff] = useState(false)
   const prevPathRef = useRef<string | null>(null)
 
@@ -828,6 +729,23 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
   const isHtml = isHtmlFile(fileName)
   const isCode = isCodeFile(fileName)
   const isEditable = isEditableFile(fileName)
+  const ownership = selectedEntry
+    ? classifyFileOwnership(selectedEntry)
+    : 'workspace file'
+  const protectedMode = selectedEntry ? isProtectedFile(selectedEntry) : false
+  const outsideBoundary = selectedEntry
+    ? isOutsideWorkspaceBoundary(selectedEntry)
+    : false
+  const absoluteReference = selectedEntry
+    ? getAbsoluteFileReference(rootPath, selectedEntry)
+    : ''
+  const safetyMessage = selectedEntry
+    ? getPathSafetyMessage(selectedEntry)
+    : null
+  const saveStatus = getFileOperationStatus('save', selectedEntry, {
+    dirty,
+    saving,
+  })
 
   const highlighted = useMemo<Array<ReactNode>>(
     () =>
@@ -963,9 +881,9 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
         <Button
           size="sm"
           variant="outline"
-          onClick={() => void copyToClipboard(selectedEntry.path)}
+          onClick={() => void copyToClipboard(absoluteReference)}
         >
-          Copy Path
+          Copy Reference
         </Button>
         {(isMd || isHtml) && !isImage && (
           <Button
@@ -986,8 +904,9 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
           <Button
             size="sm"
             variant={savedOk ? 'outline' : 'default'}
-            disabled={!dirty || saving}
+            disabled={!saveStatus.enabled}
             onClick={handleSave}
+            title={saveStatus.reason}
           >
             {saving ? 'Saving…' : savedOk ? '✓ Saved' : 'Save'}
           </Button>
@@ -1001,6 +920,24 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
       <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-300">
         Source: server workspace
       </span>
+      <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-300">
+        Owner: {ownership}
+      </span>
+      <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-300">
+        {protectedMode
+          ? 'Read-only mode recommended'
+          : 'Editable workspace file'}
+      </span>
+      {outsideBoundary ? (
+        <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+          Outside workspace boundary
+        </span>
+      ) : null}
+      {safetyMessage ? (
+        <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+          {safetyMessage}
+        </span>
+      ) : null}
       {selectedEntry.size !== undefined && (
         <span>{formatBytes(selectedEntry.size)}</span>
       )}
@@ -1009,10 +946,10 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
       )}
       <button
         type="button"
-        onClick={() => void copyToClipboard(selectedEntry.path)}
+        onClick={() => void copyToClipboard(absoluteReference)}
         className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600 underline-offset-2 hover:underline dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-300"
       >
-        Copy path
+        Copy absolute path:1
       </button>
       {dirty && (
         <span className="text-accent-500 font-medium">Unsaved changes</span>
@@ -1060,12 +997,35 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
         {diffModal}
         <div className="flex h-full flex-col">
           {header}
+          <div className="flex shrink-0 items-center gap-2 border-b border-primary-200 px-4 py-2 text-xs dark:border-neutral-800">
+            <span className="text-primary-500 dark:text-neutral-400">
+              Preview quality
+            </span>
+            {(['fit', 'actual'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setImageFit(mode)}
+                className={cn(
+                  'rounded-md border px-2 py-1 text-[11px] font-medium',
+                  imageFit === mode
+                    ? 'border-primary-700 bg-primary-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-950'
+                    : 'border-primary-200 text-primary-600 dark:border-neutral-800 dark:text-neutral-300',
+                )}
+              >
+                {mode === 'fit' ? 'Fit' : 'Actual size'}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-1 min-h-0 items-center justify-center overflow-auto p-6">
             {dataUrl ? (
               <img
                 src={dataUrl}
                 alt={selectedEntry.name}
-                className="max-h-full max-w-full rounded-lg border border-primary-200 dark:border-neutral-800 shadow-sm object-contain"
+                className={cn(
+                  'rounded-lg border border-primary-200 object-contain shadow-sm dark:border-neutral-800',
+                  imageFit === 'fit' ? 'max-h-full max-w-full' : 'max-w-none',
+                )}
               />
             ) : (
               <div className="text-sm text-primary-400">No preview</div>
@@ -1192,12 +1152,17 @@ export function FilesScreen() {
   usePageTitle('Files')
 
   const [entries, setEntries] = useState<Array<FileEntry>>([])
+  const [rootPath, setRootPath] = useState('')
   const [treeLoading, setTreeLoading] = useState(false)
   const [treeError, setTreeError] = useState<string | null>(null)
+  const [lastApiError, setLastApiError] = useState<string | null>(null)
+  const [operationStatus, setOperationStatus] = useState<string>(
+    'Ready for server workspace file operations.',
+  )
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [selectedEntry, setSelectedEntry] = useState<FileEntry | null>(null)
   const [treeSearch, setTreeSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState<FileTypeFilter>('all')
+  const [typeFilter, setTypeFilter] = useState<FileTypeFilter>('recent')
 
   // CRUD state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -1210,6 +1175,7 @@ export function FilesScreen() {
   const loadTree = useCallback(async () => {
     setTreeLoading(true)
     setTreeError(null)
+    setOperationStatus('Refreshing server workspace files...')
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 5000)
     try {
@@ -1222,7 +1188,17 @@ export function FilesScreen() {
         )
       const data = (await res.json()) as FilesListResponse
       setEntries(Array.isArray(data.entries) ? data.entries : [])
+      setRootPath(data.root || data.base || '')
+      setOperationStatus('Server workspace files refreshed.')
     } catch (err) {
+      const message =
+        err instanceof Error && err.name === 'AbortError'
+          ? 'Could not load files — request timed out. Check that HERMES_WORKSPACE_DIR is set.'
+          : err instanceof Error
+            ? err.message
+            : String(err)
+      setLastApiError(message)
+      setOperationStatus(`Files API error: ${message}`)
       if (err instanceof Error && err.name === 'AbortError') {
         setTreeError(
           'Could not load files — request timed out. Check that HERMES_WORKSPACE_DIR is set.',
@@ -1282,30 +1258,57 @@ export function FilesScreen() {
 
   const handleDeleteConfirmed = useCallback(async () => {
     if (!deleteConfirm) return
-    await fetch('/api/files', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', path: deleteConfirm.path }),
-    })
-    if (selectedEntry?.path === deleteConfirm.path) {
-      setSelectedEntry(null)
+    const status = getFileOperationStatus('delete', deleteConfirm)
+    if (!status.enabled) {
+      setOperationStatus(status.reason ?? status.label)
+      return
     }
-    setDeleteConfirm(null)
-    await loadTree()
+    try {
+      setOperationStatus(`Deleting ${deleteConfirm.path}...`)
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', path: deleteConfirm.path }),
+      })
+      if (!res.ok) throw new Error(await getFetchErrorMessage(res))
+      if (selectedEntry?.path === deleteConfirm.path) {
+        setSelectedEntry(null)
+      }
+      setOperationStatus(`Deleted ${deleteConfirm.path}.`)
+      setDeleteConfirm(null)
+      await loadTree()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setLastApiError(message)
+      setOperationStatus(`Delete failed: ${message}`)
+    }
   }, [deleteConfirm, selectedEntry, loadTree])
 
   const handleDownload = useCallback(async (entry: FileEntry) => {
-    const res = await fetch(
-      `/api/files?action=download&path=${encodeURIComponent(entry.path)}`,
-    )
-    if (!res.ok) return
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = entry.name
-    anchor.click()
-    URL.revokeObjectURL(url)
+    const status = getFileOperationStatus('download', entry)
+    if (!status.enabled) {
+      setOperationStatus(status.reason ?? status.label)
+      return
+    }
+    try {
+      setOperationStatus(`Downloading ${entry.path}...`)
+      const res = await fetch(
+        `/api/files?action=download&path=${encodeURIComponent(entry.path)}`,
+      )
+      if (!res.ok) throw new Error(await getFetchErrorMessage(res))
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = entry.name
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setOperationStatus(`Downloaded ${entry.path}.`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setLastApiError(message)
+      setOperationStatus(`Download failed: ${message}`)
+    }
   }, [])
 
   const openRenamePrompt = useCallback((entry: FileEntry) => {
@@ -1338,6 +1341,17 @@ export function FilesScreen() {
 
     try {
       if (promptState.mode === 'rename') {
+        const targetEntry =
+          selectedEntry?.path === promptState.targetPath
+            ? selectedEntry
+            : {
+                name: promptState.defaultValue ?? promptState.targetPath,
+                path: promptState.targetPath,
+                type: 'file' as const,
+              }
+        const status = getFileOperationStatus('rename', targetEntry)
+        if (!status.enabled) throw new Error(status.reason ?? status.label)
+        setOperationStatus(`Renaming ${promptState.targetPath}...`)
         const res = await fetch('/api/files', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -1357,8 +1371,10 @@ export function FilesScreen() {
             path: parent ? `${parent}/${value}` : value,
           })
         }
+        setOperationStatus(`Renamed ${promptState.targetPath} to ${value}.`)
       } else {
         // new-folder
+        setOperationStatus('Creating folder...')
         const nextPath = promptState.targetPath
           ? `${promptState.targetPath}/${value}`
           : value
@@ -1368,13 +1384,17 @@ export function FilesScreen() {
           body: JSON.stringify({ action: 'mkdir', path: nextPath }),
         })
         if (!res.ok) throw new Error(await getFetchErrorMessage(res))
+        setOperationStatus(`Created folder ${nextPath}.`)
       }
 
       setPromptState(null)
       setPromptValue('')
       await loadTree()
     } catch (err) {
-      setPromptError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setLastApiError(message)
+      setOperationStatus(`File operation failed: ${message}`)
+      setPromptError(message)
     } finally {
       setPromptBusy(false)
     }
@@ -1390,8 +1410,13 @@ export function FilesScreen() {
     () => countEntries(filteredEntries),
     [filteredEntries],
   )
+  const recentChangedFiles = useMemo(
+    () => flattenRecentFiles(entries),
+    [entries],
+  )
+  const fileHealth = useMemo(() => summarizeFileHealth(entries), [entries])
+  const pinnedRoots = useMemo(() => getPinnedWorkspaceRoots(entries), [entries])
   const hasActiveFilter = treeSearch.trim().length > 0 || typeFilter !== 'all'
-
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-primary-50/95 dark:bg-neutral-950 md:flex-row">
       {/* ── Left panel — directory tree ─────────────────────────────────── */}
@@ -1404,7 +1429,7 @@ export function FilesScreen() {
         )}
       >
         {/* Tree header */}
-        <div className="flex h-11 shrink-0 items-center justify-between border-b border-primary-200 dark:border-neutral-800 px-3">
+        <div className="sticky top-0 z-10 flex h-11 shrink-0 items-center justify-between border-b border-primary-200 bg-primary-50/95 px-3 dark:border-neutral-800 dark:bg-neutral-900/95">
           <Breadcrumb path={selectedEntry?.path ?? ''} />
           <div className="flex shrink-0 items-center gap-0.5 ml-2">
             <button
@@ -1463,10 +1488,19 @@ export function FilesScreen() {
           />
           <div className="flex flex-wrap gap-1">
             {[
+              ['recent', 'Recent'],
               ['all', 'All'],
               ['folders', 'Folders'],
               ['editable', 'Editable'],
               ['images', 'Images'],
+              ['modified', 'Modified'],
+              ['untracked', 'Untracked'],
+              ['generated', 'Generated'],
+              ['agent-touched', 'Agent touched'],
+              ['docs', 'Docs'],
+              ['tests', 'Tests'],
+              ['config', 'Config'],
+              ['runtime', 'Runtime'],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -1503,6 +1537,43 @@ export function FilesScreen() {
           ) : null}
         </div>
 
+        <div className="border-b border-primary-200 px-2 py-2 text-[11px] dark:border-neutral-800">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="font-semibold uppercase tracking-[0.08em] text-primary-500 dark:text-neutral-400">
+              Pinned roots
+            </span>
+          </div>
+          {pinnedRoots.length === 0 ? (
+            <div className="rounded-md border border-dashed border-primary-200 px-2 py-1 text-primary-400 dark:border-neutral-800 dark:text-neutral-500">
+              Waiting for common roots.
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {pinnedRoots.map((entry) => (
+                <button
+                  key={entry.path}
+                  type="button"
+                  onClick={() => {
+                    if (entry.type === 'folder') handleToggle(entry.path)
+                    else handleSelect(entry)
+                  }}
+                  className="rounded-full border border-primary-200 bg-white/70 px-2 py-1 font-medium text-primary-700 hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                >
+                  {entry.path}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="mt-2 rounded-md border border-primary-200 bg-white/70 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-300">
+            {operationStatus}
+          </div>
+          {lastApiError ? (
+            <div className="mt-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+              Last API error: {lastApiError}
+            </div>
+          ) : null}
+        </div>
+
         {/* Tree body */}
         <ScrollAreaRoot className="flex-1 min-h-0">
           <ScrollAreaViewport className="px-1 py-1">
@@ -1512,6 +1583,85 @@ export function FilesScreen() {
               </span>{' '}
               · {FILE_BROWSER_REMOTE_HELP}
             </div>
+            <section
+              aria-label="File workflow health"
+              className="mx-2 mb-2 rounded-md border border-primary-200 bg-white/80 p-2 text-[11px] text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-400"
+            >
+              <div className="mb-1 font-semibold uppercase tracking-[0.08em] text-primary-500 dark:text-neutral-400">
+                File health
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                <span>Huge files {fileHealth.hugeFiles}</span>
+                <span>Stale generated {fileHealth.staleGeneratedFiles}</span>
+                <span>Missing tests {fileHealth.missingTests}</span>
+                <span>
+                  Protected runtime {fileHealth.protectedRuntimeFiles}
+                </span>
+              </div>
+              <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+                Dirty git awareness: preview diffs before saving and avoid
+                overwriting unrelated workspace changes.
+              </div>
+              <div className="mt-1.5">
+                Pinned areas: routes, screens, server, scripts, docs. Search
+                scopes are saved by workflow mode in this panel.
+              </div>
+            </section>
+            <section
+              aria-label="Recent changed files"
+              className="mx-2 mb-2 rounded-md border border-primary-200 bg-white/80 p-2 dark:border-neutral-800 dark:bg-neutral-950/50"
+            >
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary-500 dark:text-neutral-400">
+                  Recent changes
+                </h2>
+                {recentChangedFiles.length > 0 ? (
+                  <span className="shrink-0 text-[10px] text-primary-400 dark:text-neutral-500">
+                    {recentChangedFiles.length}
+                  </span>
+                ) : null}
+              </div>
+              {treeLoading ? (
+                <div className="text-[11px] text-primary-400 dark:text-neutral-500">
+                  Loading recent files...
+                </div>
+              ) : recentChangedFiles.length === 0 ? (
+                <div className="text-[11px] text-primary-400 dark:text-neutral-500">
+                  No recent file changes loaded.
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {recentChangedFiles.map((entry) => (
+                    <button
+                      key={entry.path}
+                      type="button"
+                      onClick={() => handleSelect(entry)}
+                      className={cn(
+                        'flex w-full min-w-0 items-start gap-2 rounded-md border px-2 py-1.5 text-left transition',
+                        selectedPath === entry.path
+                          ? 'border-accent-500/40 bg-accent-500/10 text-accent-700 dark:text-accent-300'
+                          : 'border-transparent text-primary-800 hover:border-primary-200 hover:bg-primary-100 dark:text-neutral-200 dark:hover:border-neutral-800 dark:hover:bg-neutral-900',
+                      )}
+                    >
+                      <span className="mt-0.5 shrink-0 text-sm leading-none">
+                        {getFileIcon(entry)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium">
+                          {entry.name}
+                        </span>
+                        <span className="block truncate text-[10px] text-primary-500 dark:text-neutral-500">
+                          {entry.path}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[10px] text-primary-400 dark:text-neutral-500">
+                        {formatRelativeModified(entry.modifiedAt ?? '')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
             {treeLoading ? (
               <div className="px-3 py-2 text-xs text-primary-400 dark:text-neutral-500">
                 Loading server workspace…
@@ -1552,6 +1702,7 @@ export function FilesScreen() {
                   depth={0}
                   expanded={expanded}
                   selectedPath={selectedPath}
+                  searchQuery={treeSearch}
                   onToggle={handleToggle}
                   onSelect={handleSelect}
                   onContextMenu={handleContextMenu}
@@ -1575,7 +1726,53 @@ export function FilesScreen() {
           'm-2',
         )}
       >
-        <FilePanel selectedEntry={selectedEntry} />
+        <section className="shrink-0 border-b border-primary-200 bg-white/70 px-3 py-2 text-xs text-primary-600 dark:border-neutral-800 dark:bg-neutral-950/30 dark:text-neutral-400">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
+              Recent changed files default
+            </span>
+            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
+              Ownership/source chips
+            </span>
+            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
+              Safe preview/edit distinction
+            </span>
+            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
+              Diff preview before write
+            </span>
+            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
+              Breadcrumbs match ownership boundaries
+            </span>
+            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
+              Image/document preview quality controls
+            </span>
+            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
+              Route smoke links: routes, screens, server, scripts, docs
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                void copyToClipboard(
+                  [
+                    'file review roots',
+                    'src/routes',
+                    'src/screens',
+                    'src/server',
+                    'scripts',
+                    'docs',
+                  ].join('\n'),
+                )
+              }
+              className="rounded-md border border-primary-200 px-2 py-1 font-medium text-primary-700 hover:bg-primary-100 dark:border-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-800"
+            >
+              Copy review roots
+            </button>
+            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
+              Shortcuts: search, refresh, new file, copy path
+            </span>
+          </div>
+        </section>
+        <FilePanel selectedEntry={selectedEntry} rootPath={rootPath} />
       </main>
 
       {/* ── Context menu ──────────────────────────────────────────────────── */}
@@ -1586,7 +1783,11 @@ export function FilesScreen() {
           onClick={(e) => e.stopPropagation()}
         >
           <button
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-primary-100 dark:hover:bg-neutral-800"
+            disabled={
+              !getFileOperationStatus('rename', contextMenu.entry).enabled
+            }
+            title={getFileOperationStatus('rename', contextMenu.entry).reason}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-neutral-800"
             onClick={() => {
               openRenamePrompt(contextMenu.entry)
               setContextMenu(null)
@@ -1610,7 +1811,13 @@ export function FilesScreen() {
             </button>
           ) : (
             <button
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-primary-100 dark:hover:bg-neutral-800"
+              disabled={
+                !getFileOperationStatus('download', contextMenu.entry).enabled
+              }
+              title={
+                getFileOperationStatus('download', contextMenu.entry).reason
+              }
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-neutral-800"
               onClick={() => {
                 void handleDownload(contextMenu.entry)
                 setContextMenu(null)
@@ -1622,14 +1829,20 @@ export function FilesScreen() {
           <button
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-primary-100 dark:hover:bg-neutral-800"
             onClick={() => {
-              void copyToClipboard(contextMenu.entry.path)
+              void copyToClipboard(
+                getAbsoluteFileReference(rootPath, contextMenu.entry),
+              )
               setContextMenu(null)
             }}
           >
-            📋 Copy path
+            📋 Copy file reference
           </button>
           <button
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+            disabled={
+              !getFileOperationStatus('delete', contextMenu.entry).enabled
+            }
+            title={getFileOperationStatus('delete', contextMenu.entry).reason}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30"
             onClick={() => {
               setDeleteConfirm(contextMenu.entry)
               setContextMenu(null)

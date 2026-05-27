@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+
   ReservationValidationError,
   confirmReservation,
   countReservations,
   createReservation,
-  validateReservationInput,
-  type NameReservationStore,
+  validateReservationInput
 } from './name-reservations'
+import type {NameReservationStore} from './name-reservations';
 
 function makeStore(seed: {
   reservations?: Array<{
@@ -183,7 +184,7 @@ describe('createReservation', () => {
 
   it('supports three sequential successful reservations', async () => {
     const store = makeStore()
-    const sent: string[] = []
+    const sent: Array<string> = []
     const attempts = [
       { desiredName: 'AtlasOne', email: 'player1@example.com', token: 'tok_1' },
       { desiredName: 'BeaconTwo', email: 'player2@example.com', token: 'tok_2' },

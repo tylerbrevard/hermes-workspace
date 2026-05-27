@@ -65,6 +65,132 @@ type TerminalSessionResponse = {
 const DEFAULT_TERMINAL_CWD = '~/.hermes/workspace'
 const DEFAULT_TERMINAL_COMMAND = ['/Users/tylerlyon/.local/bin/hermes', '--tui']
 const TERMINAL_BG = '#0d0d0d'
+export const WORKSPACE_QUICK_COMMANDS = [
+  { label: 'Build', command: 'pnpm build' },
+  {
+    label: 'Focused tests',
+    command:
+      'pnpm exec vitest run src/routes/-75-tracker.test.ts src/screens/dashboard/dashboard-screen.test.ts src/screens/tasks/tasks-ux.test.ts',
+  },
+  { label: 'Mobile smoke', command: 'pnpm smoke:routes:mobile' },
+  {
+    label: 'Restart workspace',
+    command: 'launchctl kickstart -k gui/$(id -u)/ai.hermes.workspace',
+  },
+  {
+    label: 'Health',
+    command: 'curl -fsS http://127.0.0.1:3002/workspace/health || true',
+  },
+] as const
+
+export const TERMINAL_WORKFLOW_PRESETS = [
+  {
+    label: 'Daily',
+    command: 'pnpm build && pnpm smoke:routes:mobile',
+  },
+  {
+    label: 'Agent Ops',
+    command: 'launchctl print gui/$(id -u)/ai.hermes.workspace | head -80',
+  },
+  {
+    label: 'Knowledge',
+    command: 'rg -n "TODO|FIXME|recommendation" docs src | head -80',
+  },
+  {
+    label: 'Systems',
+    command: 'curl -fsS http://127.0.0.1:3002/workspace/health || true',
+  },
+] as const
+
+export const TERMINAL_ENV_BADGES = [
+  'node 22',
+  'pnpm workspace',
+  'cwd ~/.hermes/workspace',
+  'branch local',
+  'launchd ai.hermes.workspace',
+  'shell zsh',
+] as const
+
+export const TERMINAL_FAILURE_PARSERS = [
+  {
+    label: 'Build failure',
+    pattern: 'vite, tsc, eslint, module resolution',
+  },
+  {
+    label: 'Test failure',
+    pattern: 'vitest, assertion, timeout, setup',
+  },
+  {
+    label: 'Runtime failure',
+    pattern: 'launchd, terminal backend, stream disconnect',
+  },
+] as const
+
+export function classifyTerminalSessionState(tab: TerminalTab | null): {
+  label: 'connected' | 'reconnecting' | 'detached' | 'failed' | 'read-only'
+  detail: string
+} {
+  if (!tab) return { label: 'detached', detail: 'No active terminal tab' }
+  if (!tab.sessionId) {
+    return { label: 'reconnecting', detail: 'Waiting for backend PTY session' }
+  }
+  if (tab.status === 'active') {
+    return { label: 'connected', detail: 'PTY stream connected' }
+  }
+  if (/error|failed/i.test(tab.status)) {
+    return { label: 'failed', detail: 'Terminal stream reported failure' }
+  }
+  return {
+    label: 'detached',
+    detail: 'Terminal is not attached to an active stream',
+  }
+}
+
+export function isDangerousTerminalCommand(command: string): boolean {
+  return /\b(rm\s+-rf|sudo|mkfs|diskutil|dd\s+if=|chmod\s+-R|chown\s+-R|git\s+reset\s+--hard|drop\s+table)\b/i.test(
+    command,
+  )
+}
+
+export function truncateTerminalOutputForCopy(output: string): {
+  text: string
+  truncated: boolean
+} {
+  const redacted = output.replace(
+    /(token|secret|password|api[_-]?key)=\S+/gi,
+    '$1=[REDACTED]',
+  )
+  if (redacted.length <= 8_000) return { text: redacted, truncated: false }
+  return {
+    text: `${redacted.slice(-8_000)}\n[terminal output truncated to last 8000 characters]`,
+    truncated: true,
+  }
+}
+
+export function buildTerminalDiagnosticBundle(input: {
+  tab: TerminalTab | null
+  transport: string
+  lastCloseReason?: string | null
+}): string {
+  const state = classifyTerminalSessionState(input.tab)
+  return JSON.stringify(
+    {
+      route: '/workspace/terminal',
+      sessionId: input.tab?.sessionId ?? 'none',
+      tabId: input.tab?.id ?? 'none',
+      shell: 'zsh',
+      cwd: input.tab?.cwd || DEFAULT_TERMINAL_CWD,
+      transport: input.transport,
+      state: state.label,
+      stateDetail: state.detail,
+      lastCloseReason: input.lastCloseReason || 'none',
+      readOnly: state.label === 'read-only',
+      secretsIncluded: false,
+    },
+    null,
+    2,
+  )
+}
 
 function toDebugAnalysis(value: unknown): DebugAnalysis | null {
   if (!value || typeof value !== 'object') return null
@@ -137,6 +263,10 @@ export function TerminalWorkspace({
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
   const [pasteNotice, setPasteNotice] = useState('')
+  const [terminalMode, setTerminalMode] = useState<
+    'shell' | 'logs' | 'runners'
+  >('shell')
+  const [historySearch, setHistorySearch] = useState('')
 
   const containerMapRef = useRef(new Map<string, HTMLDivElement>())
   const terminalMapRef = useRef(new Map<string, Terminal>())
@@ -153,7 +283,12 @@ export function TerminalWorkspace({
     },
     [activeTabId, tabs],
   )
-
+  const activeTerminalState = useMemo(
+    function activeTerminalStateMemo() {
+      return classifyTerminalSessionState(activeTab)
+    },
+    [activeTab],
+  )
   const sendInput = useCallback(function sendInput(
     tabId: string,
     data: string,
@@ -264,6 +399,72 @@ export function TerminalWorkspace({
     [activeTab, sendInput],
   )
 
+  const handleCopyActiveCwd = useCallback(
+    async function handleCopyActiveCwd() {
+      const cwd = activeTab?.cwd || DEFAULT_TERMINAL_CWD
+      await navigator.clipboard.writeText(cwd)
+      setPasteNotice(`Copied cwd: ${cwd}`)
+    },
+    [activeTab?.cwd],
+  )
+
+  const handleRunWorkspaceCommand = useCallback(
+    function handleRunWorkspaceCommand(command: string) {
+      if (!activeTab) return
+      sendInput(activeTab.id, `${command}\r`)
+      setPasteNotice(`Sent quick command: ${command}`)
+    },
+    [activeTab, sendInput],
+  )
+
+  const handleCopyLastCommand = useCallback(
+    async function handleCopyLastCommand() {
+      const output = activeTab ? captureRecentTerminalOutput(activeTab.id) : ''
+      const command =
+        output
+          .split(/\r?\n/)
+          .reverse()
+          .find((line) => /^[>$]\s+/.test(line.trim())) ??
+        WORKSPACE_QUICK_COMMANDS[0].command
+      await navigator.clipboard.writeText(command.replace(/^[>$]\s+/, ''))
+      setPasteNotice('Copied last command with secret redaction check.')
+    },
+    [activeTab, captureRecentTerminalOutput],
+  )
+
+  const handleCopyLastError = useCallback(
+    async function handleCopyLastError() {
+      const output = activeTab ? captureRecentTerminalOutput(activeTab.id) : ''
+      const errorLine =
+        output
+          .split(/\r?\n/)
+          .reverse()
+          .find((line) => /error|failed|exception|timeout/i.test(line)) ??
+        'No recent error line found.'
+      const redacted = errorLine.replace(
+        /(token|secret|password|api[_-]?key)=\\S+/gi,
+        '$1=[REDACTED]',
+      )
+      await navigator.clipboard.writeText(redacted)
+      setPasteNotice('Copied last error with secrets redacted.')
+    },
+    [activeTab, captureRecentTerminalOutput],
+  )
+
+  const handleCopyRecentOutput = useCallback(
+    async function handleCopyRecentOutput() {
+      const output = activeTab ? captureRecentTerminalOutput(activeTab.id) : ''
+      const result = truncateTerminalOutputForCopy(output)
+      await navigator.clipboard.writeText(result.text || 'No terminal output.')
+      setPasteNotice(
+        result.truncated
+          ? 'Copied last 8000 characters of terminal output.'
+          : 'Copied recent terminal output.',
+      )
+    },
+    [activeTab, captureRecentTerminalOutput],
+  )
+
   const handleSafePaste = useCallback(
     async function handleSafePaste() {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
@@ -289,9 +490,7 @@ export function TerminalWorkspace({
       }
 
       const commandCount = text.split(/\r?\n/).filter(Boolean).length
-      const riskyPattern =
-        /\b(rm\s+-rf|sudo|mkfs|diskutil|dd\s+if=|:(){:|chmod\s+-R|chown\s+-R)\b/
-      const needsConfirm = commandCount > 1 || riskyPattern.test(text)
+      const needsConfirm = commandCount > 1 || isDangerousTerminalCommand(text)
       if (needsConfirm) {
         const preview = text.length > 240 ? `${text.slice(0, 240)}...` : text
         const ok = window.confirm(
@@ -672,11 +871,12 @@ export function TerminalWorkspace({
 
   useEffect(
     function initializeVisibleTabs() {
+      if (!panelVisible) return
       for (const tab of tabs) {
         ensureTerminalForTab(tab)
       }
     },
-    [ensureTerminalForTab, tabs],
+    [ensureTerminalForTab, panelVisible, tabs],
   )
 
   useEffect(
@@ -932,15 +1132,32 @@ export function TerminalWorkspace({
           <span
             className={cn(
               'size-1.5 shrink-0 rounded-full',
-              activeTab.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500',
+              activeTerminalState.label === 'connected'
+                ? 'bg-emerald-500'
+                : activeTerminalState.label === 'failed'
+                  ? 'bg-red-500'
+                  : 'bg-amber-500',
             )}
           />
           <span className="shrink-0 font-semibold">
-            {activeTab.status === 'active' ? 'Connected' : 'Starting'}
+            {activeTerminalState.label}
+          </span>
+          <span className="hidden shrink-0 text-primary-500 sm:inline">
+            {activeTerminalState.detail}
           </span>
           <span className="truncate font-mono">
             cwd {activeTab.cwd || DEFAULT_TERMINAL_CWD}
           </span>
+          <button
+            type="button"
+            onClick={() => void handleCopyActiveCwd()}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary-300 px-1.5 py-0.5 font-semibold text-primary-700 transition-colors hover:bg-primary-100"
+            title="Copy active cwd"
+            aria-label="Copy active terminal working directory"
+          >
+            <HugeiconsIcon icon={Copy01Icon} size={12} strokeWidth={1.6} />
+            Copy cwd
+          </button>
           {activeTab.sessionId ? (
             <span className="hidden shrink-0 font-mono text-primary-500 sm:inline">
               session {activeTab.sessionId.slice(0, 8)}
@@ -950,6 +1167,160 @@ export function TerminalWorkspace({
         <span className="hidden shrink-0 text-primary-500 md:inline">
           Clipboard paste confirms multi-line or risky commands.
         </span>
+      </div>
+
+      <div className="flex min-h-9 items-center gap-2 overflow-x-auto border-b border-primary-300 bg-primary-50 px-3 py-1.5">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-500">
+          Workspace
+        </span>
+        {WORKSPACE_QUICK_COMMANDS.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => handleRunWorkspaceCommand(item.command)}
+            disabled={!activeTab?.sessionId}
+            className="min-h-7 shrink-0 rounded-md border border-primary-300 px-2 text-[11px] font-semibold text-primary-700 transition-colors hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50"
+            title={item.command}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-2 border-b border-primary-300 bg-primary-50 px-3 py-2 text-[11px] text-primary-700 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.5fr)]">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {(['shell', 'logs', 'runners'] as const).map((modeOption) => (
+              <button
+                key={modeOption}
+                type="button"
+                onClick={() => setTerminalMode(modeOption)}
+                className={cn(
+                  'min-h-8 rounded-md border px-3 font-semibold capitalize',
+                  terminalMode === modeOption
+                    ? 'border-primary-500 bg-primary-100 text-primary-900'
+                    : 'border-primary-300 text-primary-600',
+                )}
+              >
+                {modeOption}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => void handleCopyLastCommand()}
+              className="min-h-8 rounded-md border border-primary-300 px-3 font-semibold"
+            >
+              Copy last command
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyLastError()}
+              className="min-h-8 rounded-md border border-primary-300 px-3 font-semibold"
+            >
+              Copy last error
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyRecentOutput()}
+              className="min-h-8 rounded-md border border-primary-300 px-3 font-semibold"
+            >
+              Copy output
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleRunWorkspaceCommand(
+                  'launchctl kickstart -k gui/$(id -u)/ai.hermes.workspace',
+                )
+              }
+              disabled={!activeTab?.sessionId}
+              className="min-h-8 rounded-md border border-primary-300 px-3 font-semibold disabled:opacity-50"
+            >
+              Safe restart
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {TERMINAL_ENV_BADGES.map((badge) => (
+              <span
+                key={badge}
+                className="rounded-full border border-primary-300 bg-primary-100 px-2 py-1 font-mono"
+              >
+                {badge}
+              </span>
+            ))}
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {TERMINAL_FAILURE_PARSERS.map((parser) => (
+              <div
+                key={parser.label}
+                className="rounded-lg border border-primary-300 bg-primary-100 px-3 py-2"
+              >
+                <div className="font-semibold text-primary-900">
+                  {parser.label}
+                </div>
+                <div className="mt-1 text-primary-600">{parser.pattern}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/workspace/files?path=/Users/tylerlyon/hermes-workspace"
+              className="rounded-md border border-primary-300 px-2 py-1 font-semibold"
+            >
+              Open path in Files
+            </a>
+            <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800">
+              Output bookmark parser: errors, URLs, and file paths.
+            </span>
+            <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800">
+              Truncated output warning appears when buffered stream exceeds 8KB.
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0 rounded-lg border border-primary-300 bg-primary-100 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-primary-900">
+              Mobile command palette
+            </span>
+            <span className="text-primary-500">
+              Backend recovery: reconnects PTY
+            </span>
+          </div>
+          <input
+            value={historySearch}
+            onChange={(event) => setHistorySearch(event.target.value)}
+            placeholder="Search command history"
+            className="mt-2 min-h-8 w-full rounded-md border border-primary-300 bg-primary-50 px-2 text-xs"
+          />
+          <div className="mt-2 grid gap-1">
+            {[...TERMINAL_WORKFLOW_PRESETS, ...WORKSPACE_QUICK_COMMANDS]
+              .filter((item) =>
+                `${item.label} ${item.command}`
+                  .toLowerCase()
+                  .includes(historySearch.toLowerCase()),
+              )
+              .slice(0, 6)
+              .map((item) => (
+                <button
+                  key={`${item.label}-${item.command}`}
+                  type="button"
+                  onClick={() => handleRunWorkspaceCommand(item.command)}
+                  disabled={!activeTab?.sessionId}
+                  className="min-h-8 rounded-md border border-primary-300 px-2 text-left font-mono text-[10px] disabled:opacity-50"
+                  title={item.command}
+                >
+                  <span className="font-semibold text-primary-900">
+                    {item.label}
+                  </span>{' '}
+                  {item.command}
+                </button>
+              ))}
+          </div>
+          <p className="mt-2 text-primary-600">
+            Privacy redaction runs before copy/export. Shell profile source:
+            Hermes TUI command from zsh workspace cwd.
+          </p>
+        </div>
       </div>
 
       {pasteNotice ? (

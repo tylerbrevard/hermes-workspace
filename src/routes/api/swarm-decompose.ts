@@ -39,7 +39,7 @@ Rules:
 - Keep rationale short (one sentence).
 `
 
-async function callOrchestrator(prompt: string, workers: WorkerHint[], model: string): Promise<{ assignments: RouteAssignment[]; unassigned: string[] }>{
+async function callOrchestrator(prompt: string, workers: Array<WorkerHint>, model: string): Promise<{ assignments: Array<RouteAssignment>; unassigned: Array<string> }>{
   const rosterText = workers
     .map((worker) => {
       const parts = [
@@ -102,7 +102,7 @@ async function callOrchestrator(prompt: string, workers: WorkerHint[], model: st
   const obj = parsed as { assignments?: unknown; unassigned?: unknown }
   const assignmentsRaw = Array.isArray(obj.assignments) ? obj.assignments : []
   const validIds = new Set(workers.map((worker) => worker.id))
-  const assignments: RouteAssignment[] = []
+  const assignments: Array<RouteAssignment> = []
   for (const entry of assignmentsRaw) {
     if (!entry || typeof entry !== 'object') continue
     const item = entry as Record<string, unknown>
@@ -114,7 +114,7 @@ async function callOrchestrator(prompt: string, workers: WorkerHint[], model: st
     assignments.push({ workerId, task, rationale })
   }
   const unassignedRaw = Array.isArray(obj.unassigned) ? obj.unassigned : []
-  const unassigned: string[] = []
+  const unassigned: Array<string> = []
   for (const entry of unassignedRaw) {
     if (typeof entry === 'string' && entry.trim()) unassigned.push(entry.trim())
   }
@@ -145,7 +145,7 @@ function scoreWorker(prompt: string, worker: WorkerHint): number {
   return score
 }
 
-function heuristicAssignments(prompt: string, workers: WorkerHint[]): { assignments: RouteAssignment[]; unassigned: string[] } {
+function heuristicAssignments(prompt: string, workers: Array<WorkerHint>): { assignments: Array<RouteAssignment>; unassigned: Array<string> } {
   const ranked = [...workers]
     .map((worker) => ({ worker, score: scoreWorker(prompt, worker) }))
     .sort((a, b) => b.score - a.score || a.worker.id.localeCompare(b.worker.id))
@@ -178,7 +178,7 @@ export const Route = createFileRoute('/api/swarm-decompose')({
         if (prompt.length > 16_000) return json({ error: 'prompt too long' }, { status: 400 })
 
         const workersRaw = Array.isArray(body.workers) ? body.workers : []
-        const workers: WorkerHint[] = []
+        const workers: Array<WorkerHint> = []
         for (const entry of workersRaw) {
           if (!entry || typeof entry !== 'object') continue
           const obj = entry as Record<string, unknown>

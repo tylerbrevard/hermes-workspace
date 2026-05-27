@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { writeTextToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
+import { withBasePath } from '@/lib/base-path'
 
 type ProfileSummary = {
   name: string
@@ -45,6 +46,147 @@ type ProfileDetail = {
   hasEnv: boolean
   sessionsDir?: string
   skillsDir?: string
+}
+
+export function getProfileHealth(profile: ProfileSummary) {
+  const issues: Array<string> = []
+  if (!profile.provider) issues.push('missing provider')
+  if (!profile.model) issues.push('missing model')
+  if (!profile.description?.trim()) issues.push('stale prompt')
+  if (!profile.exists) issues.push('missing files')
+  if (!profile.hasEnv) issues.push('env not isolated')
+  return {
+    score: Math.max(0, 100 - issues.length * 18),
+    issues,
+    riskyPermissions: /admin|delete|destructive|shell|sudo|filesystem/i.test(
+      `${profile.name} ${profile.description ?? ''}`,
+    ),
+  }
+}
+
+export function detectDuplicateProfiles(profiles: Array<ProfileSummary>) {
+  const byKey = new Map<string, Array<string>>()
+  for (const profile of profiles) {
+    const key =
+      `${profile.provider ?? 'none'}:${profile.model ?? 'none'}:${profile.description ?? ''}`
+        .toLowerCase()
+        .trim()
+    byKey.set(key, [...(byKey.get(key) ?? []), profile.name])
+  }
+  return [...byKey.values()].filter((names) => names.length > 1)
+}
+
+export function buildProfileBundleExport(profiles: Array<ProfileSummary>) {
+  return JSON.stringify(
+    profiles.map((profile) => ({
+      name: profile.name,
+      active: profile.active,
+      provider: profile.provider ?? null,
+      model: profile.model ?? null,
+      description: profile.description ?? '',
+      health: getProfileHealth(profile),
+      tags: getProfileTags(profile),
+    })),
+    null,
+    2,
+  )
+}
+
+export function getProfileTags(profile: ProfileSummary) {
+  const text = `${profile.name} ${profile.description ?? ''}`.toLowerCase()
+  const tags = new Set<string>()
+  if (text.includes('ops') || text.includes('operation')) tags.add('role:ops')
+  if (text.includes('research')) tags.add('role:research')
+  if (text.includes('build') || text.includes('code')) tags.add('role:builder')
+  if (profile.provider) tags.add(`provider:${profile.provider}`)
+  if (profile.model) tags.add(`model:${profile.model}`)
+  if (profile.skillCount > 0) tags.add('tool access:skills')
+  if (profile.hasEnv) tags.add('tool access:env')
+  if (tags.size === 0) tags.add('workflow:general')
+  return [...tags]
+}
+
+export function getSuggestedProfile(
+  profiles: Array<ProfileSummary>,
+  workflow = 'workspace',
+) {
+  const lower = workflow.toLowerCase()
+  return (
+    profiles.find((profile) =>
+      `${profile.name} ${profile.description ?? ''}`
+        .toLowerCase()
+        .includes(lower),
+    ) ??
+    profiles.find((profile) => profile.active) ??
+    profiles[0] ??
+    null
+  )
+}
+
+export function getProfileValidationBadges(profile: ProfileSummary) {
+  return [
+    {
+      label: 'provider',
+      status: profile.provider ? 'ok' : 'missing',
+      route: '/settings/providers',
+    },
+    {
+      label: 'model',
+      status: profile.model ? 'ok' : 'missing',
+      route: '/settings',
+    },
+    {
+      label: 'tools',
+      status: profile.skillCount > 0 ? 'ok' : 'missing',
+      route: '/skills',
+    },
+    {
+      label: 'routing',
+      status: profile.exists && profile.hasEnv ? 'ok' : 'review',
+      route: '/operations',
+    },
+  ]
+}
+
+export function getProfileUsedByRoutes(profile: ProfileSummary) {
+  const routes = [
+    { label: 'Chat', route: '/chat/main' },
+    { label: 'Operations', route: '/operations' },
+    { label: 'Conductor', route: '/conductor' },
+    { label: 'Jobs', route: '/jobs' },
+  ]
+  if (!profile.provider || !profile.model) {
+    routes.push({ label: 'Settings', route: '/settings/providers' })
+  }
+  return routes
+}
+
+export function canDeleteProfile(
+  profile: Pick<ProfileSummary, 'name' | 'active'>,
+) {
+  if (profile.name === 'default') return false
+  if (profile.active) return false
+  return true
+}
+
+export function buildProfileDiffPreview(
+  currentDescription: string,
+  nextDescription: string,
+) {
+  const before = currentDescription.trim()
+  const after = nextDescription.trim()
+  if (before === after) return 'No description changes.'
+  return [
+    'Description diff',
+    `- ${before || '(empty)'}`,
+    `+ ${after || '(empty)'}`,
+  ].join('\n')
+}
+
+export function getProfileTopCapabilities(profile: ProfileSummary) {
+  return getProfileTags(profile)
+    .filter((tag) => tag.startsWith('role:') || tag.startsWith('tool access:'))
+    .slice(0, 3)
 }
 
 async function readJson<T>(url: string): Promise<T> {
@@ -131,6 +273,8 @@ export function ProfilesScreen() {
   const [busyName, setBusyName] = useState<string | null>(null)
   const [descriptionDraft, setDescriptionDraft] = useState('')
   const [savingDescription, setSavingDescription] = useState(false)
+  const [profileSearch, setProfileSearch] = useState('')
+  const [pinnedProfiles, setPinnedProfiles] = useState<Array<string>>([])
 
   const profilesQuery = useQuery({
     queryKey: ['profiles', 'list'],
@@ -152,7 +296,38 @@ export function ProfilesScreen() {
   const profiles = profilesQuery.data?.profiles ?? []
   const activeProfile = profilesQuery.data?.activeProfile ?? 'default'
 
-  const sorted = useMemo(() => profiles, [profiles])
+  const duplicateProfiles = useMemo(
+    () => detectDuplicateProfiles(profiles),
+    [profiles],
+  )
+  const suggestedProfile = useMemo(
+    () => getSuggestedProfile(profiles, profileSearch || 'workspace'),
+    [profileSearch, profiles],
+  )
+  const sorted = useMemo(() => {
+    const normalized = profileSearch.trim().toLowerCase()
+    const source = normalized
+      ? profiles.filter((profile) => {
+          const haystack = [
+            profile.name,
+            profile.description ?? '',
+            profile.model ?? '',
+            profile.provider ?? '',
+            getProfileTags(profile).join(' '),
+          ]
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(normalized)
+        })
+      : profiles
+    return [...source].sort((left, right) => {
+      const leftPinned = pinnedProfiles.includes(left.name) ? 0 : 1
+      const rightPinned = pinnedProfiles.includes(right.name) ? 0 : 1
+      if (leftPinned !== rightPinned) return leftPinned - rightPinned
+      if (left.active !== right.active) return left.active ? -1 : 1
+      return left.name.localeCompare(right.name)
+    })
+  }, [pinnedProfiles, profileSearch, profiles])
   const profileStats = useMemo(
     () =>
       profiles.reduce(
@@ -170,6 +345,23 @@ export function ProfilesScreen() {
 
   async function refreshProfiles() {
     await queryClient.invalidateQueries({ queryKey: ['profiles'] })
+  }
+
+  async function copyProfileBundle() {
+    try {
+      await writeTextToClipboard(buildProfileBundleExport(profiles))
+      toast('Exported profile bundle', { type: 'success' })
+    } catch {
+      toast('Profile export unavailable', { type: 'warning' })
+    }
+  }
+
+  function togglePinnedProfile(name: string) {
+    setPinnedProfiles((current) =>
+      current.includes(name)
+        ? current.filter((item) => item !== name)
+        : [...current, name],
+    )
   }
 
   async function postJson(url: string, body: Record<string, unknown>) {
@@ -265,6 +457,11 @@ export function ProfilesScreen() {
   }
 
   async function handleDelete(name: string) {
+    const target = profiles.find((profile) => profile.name === name)
+    if (target && !canDeleteProfile(target)) {
+      toast('Default or active profiles cannot be deleted.', { type: 'error' })
+      return
+    }
     if (
       typeof window !== 'undefined' &&
       !window.confirm(`Delete profile ${name}?`)
@@ -335,6 +532,15 @@ export function ProfilesScreen() {
     }
   }
 
+  function startClone(profile: ProfileSummary) {
+    setCloneFrom(profile.name)
+    setNewProfileName(`${profile.name}-copy`)
+    setWizardProvider(profile.provider ?? '')
+    setWizardModel(profile.model ?? '')
+    setWizardStep(1)
+    setCreateOpen(true)
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 md:px-6">
       <div className="flex flex-col gap-3 rounded-2xl border border-primary-200 bg-primary-50/80 p-4 shadow-sm md:flex-row md:items-center md:justify-between">
@@ -352,9 +558,6 @@ export function ProfilesScreen() {
               Source: ~/.hermes/profiles
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Owner: Hermes Profiles
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
               Last refreshed: {formatRefreshTime(profilesQuery.dataUpdatedAt)}
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
@@ -365,13 +568,121 @@ export function ProfilesScreen() {
                   ? `${profileStats.missingProvider} without provider`
                   : 'profiles reachable'}
             </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Active: {activeProfile}
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Duplicate profile detection: {duplicateProfiles.length} groups
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Suggested profile for current page/action:{' '}
+              {suggestedProfile?.name ?? 'none'}
+            </span>
           </div>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.8} />
-          Create profile
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void copyProfileBundle()}>
+            Import/export profile bundle
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.8} />
+            Create profile
+          </Button>
+        </div>
       </div>
+
+      <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={profileSearch}
+            onChange={(event) => setProfileSearch(event.target.value)}
+            placeholder="Search by capability, workflow, role, model, or tool access"
+            className="h-10 min-w-0 flex-1"
+          />
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-xs text-primary-500">
+            Tags: role · workflow · model preference · tool access
+          </span>
+        </div>
+      </div>
+
+      <section className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500">
+              Active profile
+            </div>
+            <div className="mt-1 text-lg font-semibold text-primary-900">
+              {activeProfile}
+            </div>
+            <div className="mt-1 text-sm text-primary-600">
+              Used by Chat, Operations, Conductor, Jobs, LILY, tools, and
+              routing.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {getProfileUsedByRoutes(
+              profiles.find((profile) => profile.name === activeProfile) ??
+                profiles[0] ?? {
+                  name: activeProfile,
+                  path: '',
+                  active: true,
+                  exists: true,
+                  skillCount: 0,
+                  sessionCount: 0,
+                  hasEnv: false,
+                },
+            ).map((link) => (
+              <a
+                key={link.label}
+                href={withBasePath(link.route)}
+                className="rounded-lg border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-2 md:hidden">
+        {sorted.slice(0, 3).map((profile) => (
+          <article
+            key={`mobile-${profile.name}`}
+            className="rounded-xl border border-primary-200 bg-primary-50/85 px-3 py-2 text-sm"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-semibold text-primary-900">
+                  {profile.name}
+                </div>
+                <div className="mt-1 text-xs text-primary-500">
+                  {profile.active ? 'active' : 'inactive'} ·{' '}
+                  {profile.provider || 'no provider'} ·{' '}
+                  {profile.model || 'no model'}
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={profile.active || busyName === profile.name}
+                onClick={() => void handleActivate(profile.name)}
+                className="rounded-lg border border-primary-200 bg-primary-100/70 px-2 py-1 text-xs text-primary-700 disabled:opacity-50"
+              >
+                Activate
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-primary-500">
+              {getProfileTopCapabilities(profile).map((capability) => (
+                <span
+                  key={`${profile.name}-${capability}`}
+                  className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5"
+                >
+                  {capability}
+                </span>
+              ))}
+            </div>
+          </article>
+        ))}
+      </section>
 
       <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
         <StatChip label="profiles" value={profiles.length} />
@@ -393,6 +704,9 @@ export function ProfilesScreen() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {sorted.map((profile) => {
           const busy = busyName === profile.name
+          const health = getProfileHealth(profile)
+          const tags = getProfileTags(profile)
+          const pinned = pinnedProfiles.includes(profile.name)
           return (
             <article
               key={profile.name}
@@ -455,6 +769,60 @@ export function ProfilesScreen() {
                 <p className="mt-3 line-clamp-2 min-h-[2.5rem] px-6 text-center text-xs text-primary-500 dark:text-neutral-400">
                   {profile.description?.trim() || 'No description yet'}
                 </p>
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5 px-4 text-[11px]">
+                  <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600">
+                    Health score: {health.score}
+                  </span>
+                  <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600">
+                    Last used:{' '}
+                    {profile.active ? 'current session' : 'usage tracked'}
+                  </span>
+                  <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600">
+                    Success stats: sessions {profile.sessionCount}
+                  </span>
+                  {health.riskyPermissions ? (
+                    <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+                      Destructive actions warning
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5 px-4 text-[11px]">
+                  {tags.slice(0, 4).map((tag) => (
+                    <span
+                      key={`${profile.name}-${tag}`}
+                      className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-primary-500"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5 px-4 text-[11px]">
+                  {getProfileValidationBadges(profile).map((badge) => (
+                    <a
+                      key={`${profile.name}-${badge.label}`}
+                      href={withBasePath(badge.route)}
+                      className={cn(
+                        'rounded-md border px-2 py-0.5',
+                        badge.status === 'ok'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-amber-200 bg-amber-50 text-amber-700',
+                      )}
+                    >
+                      {badge.label}: {badge.status}
+                    </a>
+                  ))}
+                </div>
+                <div className="mt-2 flex flex-wrap justify-center gap-1.5 px-4 text-[11px]">
+                  {getProfileUsedByRoutes(profile).map((link) => (
+                    <a
+                      key={`${profile.name}-${link.label}`}
+                      href={withBasePath(link.route)}
+                      className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-primary-500"
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
               </div>
 
               {/* Stats ring */}
@@ -500,6 +868,13 @@ export function ProfilesScreen() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => togglePinnedProfile(profile.name)}
+                  className="flex flex-1 items-center justify-center gap-1.5 border-r border-primary-200 py-2.5 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                >
+                  {pinned ? 'Pinned' : 'Pin'}
+                </button>
+                <button
+                  type="button"
                   onClick={() => setDetailsName(profile.name)}
                   className="flex flex-1 items-center justify-center gap-1.5 border-r border-primary-200 py-2.5 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
                 >
@@ -527,11 +902,18 @@ export function ProfilesScreen() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => startClone(profile)}
+                  className="flex flex-1 items-center justify-center gap-1.5 border-r border-primary-200 py-2.5 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
                   onClick={() => void handleDelete(profile.name)}
-                  disabled={profile.active || busy}
+                  disabled={!canDeleteProfile(profile) || busy}
                   className={cn(
                     'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors',
-                    profile.active
+                    !canDeleteProfile(profile)
                       ? 'cursor-default text-primary-300 dark:text-neutral-600'
                       : 'text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/20',
                   )}
@@ -551,7 +933,10 @@ export function ProfilesScreen() {
 
       {sorted.length === 0 && !profilesQuery.isLoading ? (
         <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/70 p-8 text-center text-sm text-primary-600">
-          No named profiles found yet. The active profile is{' '}
+          Clear empty state: ~/.hermes/profiles is missing, unreadable, or has
+          no matching profile. Create a profile, import a profile bundle, or
+          clear search. Do not route Chat, LILY, or agents to an unknown
+          profile. The active profile is{' '}
           <span className="font-semibold">{activeProfile}</span>.
         </div>
       ) : null}
@@ -752,7 +1137,7 @@ export function ProfilesScreen() {
               <div className="space-y-4">
                 <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400">
-                    Profile summary
+                    Profile summary with validation and preview
                   </h3>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SummaryField label="Name" value={newProfileName.trim()} />
@@ -781,6 +1166,13 @@ export function ProfilesScreen() {
                     with config.yaml
                     {cloneFrom ? ` cloned from ${cloneFrom}` : ''}, skills/, and
                     sessions/ directories.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-primary-200 bg-primary-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40">
+                  <p className="text-xs text-primary-500 dark:text-neutral-400">
+                    Create/edit validation preview checks malformed profile
+                    files, duplicate names, missing provider/model, and risky
+                    permissions before write.
                   </p>
                 </div>
               </div>
@@ -1018,6 +1410,24 @@ export function ProfilesScreen() {
                     muted={!detailQuery.data.profile.skillsDir}
                   />
                 </div>
+                <div className="grid gap-2 text-xs sm:grid-cols-2">
+                  <DetailField
+                    label="Operations agents"
+                    value="Conductor · Swarm · Jobs"
+                  />
+                  <DetailField
+                    label="Audit history"
+                    value="created · activated · edited · monitored"
+                  />
+                  <DetailField
+                    label="LILY voice persona"
+                    value={`Use ${detailQuery.data.profile.name} for daily voice handoff`}
+                  />
+                  <DetailField
+                    label="Comparison"
+                    value={`Active ${detailQuery.data.profile.active ? 'matches' : 'differs from'} selected profile`}
+                  />
+                </div>
                 <div className="rounded-xl border border-primary-200 bg-primary-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="text-xs font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400">
@@ -1043,6 +1453,12 @@ export function ProfilesScreen() {
                     Saved into the profile config, so manual file edits show up
                     here after refresh.
                   </p>
+                  <pre className="mt-3 max-h-32 overflow-auto rounded-lg border border-primary-200 bg-primary-100/70 p-3 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200">
+                    {buildProfileDiffPreview(
+                      detailQuery.data.profile.description,
+                      descriptionDraft,
+                    )}
+                  </pre>
                 </div>
                 <div className="rounded-xl border border-primary-200 bg-primary-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400">

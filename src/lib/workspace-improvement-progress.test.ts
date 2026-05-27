@@ -36,7 +36,7 @@ describe('workspace improvement progress helpers', () => {
     expect(page?.id).toBe('dashboard')
 
     const completed: CompletedMap = {
-      [improvementItemKey('dashboard', 5)]: true,
+      [improvementItemKey('dashboard', 6)]: true,
     }
     const result = filterWorkspaceImprovements({
       completed,
@@ -50,7 +50,7 @@ describe('workspace improvement progress helpers', () => {
     expect(result).toHaveLength(1)
     expect(result[0].items).toHaveLength(1)
     expect(result[0].items[0]).toMatchObject({
-      item: 'Mobile compact cards',
+      item: 'Add a "today only" mobile digest that hides lower-priority analytics until expanded.',
       category: 'Mobile',
       completed: true,
     })
@@ -58,12 +58,12 @@ describe('workspace improvement progress helpers', () => {
 
   it('exports a markdown execution plan with completion state and categories', () => {
     const markdown = serializeImprovementPlan(
-      { [improvementItemKey('75-tracker', 0)]: true },
+      { [improvementItemKey('75-tracker', 1)]: true },
       'markdown',
     )
 
     expect(markdown).toContain('## 75 Hard/Soft (/75-tracker)')
-    expect(markdown).toContain('1. [x]')
+    expect(markdown).toContain('2. [x]')
     expect(markdown).toContain('(Mobile)')
   })
 

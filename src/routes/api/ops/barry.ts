@@ -15,7 +15,7 @@ type BarryMeeting = {
   date: string
   status: BarryMeetingStatus
   agenda: Array<{ text: string; discussed: boolean }>
-  winsDiscussed: string[]
+  winsDiscussed: Array<string>
   actionItems: Array<{ text: string; owner: string; done: boolean }>
   notes: string
 }

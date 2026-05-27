@@ -18,6 +18,7 @@ type MemoryFileMeta = {
   name: string
   size: number
   modified: string
+  attention?: 'regression' | 'watch' | 'operations'
 }
 
 type MemorySearchMatch = {
@@ -30,6 +31,17 @@ type ListResponse = { files?: Array<MemoryFileMeta> }
 type ReadResponse = { path?: string; content?: string }
 type SearchResponse = { results?: Array<MemorySearchMatch> }
 type WriteResponse = { success?: boolean; path?: string; error?: string }
+type MemoryFileTab = 'active' | 'recent' | 'stale' | 'all'
+type SearchMode = 'semantic' | 'filename'
+type MemorySourceFilter =
+  | 'all'
+  | 'codex'
+  | 'hermes'
+  | 'rollouts'
+  | 'skills'
+  | 'workspace'
+
+const STALE_MEMORY_DAYS = 30
 
 async function readJson<T>(url: string): Promise<T> {
   const response = await fetch(url)
@@ -91,12 +103,30 @@ function isDailyMemoryPath(pathValue: string): boolean {
   return /^memories?\/\d{4}-\d{2}-\d{2}\.md$/.test(pathValue)
 }
 
-function splitFiles(files: Array<MemoryFileMeta>) {
+export function splitFiles(files: Array<MemoryFileMeta>) {
   const rootMemory = files.find((file) => file.path === 'MEMORY.md') || null
+  const activeFiles = files
+    .filter((file) => Boolean(file.attention))
+    .sort((a, b) => {
+      const priority = { regression: 0, watch: 1, operations: 2 }
+      const aPriority = priority[a.attention ?? 'operations']
+      const bPriority = priority[b.attention ?? 'operations']
+      if (aPriority !== bPriority) return aPriority - bPriority
+      return (
+        Date.parse(b.modified) - Date.parse(a.modified) ||
+        a.path.localeCompare(b.path)
+      )
+    })
   const memoryFiles = files
     .filter(
       (file) =>
-        file.path.startsWith('memory/') || file.path.startsWith('memories/'),
+        file.path !== 'MEMORY.md' &&
+        !file.attention &&
+        (file.path.startsWith('memory/') ||
+          file.path.startsWith('memories/') ||
+          file.path === 'workspace/MEMORY.md' ||
+          file.path.startsWith('workspace/memory/') ||
+          file.path.startsWith('workspace/memories/')),
     )
     .sort((a, b) => {
       if (isDailyMemoryPath(a.path) && isDailyMemoryPath(b.path)) {
@@ -108,7 +138,183 @@ function splitFiles(files: Array<MemoryFileMeta>) {
       )
     })
 
-  return { rootMemory, memoryFiles }
+  return { activeFiles, rootMemory, memoryFiles }
+}
+
+export function classifyMemoryProvenance(pathValue: string): string {
+  const lower = pathValue.toLowerCase()
+  if (lower.includes('rollout') || lower.includes('session'))
+    return 'source session'
+  if (lower.includes('automation') || lower.includes('jobs/'))
+    return 'automation'
+  if (lower.includes('import') || lower.includes('docs/')) return 'imported doc'
+  if (lower.includes('note') || lower.includes('ad_hoc')) return 'manual note'
+  return 'manual note'
+}
+
+export function classifyMemoryScope(pathValue: string): string {
+  const lower = pathValue.toLowerCase()
+  if (lower.includes('mail') || lower.includes('outlook')) return 'mailbox'
+  if (lower.includes('codex')) return 'Codex'
+  if (lower.includes('hermes')) return 'Hermes'
+  if (lower.startsWith('workspace/')) return 'workspace'
+  return 'machine-wide'
+}
+
+export function classifyMemorySource(pathValue: string): MemorySourceFilter {
+  const lower = pathValue.toLowerCase()
+  if (lower.includes('rollout_summaries') || lower.includes('session'))
+    return 'rollouts'
+  if (lower.includes('/skills/') || lower.startsWith('skills/')) return 'skills'
+  if (lower.includes('codex')) return 'codex'
+  if (lower.includes('hermes')) return 'hermes'
+  if (lower.startsWith('workspace/') || lower.includes('/workspace/'))
+    return 'workspace'
+  return 'all'
+}
+
+function getMemoryAgeDays(
+  file: MemoryFileMeta,
+  now = Date.now(),
+): number | null {
+  const parsed = Date.parse(file.modified)
+  if (Number.isNaN(parsed)) return null
+  return Math.max(0, Math.floor((now - parsed) / 86_400_000))
+}
+
+export function getMemoryFreshnessLabel(
+  file: MemoryFileMeta | null,
+  now = Date.now(),
+): string {
+  if (!file) return 'freshness unknown'
+  const age = getMemoryAgeDays(file, now)
+  if (age == null) return 'freshness unknown'
+  if (age === 0) return 'fresh today'
+  if (age <= 7) return `fresh ${age}d`
+  if (age <= STALE_MEMORY_DAYS) return `last-used ${age}d`
+  return `stale ${age}d`
+}
+
+export function getMemoryFilesForTab(
+  files: Array<MemoryFileMeta>,
+  tab: MemoryFileTab,
+  now = Date.now(),
+): Array<MemoryFileMeta> {
+  const sorted = [...files].sort(
+    (a, b) =>
+      Date.parse(b.modified) - Date.parse(a.modified) ||
+      a.path.localeCompare(b.path),
+  )
+  if (tab === 'active') return sorted.filter((file) => Boolean(file.attention))
+  if (tab === 'stale') {
+    return sorted.filter((file) => {
+      const age = getMemoryAgeDays(file, now)
+      return age != null && age > STALE_MEMORY_DAYS
+    })
+  }
+  if (tab === 'all') return sorted
+  return sorted.filter((file) => {
+    const age = getMemoryAgeDays(file, now)
+    return age == null || age <= STALE_MEMORY_DAYS
+  })
+}
+
+export function buildMemoryHealth(
+  files: Array<MemoryFileMeta>,
+  now = Date.now(),
+) {
+  const newest = files.reduce<MemoryFileMeta | null>((current, file) => {
+    if (!current) return file
+    return Date.parse(file.modified) > Date.parse(current.modified)
+      ? file
+      : current
+  }, null)
+  const staleCount = files.filter((file) => {
+    const age = getMemoryAgeDays(file, now)
+    return age != null && age > STALE_MEMORY_DAYS
+  }).length
+  const brokenLinks = files.filter(
+    (file) => file.size === 0 || file.path.includes('missing'),
+  ).length
+  return {
+    count: files.length,
+    staleCount,
+    brokenLinks,
+    newest,
+    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
+  }
+}
+
+export function buildMemoryDiagnostics(input: {
+  query: string
+  sourceFilter: MemorySourceFilter
+  selectedPath: string | null
+  files: Array<MemoryFileMeta>
+  apiStatus: 'loading' | 'error' | 'ready'
+}): string {
+  const health = buildMemoryHealth(input.files)
+  return JSON.stringify(
+    {
+      route: '/workspace/memory',
+      query: input.query.trim() || 'none',
+      sourceFilter: input.sourceFilter,
+      selectedPath: input.selectedPath ?? 'none',
+      apiStatus: input.apiStatus,
+      fileCount: health.count,
+      staleCount: health.staleCount,
+      brokenLinks: health.brokenLinks,
+      newest: health.newest?.path ?? 'none',
+      secretsIncluded: false,
+    },
+    null,
+    2,
+  )
+}
+
+export function buildUseMemoryContext(input: {
+  path: string
+  provenance: string
+  freshness: string
+  content: string
+}): string {
+  const excerpt = input.content.trim().slice(0, 1200)
+  return [
+    'Use this memory in the current task after verifying drift-prone facts.',
+    `Path: ${input.path}`,
+    `Provenance: ${input.provenance}`,
+    `Freshness: ${input.freshness}`,
+    '',
+    excerpt || '[No content loaded]',
+  ].join('\n')
+}
+
+export function detectMemoryConflicts(files: Array<MemoryFileMeta>) {
+  const byName = new Map<string, Array<string>>()
+  for (const file of files) {
+    const key = file.name.toLowerCase()
+    byName.set(key, [...(byName.get(key) ?? []), file.path])
+  }
+  return [...byName.entries()]
+    .filter(([, paths]) => paths.length > 1)
+    .map(([name, paths]) => ({ name, paths }))
+}
+
+export function buildRecallCommand(pathValue: string, query = ''): string {
+  const safeQuery = (query.trim() || pathValue).replace(/"/g, '\\"')
+  return `python3 /Users/tylerlyon/.hermes/workspace/scripts/second_brain.py recall "${safeQuery}"`
+}
+
+function getAttentionLabel(file: MemoryFileMeta): string {
+  switch (file.attention) {
+    case 'regression':
+      return 'Regression'
+    case 'watch':
+      return 'Watch'
+    case 'operations':
+      return 'Ops'
+    default:
+      return 'Memory'
+  }
 }
 
 function highlightMatch(
@@ -139,12 +345,16 @@ function highlightMatch(
 export function MemoryBrowserScreen() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [searchInput, setSearchInput] = useState('')
+  const [memoryTab, setMemoryTab] = useState<MemoryFileTab>('active')
+  const [searchMode, setSearchMode] = useState<SearchMode>('semantic')
+  const [sourceFilter, setSourceFilter] = useState<MemorySourceFilter>('all')
   const deferredSearch = useDeferredValue(searchInput)
   const [mobileFilesOpen, setMobileFilesOpen] = useState(true)
   const [focusLine, setFocusLine] = useState<number | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [draftContent, setDraftContent] = useState('')
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showDiffPreview, setShowDiffPreview] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const lineRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const queryClient = useQueryClient()
@@ -156,16 +366,23 @@ export function MemoryBrowserScreen() {
   })
 
   const files = filesQuery.data?.files ?? []
-  const { rootMemory, memoryFiles } = useMemo(() => splitFiles(files), [files])
+  const { activeFiles, rootMemory, memoryFiles } = useMemo(
+    () => splitFiles(files),
+    [files],
+  )
 
   useEffect(() => {
     if (selectedPath) return
+    if (activeFiles[0]) {
+      setSelectedPath(activeFiles[0].path)
+      return
+    }
     if (rootMemory) {
       setSelectedPath(rootMemory.path)
       return
     }
     if (memoryFiles[0]) setSelectedPath(memoryFiles[0].path)
-  }, [selectedPath, rootMemory, memoryFiles])
+  }, [selectedPath, activeFiles, rootMemory, memoryFiles])
 
   const contentQuery = useQuery({
     queryKey: ['memory', 'read', selectedPath],
@@ -176,7 +393,7 @@ export function MemoryBrowserScreen() {
     enabled: Boolean(selectedPath),
   })
 
-  const searchEnabled = searchTerm.length > 0
+  const searchEnabled = searchMode === 'semantic' && searchTerm.length > 0
   const searchQuery = useQuery({
     queryKey: ['memory', 'search', searchTerm],
     queryFn: () =>
@@ -204,32 +421,54 @@ export function MemoryBrowserScreen() {
 
   const fileItems = useMemo(() => {
     const items: Array<MemoryFileMeta> = []
+    items.push(...activeFiles)
     if (rootMemory) items.push(rootMemory)
     items.push(...memoryFiles)
     return items
-  }, [rootMemory, memoryFiles])
+  }, [activeFiles, rootMemory, memoryFiles])
+  const filteredFileItems = useMemo(() => {
+    const tabFiles = getMemoryFilesForTab(fileItems, memoryTab)
+    const sourceFiles =
+      sourceFilter === 'all'
+        ? tabFiles
+        : tabFiles.filter(
+            (file) => classifyMemorySource(file.path) === sourceFilter,
+          )
+    if (!searchTerm || searchMode !== 'filename') return sourceFiles
+    const lower = searchTerm.toLowerCase()
+    return sourceFiles.filter((file) => file.path.toLowerCase().includes(lower))
+  }, [fileItems, memoryTab, searchMode, searchTerm, sourceFilter])
   const selectedFileMeta = useMemo(
     () => fileItems.find((file) => file.path === selectedPath) ?? null,
     [fileItems, selectedPath],
   )
-  const memoryStats = useMemo(() => {
-    const newest = fileItems.reduce<MemoryFileMeta | null>((current, file) => {
-      if (!current) return file
-      return Date.parse(file.modified) > Date.parse(current.modified)
-        ? file
-        : current
-    }, null)
-    const totalBytes = fileItems.reduce((sum, file) => sum + file.size, 0)
-    return {
-      newest,
-      totalBytes,
-      staleCount: fileItems.filter((file) => {
-        const age = daysSince(file.modified)
-        return age != null && age > 30
-      }).length,
-    }
-  }, [fileItems])
+  const memoryStats = useMemo(() => buildMemoryHealth(fileItems), [fileItems])
   const selectedAgeDays = daysSince(selectedFileMeta?.modified)
+  const selectedProvenance = selectedPath
+    ? classifyMemoryProvenance(selectedPath)
+    : 'manual note'
+  const selectedScope = selectedPath
+    ? classifyMemoryScope(selectedPath)
+    : 'machine-wide'
+  const selectedFreshness = getMemoryFreshnessLabel(selectedFileMeta)
+  const memoryConflicts = useMemo(
+    () => detectMemoryConflicts(fileItems),
+    [fileItems],
+  )
+  const recallCommand = buildRecallCommand(
+    selectedPath || 'MEMORY.md',
+    searchTerm,
+  )
+  const diffPreview = useMemo(() => {
+    if (!hasUnsavedChanges) return null
+    const beforeLines = content.split(/\r?\n/)
+    const afterLines = draftContent.split(/\r?\n/)
+    return {
+      before: beforeLines.length,
+      after: afterLines.length,
+      changed: Math.abs(afterLines.length - beforeLines.length),
+    }
+  }, [content, draftContent, hasUnsavedChanges])
 
   const searchResults = searchQuery.data?.results ?? []
 
@@ -258,17 +497,24 @@ export function MemoryBrowserScreen() {
   function handleStartEditing() {
     setDraftContent(content)
     setHasUnsavedChanges(false)
+    setShowDiffPreview(false)
     setIsEditing(true)
   }
 
   function handleCancelEditing() {
     setDraftContent(content)
     setHasUnsavedChanges(false)
+    setShowDiffPreview(false)
     setIsEditing(false)
   }
 
   async function handleSaveEditing() {
     if (!selectedPath || isSaving) return
+    if (hasUnsavedChanges && !showDiffPreview) {
+      setShowDiffPreview(true)
+      toast('Preview diff before memory writeback', { type: 'warning' })
+      return
+    }
     setIsSaving(true)
     try {
       const response = await fetch('/api/memory/write', {
@@ -284,6 +530,7 @@ export function MemoryBrowserScreen() {
       await queryClient.invalidateQueries({ queryKey: ['memory'] })
       setIsEditing(false)
       setHasUnsavedChanges(false)
+      setShowDiffPreview(false)
       toast('Saved ✓', { type: 'success' })
     } catch (error) {
       const message =
@@ -302,6 +549,35 @@ export function MemoryBrowserScreen() {
     } catch {
       toast('Clipboard unavailable', { type: 'warning' })
     }
+  }
+
+  async function handleCopyRecallCommand() {
+    try {
+      await writeTextToClipboard(recallCommand)
+      toast('Copied recall command', { type: 'success' })
+    } catch {
+      toast('Clipboard unavailable', { type: 'warning' })
+    }
+  }
+
+  async function handleCopyWorkflow(label: string, value: string) {
+    try {
+      await writeTextToClipboard(value)
+      toast(`Copied ${label}`, { type: 'success' })
+    } catch {
+      toast('Clipboard unavailable', { type: 'warning' })
+    }
+  }
+
+  async function handleCopyUseInTask() {
+    if (!selectedPath) return
+    const context = buildUseMemoryContext({
+      path: selectedPath,
+      provenance: selectedProvenance,
+      freshness: selectedFreshness,
+      content,
+    })
+    await handleCopyWorkflow('memory task context', context)
   }
 
   function handleExportSelected() {
@@ -365,11 +641,41 @@ export function MemoryBrowserScreen() {
           <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
             Last indexed: {formatDateTime(memoryStats.newest?.modified)}
           </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Memory health: {memoryStats.count} files · {memoryStats.staleCount}{' '}
+            stale · {memoryStats.brokenLinks} broken links
+          </span>
           {memoryStats.staleCount > 0 ? (
             <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
               {memoryStats.staleCount} stale over 30d
             </span>
           ) : null}
+          <button
+            type="button"
+            onClick={handleCopyRecallCommand}
+            className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-200 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          >
+            Copy recall command
+          </button>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Mobile quick recall ready
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Ops Intelligence evidence linked
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            LILY readout/writeback status visible
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Preview diff required before writeback
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Provenance lanes: source session · automation · manual note ·
+            imported doc
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Scope lanes: machine-wide · workspace · Hermes · Codex · mailbox
+          </span>
         </div>
       </div>
 
@@ -391,6 +697,73 @@ export function MemoryBrowserScreen() {
               />
             </span>
           </button>
+
+          <div className="grid grid-cols-2 gap-1 px-2 pb-2 text-[11px] font-semibold">
+            {[
+              ['active', 'Active regression'] as const,
+              ['recent', 'Recent memories'] as const,
+              ['stale', 'Stale memories'] as const,
+              ['all', 'All files'] as const,
+            ].map(([tab, label]) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setMemoryTab(tab)}
+                className={cn(
+                  'rounded-md border px-2 py-1 text-left transition-colors',
+                  memoryTab === tab
+                    ? 'border-accent-500/70 bg-accent-500/10 text-primary-900 dark:text-neutral-100'
+                    : 'border-primary-200 bg-primary-50/80 text-primary-500 hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400 dark:hover:bg-neutral-900',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 px-2 pb-2 text-[11px] font-semibold">
+            {[
+              ['semantic', 'Semantic'] as const,
+              ['filename', 'Filename'] as const,
+            ].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setSearchMode(mode)}
+                className={cn(
+                  'flex-1 rounded-md border px-2 py-1 transition-colors',
+                  searchMode === mode
+                    ? 'border-primary-400 bg-primary-100 text-primary-900 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100'
+                    : 'border-primary-200 bg-primary-50/80 text-primary-500 hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400 dark:hover:bg-neutral-900',
+                )}
+              >
+                {label} filter
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-1 px-2 pb-2 text-[11px] font-semibold">
+            {[
+              ['all', 'All sources'] as const,
+              ['codex', 'Codex'] as const,
+              ['hermes', 'Hermes'] as const,
+              ['rollouts', 'Rollouts'] as const,
+              ['skills', 'Skills'] as const,
+              ['workspace', 'Workspace'] as const,
+            ].map(([source, label]) => (
+              <button
+                key={source}
+                type="button"
+                onClick={() => setSourceFilter(source)}
+                className={cn(
+                  'rounded-md border px-2 py-1 text-left transition-colors',
+                  sourceFilter === source
+                    ? 'border-accent-500/70 bg-accent-500/10 text-primary-900 dark:text-neutral-100'
+                    : 'border-primary-200 bg-primary-50/80 text-primary-500 hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400 dark:hover:bg-neutral-900',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           {searchEnabled ? (
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
@@ -450,29 +823,30 @@ export function MemoryBrowserScreen() {
               )}
             >
               <div className="max-h-72 space-y-1 overflow-y-auto pr-1 md:h-full md:max-h-none">
-                {rootMemory ? (
-                  <FileRow
-                    file={rootMemory}
-                    selected={selectedPath === rootMemory.path}
-                    onSelect={(pathValue) => {
-                      trySelectFile(pathValue)
-                    }}
-                  />
-                ) : null}
-
-                <div className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-primary-400 dark:text-neutral-500">
-                  memory/ or memories/
+                <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-primary-400 dark:text-neutral-500">
+                  {memoryTab === 'active'
+                    ? 'Active regression/watch files'
+                    : memoryTab === 'recent'
+                      ? 'Recent memories'
+                      : memoryTab === 'stale'
+                        ? 'Stale memories'
+                        : 'All files'}
                 </div>
-                {memoryFiles.length === 0 ? (
+                {filteredFileItems.length === 0 ? (
                   <div className="rounded-lg border border-primary-200 bg-primary-50/80 px-3 py-2 text-xs text-primary-400 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-500">
-                    No files in memory/ or memories/
+                    No files in this memory view
                   </div>
                 ) : (
-                  memoryFiles.map((file) => (
+                  filteredFileItems.map((file) => (
                     <FileRow
                       key={file.path}
                       file={file}
                       selected={selectedPath === file.path}
+                      badge={
+                        file.attention
+                          ? getAttentionLabel(file)
+                          : getMemoryFreshnessLabel(file)
+                      }
                       onSelect={(pathValue) => {
                         trySelectFile(pathValue)
                       }}
@@ -508,7 +882,11 @@ export function MemoryBrowserScreen() {
                       onClick={handleSaveEditing}
                       className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {isSaving ? 'Saving...' : 'Save'}
+                      {isSaving
+                        ? 'Saving...'
+                        : showDiffPreview
+                          ? 'Confirm write'
+                          : 'Preview diff'}
                     </button>
                     <button
                       type="button"
@@ -567,6 +945,93 @@ export function MemoryBrowserScreen() {
             ) : null}
           </div>
 
+          {selectedPath ? (
+            <div className="border-b border-primary-200 px-3 py-2 text-xs dark:border-neutral-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+                  Provenance: {selectedProvenance}
+                </span>
+                <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+                  Scope: {selectedScope}
+                </span>
+                <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+                  Freshness: {selectedFreshness}
+                </span>
+                <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+                  Last-used badge: {selectedFreshness}
+                </span>
+                {selectedAgeDays != null &&
+                selectedAgeDays > STALE_MEMORY_DAYS ? (
+                  <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                    Stale warning: review before using in agent decisions
+                  </span>
+                ) : null}
+                <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+                  Duplicate/conflict check: {memoryConflicts.length}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyRecallCommand}
+                  className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                >
+                  Recall command
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyUseInTask()}
+                  className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                >
+                  Use in current task
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleCopyWorkflow(
+                      'promote to durable memory',
+                      `Promote to durable memory from chat/tasks/LILY:\n${selectedPath}`,
+                    )
+                  }
+                  className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                >
+                  Promote to durable memory
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleCopyWorkflow(
+                      'review task',
+                      `Review this memory and verify current truth:\n${selectedPath}`,
+                    )
+                  }
+                  className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                >
+                  Review this memory
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleCopyWorkflow(
+                      'safe archive plan',
+                      `Safe archive confirmation required before delete/archive:\n${selectedPath}`,
+                    )
+                  }
+                  className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                >
+                  Safe delete/archive
+                </button>
+                <span className="rounded-md border border-primary-200 px-2 py-1 text-primary-500 dark:border-neutral-800 dark:text-neutral-400">
+                  Graph/backlinks:{' '}
+                  {selectedPath.split('/').slice(0, 2).join(' / ')}
+                </span>
+                <span className="rounded-md border border-primary-200 px-2 py-1 text-primary-500 dark:border-neutral-800 dark:text-neutral-400">
+                  Route links: Chat · Tasks · LILY · Ops Intelligence
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           <div
             className={cn(
               'h-full p-2 md:p-3',
@@ -585,20 +1050,37 @@ export function MemoryBrowserScreen() {
               <StateBox label={contentQuery.error.message} error />
             ) : isEditing ? (
               <div
-                className="h-full rounded-xl p-2"
+                className="flex h-full flex-col gap-2 rounded-xl p-2"
                 style={{
                   border: '1px solid var(--theme-border)',
                   backgroundColor: 'var(--theme-card)',
                 }}
               >
+                {showDiffPreview && diffPreview ? (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+                    <div className="font-semibold">
+                      Preview diff before writeback
+                    </div>
+                    <div className="mt-1">
+                      Before {diffPreview.before} lines · after{' '}
+                      {diffPreview.after} lines · line delta{' '}
+                      {diffPreview.after - diffPreview.before}
+                    </div>
+                    <div className="mt-1 text-amber-800 dark:text-amber-200">
+                      Confirm write only after checking this memory does not
+                      overwrite a fresher note from chat/tasks/LILY.
+                    </div>
+                  </div>
+                ) : null}
                 <textarea
                   value={draftContent}
                   onChange={(event) => {
                     const nextValue = event.target.value
                     setDraftContent(nextValue)
                     setHasUnsavedChanges(nextValue !== content)
+                    setShowDiffPreview(false)
                   }}
-                  className="h-full w-full resize-none rounded-lg px-3 py-2 font-mono text-[13px] outline-none ring-0"
+                  className="min-h-0 flex-1 resize-none rounded-lg px-3 py-2 font-mono text-[13px] outline-none ring-0"
                   style={{
                     border: '1px solid var(--theme-border)',
                     backgroundColor: 'var(--theme-bg)',
@@ -657,10 +1139,12 @@ export function MemoryBrowserScreen() {
 function FileRow({
   file,
   selected,
+  badge,
   onSelect,
 }: {
   file: MemoryFileMeta
   selected: boolean
+  badge?: string
   onSelect: (pathValue: string) => void
 }) {
   return (
@@ -674,8 +1158,15 @@ function FileRow({
           : 'border-primary-200 bg-primary-50/80 hover:border-primary-300 hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/60 dark:hover:border-neutral-700 dark:hover:bg-neutral-900',
       )}
     >
-      <div className="truncate font-mono text-xs text-primary-900 dark:text-neutral-100">
-        {file.path}
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="truncate font-mono text-xs text-primary-900 dark:text-neutral-100">
+          {file.path}
+        </div>
+        {badge ? (
+          <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+            {badge}
+          </span>
+        ) : null}
       </div>
       <div className="mt-0.5 text-[11px] text-primary-400 dark:text-neutral-500">
         {formatBytes(file.size)} · {formatModified(file.modified)}

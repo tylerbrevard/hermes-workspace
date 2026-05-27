@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button'
-import { DiagnosticBundleButton } from '@/components/diagnostic-bundle-button'
 import { recordDiagnosticEvent } from '@/lib/page-diagnostics'
 
 type RouteErrorFallbackProps = {
@@ -23,7 +22,7 @@ function getErrorStack(error: unknown) {
 export function RouteErrorFallback({
   error,
   title = 'This page failed to load',
-  description = 'Retry the route first. If it fails again, copy diagnostics before reloading.',
+  description = 'Retry the route first. If it fails again, reload the page.',
   reset,
   className,
 }: RouteErrorFallbackProps) {
@@ -86,12 +85,19 @@ export function RouteErrorFallback({
           >
             Reload page
           </Button>
-          <DiagnosticBundleButton
-            context={{ error: message, stack }}
-            label="Copy diagnostics"
-          />
         </div>
       </section>
+    </div>
+  )
+}
+
+export function RouteLoadingState({ label }: { label: string }) {
+  return (
+    <div className="flex h-full min-h-[240px] items-center justify-center px-4 text-sm text-primary-500 dark:text-neutral-400">
+      <div className="text-center">
+        <div className="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-4 border-accent-500 border-r-transparent" />
+        <p>{label}</p>
+      </div>
     </div>
   )
 }

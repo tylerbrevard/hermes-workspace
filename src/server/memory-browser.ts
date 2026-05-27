@@ -2,11 +2,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+export type MemoryAttentionKind = 'regression' | 'watch' | 'operations'
+
 export type MemoryFileMeta = {
   path: string
   name: string
   size: number
   modified: string
+  attention?: MemoryAttentionKind
 }
 
 export type MemorySearchMatch = {
@@ -19,7 +22,10 @@ function isBrowserMemoryPath(relativePath: string): boolean {
   return (
     relativePath === 'MEMORY.md' ||
     relativePath.startsWith('memory/') ||
-    relativePath.startsWith('memories/')
+    relativePath.startsWith('memories/') ||
+    relativePath === 'workspace/MEMORY.md' ||
+    relativePath.startsWith('workspace/memory/') ||
+    relativePath.startsWith('workspace/memories/')
   )
 }
 
@@ -84,6 +90,7 @@ function pushIfMarkdownFile(
     name: path.basename(fullPath),
     size: stats.size,
     modified: stats.mtime.toISOString(),
+    attention: getMemoryFileAttention(relativePath) ?? undefined,
   })
 }
 
@@ -121,6 +128,19 @@ function walkWorkspaceDir(
 }
 
 function compareMemoryFiles(a: MemoryFileMeta, b: MemoryFileMeta): number {
+  const aAttention = getMemoryFileAttention(a.path)
+  const bAttention = getMemoryFileAttention(b.path)
+  if (aAttention && !bAttention) return -1
+  if (bAttention && !aAttention) return 1
+  if (aAttention && bAttention && aAttention !== bAttention) {
+    const priority: Record<MemoryAttentionKind, number> = {
+      regression: 0,
+      watch: 1,
+      operations: 2,
+    }
+    return priority[aAttention] - priority[bAttention]
+  }
+
   if (a.path === 'MEMORY.md' && b.path !== 'MEMORY.md') return -1
   if (b.path === 'MEMORY.md' && a.path !== 'MEMORY.md') return 1
 
@@ -133,12 +153,32 @@ function compareMemoryFiles(a: MemoryFileMeta, b: MemoryFileMeta): number {
   return a.path.localeCompare(b.path)
 }
 
+export function getMemoryFileAttention(
+  relativePath: string,
+): MemoryAttentionKind | null {
+  const normalized = relativePath.toLowerCase()
+  if (/regression|rollback|bug|breakage/.test(normalized)) {
+    return 'regression'
+  }
+  if (/watch|monitor|heartbeat|health|status|sentinel/.test(normalized)) {
+    return 'watch'
+  }
+  if (/incident|failure|failed|error|triage|blocked|risk/.test(normalized)) {
+    return 'operations'
+  }
+  return null
+}
+
 export function listMemoryFiles(): Array<MemoryFileMeta> {
   const workspaceRoot = getMemoryWorkspaceRoot()
   const results: Array<MemoryFileMeta> = []
 
   pushIfMarkdownFile(results, workspaceRoot, path.join(workspaceRoot, 'MEMORY.md'))
   for (const subdir of ['memory', 'memories']) {
+    walkWorkspaceDir(results, workspaceRoot, path.join(workspaceRoot, subdir))
+  }
+  pushIfMarkdownFile(results, workspaceRoot, path.join(workspaceRoot, 'workspace', 'MEMORY.md'))
+  for (const subdir of ['workspace/memory', 'workspace/memories']) {
     walkWorkspaceDir(results, workspaceRoot, path.join(workspaceRoot, subdir))
   }
 

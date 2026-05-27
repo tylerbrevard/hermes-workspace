@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  DEFAULT_WORLD,
-  type AgoraFacing,
-  type AgoraMessage,
-  type AgoraProfile,
-  type AgoraUser,
-  type AgoraWorld,
+
+
+
+
+
+  DEFAULT_WORLD
 } from '../lib/agora-types'
+import type {AgoraFacing, AgoraMessage, AgoraProfile, AgoraUser, AgoraWorld} from '../lib/agora-types';
 
 const MOVE_SPEED_PX = 6
 const BUBBLE_TTL_MS = 7000
@@ -31,9 +32,9 @@ export function useAgoraRoom({
     isMoving: false,
   }))
 
-  const [others] = useState<AgoraUser[]>([])
+  const [others] = useState<Array<AgoraUser>>([])
 
-  const [messages, setMessages] = useState<AgoraMessage[]>([])
+  const [messages, setMessages] = useState<Array<AgoraMessage>>([])
 
   // Sync self.profile when external profile changes (e.g. avatar swap).
   useEffect(() => {

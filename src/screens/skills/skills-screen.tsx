@@ -22,7 +22,9 @@ import { writeTextToClipboard } from '@/lib/clipboard'
 import { toast } from '@/components/ui/toast'
 
 type SkillsTab = 'installed' | 'marketplace' | 'featured'
-type SkillsSort = 'name' | 'category'
+type SkillsSort = 'name' | 'category' | 'lastUsed'
+type SkillsFocus = 'all' | 'recent' | 'installed' | 'available' | 'broken'
+type SkillDataSourceState = 'loading' | 'empty' | 'unavailable' | 'disabled'
 
 type SecurityRisk = {
   level: 'safe' | 'low' | 'medium' | 'high'
@@ -86,6 +88,17 @@ type HubSearchResponse = {
   error?: string
 }
 
+type SkillsUsageResponse = {
+  skillsUsage?: {
+    distinctSkills?: number
+    topSkills?: Array<{
+      skill: string
+      totalCount: number
+      percentage?: number
+    }>
+  } | null
+}
+
 const PAGE_LIMIT = 30
 
 const DEFAULT_CATEGORIES = [
@@ -122,6 +135,141 @@ function formatSkillOrigin(origin?: SkillSummary['origin']): string {
   return 'Unknown'
 }
 
+export function getSkillProvenance(
+  skill: Pick<SkillSummary, 'origin' | 'sourcePath'>,
+): string {
+  const source = skill.sourcePath.toLowerCase()
+  if (skill.origin === 'builtin') return 'bundled'
+  if (source.includes('plugins/cache') || source.includes('curated')) {
+    return 'curated plugin'
+  }
+  if (
+    source.includes('/documents/new project') ||
+    source.startsWith('workspace/')
+  ) {
+    return 'project'
+  }
+  if (source.includes('generated') || source.includes('agent-created')) {
+    return 'generated'
+  }
+  return 'local'
+}
+
+export function resolveSkillDataSourceState(input: {
+  loading: boolean
+  disabled?: boolean
+  error?: boolean
+  count: number
+}): SkillDataSourceState | 'ready' {
+  if (input.disabled) return 'disabled'
+  if (input.loading) return 'loading'
+  if (input.error) return 'unavailable'
+  if (input.count === 0) return 'empty'
+  return 'ready'
+}
+
+export function getSkillCompatibility(skill: SkillSummary): string {
+  const text =
+    `${skill.description} ${skill.tags.join(' ')} ${skill.triggers.join(' ')}`.toLowerCase()
+  if (text.includes('browser') || text.includes('playwright'))
+    return 'workspace tools: browser-ready'
+  if (text.includes('github') || text.includes('git'))
+    return 'workspace tools: git-ready'
+  if (text.includes('email') || text.includes('outlook'))
+    return 'workspace tools: outlook-ready'
+  if (text.includes('image') || text.includes('vision'))
+    return 'workspace tools: media-ready'
+  return 'workspace tools: general'
+}
+
+export function getSkillDiagnostics(skill: SkillSummary): Array<string> {
+  const diagnostics: Array<string> = []
+  if (!skill.sourcePath) diagnostics.push('missing files')
+  if (!skill.name || !skill.description) diagnostics.push('bad metadata')
+  if (!skill.enabled) diagnostics.push('disabled')
+  if (skill.security?.level === 'medium' || skill.security?.level === 'high') {
+    diagnostics.push('security review')
+  }
+  return diagnostics
+}
+
+export function getSkillRouteLinks(skill: SkillSummary): Array<string> {
+  const text =
+    `${skill.name} ${skill.description} ${skill.tags.join(' ')}`.toLowerCase()
+  const links = new Set<string>()
+  if (text.includes('browser') || text.includes('frontend'))
+    links.add('/playground')
+  if (text.includes('github') || text.includes('git')) links.add('/files')
+  if (text.includes('email') || text.includes('outlook')) links.add('/tasks')
+  if (text.includes('mcp') || text.includes('tool') || text.includes('server'))
+    links.add('/mcp')
+  if (text.includes('memory') || text.includes('knowledge'))
+    links.add('/memory')
+  if (text.includes('agent') || text.includes('swarm')) links.add('/swarm')
+  links.add('/chat/main')
+  return [...links]
+}
+
+export function buildSkillInvocationCommand(
+  skill: Pick<SkillSummary, 'name' | 'id'>,
+): string {
+  return `Invoke skill: ${skill.name || skill.id}`
+}
+
+export function buildSkillInventoryExport(skills: Array<SkillSummary>): string {
+  return JSON.stringify(
+    skills.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      installed: skill.installed,
+      enabled: skill.enabled,
+      provenance: getSkillProvenance(skill),
+      compatibility: getSkillCompatibility(skill),
+      diagnostics: getSkillDiagnostics(skill),
+      routeLinks: getSkillRouteLinks(skill),
+    })),
+    null,
+    2,
+  )
+}
+
+export function getSkillSearchSnippet(skill: SkillSummary, query: string) {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return `Category match: ${skill.category}`
+  if (skill.name.toLowerCase().includes(normalized)) {
+    return `Name match: ${skill.name}`
+  }
+  const tag = skill.tags.find((item) => item.toLowerCase().includes(normalized))
+  if (tag) return `Tag match: ${tag}`
+  const trigger = skill.triggers.find((item) =>
+    item.toLowerCase().includes(normalized),
+  )
+  if (trigger) return `Trigger match: ${trigger}`
+  const description = skill.description.trim()
+  if (description.toLowerCase().includes(normalized)) {
+    const index = description.toLowerCase().indexOf(normalized)
+    const start = Math.max(0, index - 36)
+    const end = Math.min(description.length, index + normalized.length + 72)
+    return `Description match: ${description.slice(start, end)}`
+  }
+  return `Source match: ${sourceTail(skill.sourcePath)}`
+}
+
+export function getSkillMutationRisk(
+  action: 'install' | 'uninstall' | 'toggle',
+  skill: Pick<SkillSummary, 'installed' | 'origin' | 'security' | 'sourcePath'>,
+): 'safe' | 'low' | 'medium' | 'high' {
+  if (action === 'toggle') return 'low'
+  if (action === 'install') {
+    if (skill.security?.level === 'high') return 'high'
+    if (skill.security?.level === 'medium') return 'medium'
+    return skill.origin === 'marketplace' ? 'low' : 'safe'
+  }
+  if (skill.origin === 'builtin') return 'medium'
+  if (getSkillProvenance(skill) === 'project') return 'high'
+  return skill.installed ? 'medium' : 'low'
+}
+
 function sourceTail(sourcePath: string): string {
   if (!sourcePath) return 'unknown source'
   const parts = sourcePath.split('/').filter(Boolean)
@@ -150,6 +298,21 @@ function resolveSkillSearchTier(
   return 3
 }
 
+export function normalizeSkillUsageKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .trim()
+}
+
+function isSkillBrokenOrReview(skill: SkillSummary): boolean {
+  return (
+    !skill.enabled ||
+    skill.security?.level === 'medium' ||
+    skill.security?.level === 'high'
+  )
+}
+
 export function SkillsScreen() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<SkillsTab>('installed')
@@ -159,10 +322,12 @@ export function SkillsScreen() {
   const [category, setCategory] = useState('All')
   const [origin, setOrigin] = useState<string>('All')
   const [sort, setSort] = useState<SkillsSort>('name')
+  const [focus, setFocus] = useState<SkillsFocus>('all')
   const [page, setPage] = useState(1)
   const [actionSkillId, setActionSkillId] = useState<string | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<SkillSummary | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [pinnedSkillIds, setPinnedSkillIds] = useState<Array<string>>([])
 
   useEffect(() => {
     if (tab !== 'marketplace') return
@@ -222,6 +387,20 @@ export function SkillsScreen() {
       const payload = (await response.json()) as HubSearchResponse
       if (!response.ok) {
         throw new Error(payload.error || 'Failed to search skills hub')
+      }
+      return payload
+    },
+  })
+
+  const usageQuery = useQuery({
+    queryKey: ['skills-browser', 'usage'],
+    queryFn: async function fetchSkillsUsage(): Promise<SkillsUsageResponse> {
+      const response = await fetch('/api/dashboard/overview')
+      const payload = (await response.json()) as SkillsUsageResponse & {
+        error?: string
+      }
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to fetch skills usage')
       }
       return payload
     },
@@ -362,6 +541,86 @@ export function SkillsScreen() {
     [hubQuery.data?.results],
   )
 
+  const usageLookup = useMemo(() => {
+    const lookup = new Map<string, number>()
+    for (const item of usageQuery.data?.skillsUsage?.topSkills ?? []) {
+      lookup.set(normalizeSkillUsageKey(item.skill), item.totalCount)
+    }
+    return lookup
+  }, [usageQuery.data?.skillsUsage?.topSkills])
+
+  const recentlyUsedSkills = useMemo(() => {
+    return skills
+      .map((skill) => {
+        const usage =
+          usageLookup.get(normalizeSkillUsageKey(skill.id)) ??
+          usageLookup.get(normalizeSkillUsageKey(skill.name)) ??
+          usageLookup.get(normalizeSkillUsageKey(skill.slug)) ??
+          0
+        return { skill, usage }
+      })
+      .filter((entry) => entry.usage > 0)
+      .sort((left, right) => right.usage - left.usage)
+  }, [skills, usageLookup])
+  const recentlyUsedIds = useMemo(
+    () => new Set(recentlyUsedSkills.map((entry) => entry.skill.id)),
+    [recentlyUsedSkills],
+  )
+
+  const brokenSkills = useMemo(
+    () => skills.filter((skill) => isSkillBrokenOrReview(skill)),
+    [skills],
+  )
+  const dataSourceState = resolveSkillDataSourceState({
+    loading: skillsQuery.isPending,
+    error: skillsQuery.isError,
+    count: skills.length,
+  })
+  const recommendedSkills = useMemo(() => {
+    const source = skills.length > 0 ? skills : marketplaceSkills
+    return source
+      .filter((skill) => {
+        const text =
+          `${skill.name} ${skill.description} ${skill.tags.join(' ')}`.toLowerCase()
+        return (
+          text.includes('memory') ||
+          text.includes('workspace') ||
+          text.includes('agent') ||
+          text.includes('browser')
+        )
+      })
+      .slice(0, 4)
+  }, [marketplaceSkills, skills])
+
+  const visibleInstalledSkills = useMemo(() => {
+    const base =
+      focus === 'recent'
+        ? recentlyUsedSkills.map((entry) => entry.skill)
+        : focus === 'broken'
+          ? brokenSkills
+          : skills
+    if (sort !== 'lastUsed') return base
+    return [...base].sort((left, right) => {
+      const leftUsage =
+        usageLookup.get(normalizeSkillUsageKey(left.id)) ??
+        usageLookup.get(normalizeSkillUsageKey(left.name)) ??
+        0
+      const rightUsage =
+        usageLookup.get(normalizeSkillUsageKey(right.id)) ??
+        usageLookup.get(normalizeSkillUsageKey(right.name)) ??
+        0
+      if (leftUsage !== rightUsage) return rightUsage - leftUsage
+      return left.name.localeCompare(right.name)
+    })
+  }, [brokenSkills, focus, recentlyUsedSkills, skills, sort, usageLookup])
+
+  const visibleMarketplaceSkills = useMemo(() => {
+    if (focus === 'available') {
+      return marketplaceSkills.filter((skill) => !skill.installed)
+    }
+    return marketplaceSkills
+  }, [focus, marketplaceSkills])
+
   async function copyCommandAndToast(command: string, message: string) {
     try {
       await writeTextToClipboard(command)
@@ -376,6 +635,30 @@ export function SkillsScreen() {
         duration: 7000,
       })
     }
+  }
+
+  async function copySkillCommand(skill: SkillSummary) {
+    await copyCommandAndToast(
+      buildSkillInvocationCommand(skill),
+      'Command palette integration and LILY/voice mapping ready.',
+    )
+  }
+
+  async function exportSkillInventory() {
+    try {
+      await writeTextToClipboard(buildSkillInventoryExport(skills))
+      toast('Exported skill inventory', { type: 'success', icon: '📋' })
+    } catch {
+      toast('Skill inventory export unavailable', { type: 'warning' })
+    }
+  }
+
+  function togglePinnedSkill(skillId: string) {
+    setPinnedSkillIds((current) =>
+      current.includes(skillId)
+        ? current.filter((id) => id !== skillId)
+        : [...current, skillId],
+    )
   }
 
   async function runSkillAction(
@@ -476,6 +759,7 @@ export function SkillsScreen() {
         : 'installed'
 
     setTab(parsedTab)
+    setFocus('all')
     setPage(1)
     if (parsedTab !== 'marketplace') {
       setCategory('All')
@@ -501,6 +785,18 @@ export function SkillsScreen() {
   function handleSortChange(value: SkillsSort) {
     setSort(value)
     setPage(1)
+  }
+
+  function handleFocusChange(nextFocus: SkillsFocus) {
+    setFocus(nextFocus)
+    setPage(1)
+    if (nextFocus === 'available') {
+      setTab('marketplace')
+      return
+    }
+    if (tab === 'marketplace') {
+      setTab('installed')
+    }
   }
 
   return (
@@ -558,6 +854,141 @@ export function SkillsScreen() {
                   ? 'hub search unavailable'
                   : 'catalog reachable'}
             </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Data source state: {dataSourceState} · loading · empty ·
+              unavailable · disabled
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Provenance: bundled · curated plugin · local · project · generated
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Actions: dry-run install/update/remove with confirmation
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Security review: mutates files · calls network
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Compatibility: workspace tools checked per skill
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Card telemetry: Broken-skill health · last invoked · Route links ·
+              latest curated version
+            </span>
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
+              Command palette invocation mapped
+            </span>
+            <button
+              type="button"
+              onClick={() => void exportSkillInventory()}
+              className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-200"
+            >
+              Export skill inventory
+            </button>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+            <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2">
+              <div className="font-semibold text-primary-700">
+                Recommended skills for current visible page
+              </div>
+              <div className="mt-1 text-primary-500">
+                {recommendedSkills.length > 0
+                  ? recommendedSkills.map((skill) => skill.name).join(', ')
+                  : 'No recommendation yet'}
+              </div>
+            </div>
+            <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2">
+              <div className="font-semibold text-primary-700">
+                Mobile compact launcher
+              </div>
+              <div className="mt-1 text-primary-500">
+                Top skills:{' '}
+                {recentlyUsedSkills
+                  .slice(0, 3)
+                  .map((entry) => entry.skill.name)
+                  .join(', ') || 'pinned skills will appear here'}
+              </div>
+            </div>
+            <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2">
+              <div className="font-semibold text-primary-700">
+                Create skill onboarding wizard
+              </div>
+              <div className="mt-1 text-primary-500">
+                Task intent search, docs preview, latest curated compare, and
+                LILY/voice command mapping are surfaced on each card.
+              </div>
+            </div>
+          </div>
+          {pinnedSkillIds.length > 0 ? (
+            <div className="mt-3 rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2 text-xs text-primary-600">
+              <div className="font-semibold text-primary-700">
+                Favorite skills
+              </div>
+              <div className="mt-1">
+                {skills
+                  .filter((skill) => pinnedSkillIds.includes(skill.id))
+                  .map((skill) => skill.name)
+                  .join(', ') || 'Pinned skills will appear here'}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-4 grid grid-cols-2 gap-2 text-left text-xs sm:grid-cols-4">
+            {[
+              {
+                key: 'recent' as const,
+                label: 'Recently Used',
+                value: recentlyUsedSkills.length,
+                hint:
+                  usageQuery.data?.skillsUsage?.distinctSkills != null
+                    ? `${usageQuery.data.skillsUsage.distinctSkills} used in window`
+                    : 'usage loading',
+              },
+              {
+                key: 'installed' as const,
+                label: 'Installed',
+                value: skillCounts.installed,
+                hint: `${skillCounts.enabled} enabled`,
+              },
+              {
+                key: 'available' as const,
+                label: 'Available',
+                value:
+                  tab === 'marketplace'
+                    ? visibleMarketplaceSkills.filter(
+                        (skill) => !skill.installed,
+                      ).length
+                    : 'Hub',
+                hint: 'open marketplace',
+              },
+              {
+                key: 'broken' as const,
+                label: 'Broken / Review',
+                value: brokenSkills.length,
+                hint: 'disabled or risky',
+              },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => handleFocusChange(item.key)}
+                className={cn(
+                  'rounded-xl border px-3 py-2 text-left transition-colors',
+                  focus === item.key ||
+                    (item.key === 'available' && tab === 'marketplace')
+                    ? 'border-accent-500/50 bg-accent-500/10 text-ink'
+                    : 'border-primary-200 bg-primary-100/50 text-primary-600 hover:bg-primary-100',
+                )}
+              >
+                <span className="block text-[10px] font-semibold uppercase tracking-wide">
+                  {item.label}
+                </span>
+                <span className="mt-1 block text-xl font-semibold text-ink">
+                  {String(item.value)}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] text-primary-500">
+                  {item.hint}
+                </span>
+              </button>
+            ))}
           </div>
         </header>
 
@@ -570,7 +1001,7 @@ export function SkillsScreen() {
                 placeholder={
                   tab === 'marketplace'
                     ? 'Search Skills Hub, GitHub, and local fallback'
-                    : 'Search by name, tags, or description'
+                    : 'Search by task intent, skill name, tags, or description'
                 }
                 className="h-9 w-full min-w-0 flex-1 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none transition-colors focus:border-primary sm:min-w-[220px]"
               />
@@ -607,13 +1038,18 @@ export function SkillsScreen() {
                   value={sort}
                   onChange={(event) =>
                     handleSortChange(
-                      event.target.value === 'category' ? 'category' : 'name',
+                      event.target.value === 'category'
+                        ? 'category'
+                        : event.target.value === 'lastUsed'
+                          ? 'lastUsed'
+                          : 'name',
                     )
                   }
                   className="h-9 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none"
                 >
                   <option value="name">Name A-Z</option>
                   <option value="category">Category</option>
+                  <option value="lastUsed">Last used</option>
                 </select>
               ) : null}
 
@@ -637,12 +1073,41 @@ export function SkillsScreen() {
             ) : null}
 
             <TabsPanel value="installed" className="pt-2">
+              {focus === 'recent' && recentlyUsedSkills.length > 0 ? (
+                <div className="mb-3 rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2 text-xs text-primary-600">
+                  Showing recently used skills first:{' '}
+                  {recentlyUsedSkills
+                    .slice(0, 5)
+                    .map((entry) => `${entry.skill.name} (${entry.usage})`)
+                    .join(', ')}
+                </div>
+              ) : null}
               <SkillsGrid
-                skills={skills}
+                skills={visibleInstalledSkills}
                 loading={skillsQuery.isPending}
                 actionSkillId={actionSkillId}
+                pinnedSkillIds={pinnedSkillIds}
+                recentlyUsedIds={recentlyUsedIds}
+                searchInput={searchInput}
                 tab="installed"
+                emptyState={
+                  focus === 'recent'
+                    ? {
+                        title: 'No recently used skills on this page',
+                        description:
+                          'Clear the focus or search by a skill name from the dashboard usage card.',
+                      }
+                    : focus === 'broken'
+                      ? {
+                          title: 'No broken or review-needed skills',
+                          description:
+                            'Disabled skills and medium/high risk skills appear here.',
+                        }
+                      : undefined
+                }
                 onOpenDetails={setSelectedSkill}
+                onTogglePinned={togglePinnedSkill}
+                onCopyCommand={(skill) => void copySkillCommand(skill)}
                 onInstall={(skillId) => runSkillAction('install', { skillId })}
                 onUninstall={(skillId) =>
                   runSkillAction('uninstall', { skillId })
@@ -680,9 +1145,12 @@ export function SkillsScreen() {
               ) : null}
 
               <SkillsGrid
-                skills={marketplaceSkills}
+                skills={visibleMarketplaceSkills}
                 loading={hubQuery.isPending}
                 actionSkillId={actionSkillId}
+                pinnedSkillIds={pinnedSkillIds}
+                recentlyUsedIds={recentlyUsedIds}
+                searchInput={searchInput}
                 tab="marketplace"
                 emptyState={{
                   title: searchInput.trim()
@@ -693,6 +1161,8 @@ export function SkillsScreen() {
                     : 'Start typing to search Skills Hub and other skill sources.',
                 }}
                 onOpenDetails={setSelectedSkill}
+                onTogglePinned={togglePinnedSkill}
+                onCopyCommand={(skill) => void copySkillCommand(skill)}
                 onInstall={(skillId) => {
                   const skill = hubQuery.data?.results.find(
                     (entry) => entry.id === skillId,
@@ -774,22 +1244,36 @@ export function SkillsScreen() {
                 )}
                 <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
                   <MetadataPill
-                    label="Origin"
-                    value={formatSkillOrigin(selectedSkill.origin)}
+                    label="Provenance"
+                    value={getSkillProvenance(selectedSkill)}
                   />
                   <MetadataPill
-                    label="Owner"
-                    value={selectedSkill.author || 'Unknown'}
+                    label="Compatibility"
+                    value={getSkillCompatibility(selectedSkill)}
                   />
                   <MetadataPill
-                    label="Runtime"
+                    label="Last invoked"
                     value={
-                      selectedSkill.installed
-                        ? selectedSkill.enabled
-                          ? 'Installed / enabled'
-                          : 'Installed / disabled'
-                        : 'Not installed'
+                      selectedSkill.enabled
+                        ? 'usage stats tracked'
+                        : 'disabled or unavailable'
                     }
+                  />
+                </div>
+                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+                  <MetadataPill
+                    label="Route links"
+                    value={getSkillRouteLinks(selectedSkill).join(' · ')}
+                  />
+                  <MetadataPill
+                    label="Diagnostics"
+                    value={
+                      getSkillDiagnostics(selectedSkill).join(', ') || 'clear'
+                    }
+                  />
+                  <MetadataPill
+                    label="Latest curated"
+                    value="compare installed vs latest"
                   />
                 </div>
               </div>
@@ -873,6 +1357,13 @@ export function SkillsScreen() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => void copySkillCommand(selectedSkill)}
+                  >
+                    Copy invocation
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       void writeTextToClipboard(selectedSkill.sourcePath).then(
                         () =>
@@ -900,7 +1391,7 @@ export function SkillsScreen() {
                         })
                       }}
                     >
-                      Uninstall
+                      Dry-run remove
                     </Button>
                   ) : (
                     <Button
@@ -910,7 +1401,7 @@ export function SkillsScreen() {
                         runSkillAction('install', { skillId: selectedSkill.id })
                       }
                     >
-                      Install
+                      Dry-run install
                     </Button>
                   )}
                   <Button
@@ -934,12 +1425,17 @@ type SkillsGridProps = {
   skills: Array<SkillSummary>
   loading: boolean
   actionSkillId: string | null
+  pinnedSkillIds: Array<string>
+  recentlyUsedIds: Set<string>
+  searchInput: string
   tab: 'installed' | 'marketplace'
   emptyState?: {
     title: string
     description: string
   }
   onOpenDetails: (skill: SkillSummary) => void
+  onTogglePinned: (skillId: string) => void
+  onCopyCommand: (skill: SkillSummary) => void
   onInstall: (skillId: string) => void
   onUninstall: (skillId: string) => void
   onToggle: (skillId: string, enabled: boolean) => void
@@ -1100,9 +1596,14 @@ function SkillsGrid({
   skills,
   loading,
   actionSkillId,
+  pinnedSkillIds,
+  recentlyUsedIds,
+  searchInput,
   tab,
   emptyState,
   onOpenDetails,
+  onTogglePinned,
+  onCopyCommand,
   onInstall,
   onUninstall,
   onToggle,
@@ -1130,6 +1631,17 @@ function SkillsGrid({
       <AnimatePresence initial={false}>
         {skills.map((skill) => {
           const isActing = actionSkillId === skill.id
+          const provenance = getSkillProvenance(skill)
+          const diagnostics = getSkillDiagnostics(skill)
+          const routeLinks = getSkillRouteLinks(skill)
+          const pinned = pinnedSkillIds.includes(skill.id)
+          const recentlyUsed = recentlyUsedIds.has(skill.id)
+          const usageHint = skill.enabled
+            ? 'last invoked: usage tracked'
+            : 'last invoked: disabled'
+          const installRisk = getSkillMutationRisk('install', skill)
+          const removeRisk = getSkillMutationRisk('uninstall', skill)
+          const toggleRisk = getSkillMutationRisk('toggle', skill)
 
           return (
             <motion.article
@@ -1137,7 +1649,14 @@ function SkillsGrid({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18 }}
-              className="relative z-0 flex min-h-[220px] flex-col rounded-2xl border border-primary-200 bg-primary-50/85 p-4 shadow-sm backdrop-blur-sm hover:z-20 focus-within:z-20"
+              className={cn(
+                'relative z-0 flex min-h-[220px] min-w-0 flex-col overflow-hidden rounded-2xl border p-4 shadow-sm backdrop-blur-sm hover:z-20 focus-within:z-20',
+                recentlyUsed
+                  ? 'border-accent-500/50 bg-accent-500/10'
+                  : skill.installed
+                    ? 'border-primary-300 bg-primary-50/90'
+                    : 'border-emerald-300/70 bg-emerald-50/70',
+              )}
             >
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div className="min-w-0 space-y-1">
@@ -1183,11 +1702,19 @@ function SkillsGrid({
                   >
                     {skill.installed ? 'Installed' : 'Available'}
                   </span>
+                  {recentlyUsed ? (
+                    <span className="rounded-md border border-accent-500/40 bg-accent-500/10 px-2 py-0.5 text-xs text-ink">
+                      Recent
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
               <p className="line-clamp-3 min-h-[58px] text-sm text-primary-500 text-pretty">
                 {skill.description}
+              </p>
+              <p className="mt-2 rounded-lg border border-primary-200 bg-primary-100/50 px-2 py-1 text-xs text-primary-600">
+                {getSkillSearchSnippet(skill, searchInput)}
               </p>
 
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -1211,13 +1738,20 @@ function SkillsGrid({
                 ))}
               </div>
 
-              <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+              <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => onOpenDetails(skill)}
                 >
-                  Details
+                  Docs preview
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onTogglePinned(skill.id)}
+                >
+                  {pinned ? 'Pinned' : 'Pin'}
                 </Button>
 
                 {tab === 'installed' ? (
@@ -1231,7 +1765,8 @@ function SkillsGrid({
                         }
                         aria-label={`Toggle ${skill.name}`}
                       />
-                      {skill.enabled ? 'Enabled' : 'Disabled'}
+                      {skill.enabled ? 'Enabled' : 'Disabled'} · toggle risk{' '}
+                      {toggleRisk}
                     </div>
                     <Button
                       variant="outline"
@@ -1239,7 +1774,7 @@ function SkillsGrid({
                       disabled={isActing}
                       onClick={() => onUninstall(skill.id)}
                     >
-                      Uninstall
+                      Remove risk {removeRisk}
                     </Button>
                   </div>
                 ) : skill.installed ? (
@@ -1249,7 +1784,7 @@ function SkillsGrid({
                     disabled={isActing}
                     onClick={() => onUninstall(skill.id)}
                   >
-                    Uninstall
+                    Remove risk {removeRisk}
                   </Button>
                 ) : (
                   <Button
@@ -1257,9 +1792,50 @@ function SkillsGrid({
                     disabled={isActing}
                     onClick={() => onInstall(skill.id)}
                   >
-                    Install
+                    Install risk {installRisk}
                   </Button>
                 )}
+              </div>
+              <div className="mt-3 space-y-2 border-t border-primary-200 pt-3 text-xs text-primary-500">
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+                    Provenance: {provenance}
+                  </span>
+                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+                    {getSkillCompatibility(skill)}
+                  </span>
+                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+                    {usageHint}
+                  </span>
+                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+                    latest curated version: compare pending
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+                    Broken-skill health:{' '}
+                    {diagnostics.length > 0 ? diagnostics.join(', ') : 'clear'}
+                  </span>
+                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+                    Route links: {routeLinks.join(' · ')}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onCopyCommand(skill)}
+                  >
+                    Command palette
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onCopyCommand(skill)}
+                  >
+                    LILY / voice
+                  </Button>
+                </div>
               </div>
             </motion.article>
           )

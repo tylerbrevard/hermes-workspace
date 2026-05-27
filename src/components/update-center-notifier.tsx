@@ -124,6 +124,9 @@ export function UpdateCenterNotifier() {
     agent: '',
   })
   const [notes, setNotes] = useState<Notes | null>(null)
+  const [expandedProducts, setExpandedProducts] = useState<Set<ProductId>>(
+    () => new Set(),
+  )
 
   useEffect(() => {
     const values = new Set<string>()
@@ -174,6 +177,20 @@ export function UpdateCenterNotifier() {
     const key = productDismissKey(product)
     localStorage.setItem(`${DISMISS_PREFIX}${product.id}`, key)
     setDismissed((prev) => new Set([...prev, key]))
+    setExpandedProducts((prev) => {
+      const next = new Set(prev)
+      next.delete(product.id)
+      return next
+    })
+  }
+
+  function toggleExpanded(productId: ProductId) {
+    setExpandedProducts((prev) => {
+      const next = new Set(prev)
+      if (next.has(productId)) next.delete(productId)
+      else next.add(productId)
+      return next
+    })
   }
 
   async function update(product: ProductUpdateStatus) {
@@ -226,21 +243,117 @@ export function UpdateCenterNotifier() {
   return (
     <>
       <ReleaseNotes notes={notes} onClose={closeNotes} />
-      <div className="pointer-events-none fixed left-1/2 top-[calc(var(--titlebar-h,0px)+1rem)] z-[9998] flex w-[92vw] max-w-md -translate-x-1/2 flex-col gap-3">
+      <div className="pointer-events-none fixed bottom-[calc(var(--tabbar-h,80px)+1rem)] left-3 right-3 z-[9998] flex flex-col items-end gap-2 md:bottom-auto md:left-auto md:right-4 md:top-[calc(var(--titlebar-h,0px)+1rem)] md:w-[360px]">
         <AnimatePresence>
-          {visibleProducts.map((product) => (
-            <UpdateCard
-              key={product.id}
-              product={product}
-              phase={phases[product.id]}
-              error={errors[product.id]}
-              onDismiss={() => dismiss(product)}
-              onUpdate={() => update(product)}
-            />
-          ))}
+          {visibleProducts.map((product) =>
+            expandedProducts.has(product.id) || phases[product.id] === 'error' ? (
+              <UpdateCard
+                key={product.id}
+                product={product}
+                phase={phases[product.id]}
+                error={errors[product.id]}
+                onCollapse={() => toggleExpanded(product.id)}
+                onDismiss={() => dismiss(product)}
+                onUpdate={() => update(product)}
+              />
+            ) : (
+              <UpdatePill
+                key={product.id}
+                product={product}
+                phase={phases[product.id]}
+                onDismiss={() => dismiss(product)}
+                onExpand={() => toggleExpanded(product.id)}
+                onUpdate={() => update(product)}
+              />
+            ),
+          )}
         </AnimatePresence>
       </div>
     </>
+  )
+}
+
+function UpdatePill({
+  product,
+  phase,
+  onDismiss,
+  onExpand,
+  onUpdate,
+}: {
+  product: ProductUpdateStatus
+  phase: Phase
+  onDismiss: () => void
+  onExpand: () => void
+  onUpdate: () => void
+}) {
+  const updating = phase === 'updating'
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 12, scale: 0.98 }}
+      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+      onContextMenu={(event) => event.stopPropagation()}
+      className="pointer-events-auto flex max-w-full items-center gap-2 overflow-hidden rounded-full px-2 py-2 shadow-xl select-text md:max-w-[360px]"
+      style={{
+        background: 'var(--theme-card)',
+        border: '1px solid var(--theme-border)',
+        color: 'var(--theme-text)',
+        boxShadow: 'var(--theme-shadow-2)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={onExpand}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-full px-2 py-1 text-left hover:bg-white/5"
+        aria-label={`Open ${product.label} update details`}
+      >
+        <span
+          className="flex size-7 shrink-0 items-center justify-center rounded-full"
+          style={{
+            background:
+              'color-mix(in srgb, var(--theme-accent) 14%, transparent)',
+          }}
+        >
+          <HugeiconsIcon
+            icon={updating ? Loading03Icon : ArrowUp02Icon}
+            size={15}
+            strokeWidth={2}
+            className={updating ? 'animate-spin' : undefined}
+            style={{ color: 'var(--theme-accent)' }}
+          />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-semibold">
+            {product.label} update
+          </span>
+          <span
+            className="block truncate text-[11px]"
+            style={{ color: 'var(--theme-muted)' }}
+          >
+            {shortSha(product.currentHead)} → {shortSha(product.latestHead)}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onUpdate}
+        disabled={updating}
+        className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+        style={{ background: 'var(--theme-accent)' }}
+      >
+        {updating ? 'Updating' : 'Update'}
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="shrink-0 rounded-full p-1.5 transition-opacity hover:opacity-80"
+        style={{ color: 'var(--theme-muted)' }}
+        aria-label={`Dismiss ${product.label} update`}
+      >
+        <HugeiconsIcon icon={Cancel01Icon} size={13} strokeWidth={2} />
+      </button>
+    </motion.div>
   )
 }
 
@@ -248,12 +361,14 @@ function UpdateCard({
   product,
   phase,
   error,
+  onCollapse,
   onDismiss,
   onUpdate,
 }: {
   product: ProductUpdateStatus
   phase: Phase
   error: string
+  onCollapse: () => void
   onDismiss: () => void
   onUpdate: () => void
 }) {
@@ -278,7 +393,7 @@ function UpdateCard({
       // native context menu open on the card itself and keep the event from
       // bubbling to the backdrop. See #286.
       onContextMenu={(event) => event.stopPropagation()}
-      className="pointer-events-auto overflow-hidden rounded-2xl shadow-2xl select-text"
+      className="pointer-events-auto w-full overflow-hidden rounded-2xl shadow-2xl select-text"
       style={{
         background: 'var(--theme-card)',
         border: '1px solid var(--theme-border)',
@@ -292,7 +407,7 @@ function UpdateCard({
           style={{ background: 'var(--theme-accent)' }}
         />
       ) : null}
-      <div className="flex items-center gap-3 px-5 py-3.5">
+      <div className="flex items-center gap-3 px-4 py-3">
         <div
           className={cn(
             'flex size-9 shrink-0 items-center justify-center rounded-xl',
@@ -400,9 +515,17 @@ function UpdateCard({
           <button
             type="button"
             onClick={onDismiss}
+            className="rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-opacity hover:opacity-80"
+            style={{ color: 'var(--theme-muted)' }}
+          >
+            Dismiss
+          </button>
+          <button
+            type="button"
+            onClick={onCollapse}
             className="rounded-lg p-1.5 transition-opacity hover:opacity-80"
             style={{ color: 'var(--theme-muted)' }}
-            aria-label={`Dismiss ${product.label} update`}
+            aria-label={`Collapse ${product.label} update`}
           >
             <HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={2} />
           </button>

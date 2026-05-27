@@ -42,11 +42,11 @@ type TabItem = {
 
 export const MOBILE_NAV_TABS: Array<TabItem> = [
   {
-    id: 'dashboard',
+    id: 'phone',
     label: 'Home',
     icon: DashboardSquare01Icon,
-    to: '/dashboard',
-    match: (p) => p === '/dashboard',
+    to: '/phone',
+    match: (p) => p === '/dashboard' || p.startsWith('/phone'),
   },
   {
     id: 'chat',
@@ -56,11 +56,11 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     match: (p) => p.startsWith('/chat') || p === '/new',
   },
   {
-    id: 'playground',
-    label: 'Play',
-    icon: Rocket01Icon,
-    to: '/playground',
-    match: (p) => p.startsWith('/playground'),
+    id: 'lily',
+    label: 'LILY',
+    icon: Chat01Icon,
+    to: '/lily',
+    match: (p) => p.startsWith('/lily'),
   },
   {
     id: 'files',
@@ -77,23 +77,6 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     match: (p) => p.startsWith('/terminal'),
   },
   {
-<<<<<<< HEAD
-    id: 'life-os',
-    label: 'Life OS',
-    icon: Castle02Icon,
-    to: '/life-os',
-    match: (p) => p.startsWith('/life-os'),
-  },
-  {
-    id: 'jobs',
-    label: 'Jobs',
-    icon: Clock01Icon,
-    to: '/jobs',
-    match: (p) => p.startsWith('/jobs'),
-  },
-  {
-=======
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     id: 'swarm',
     label: 'Swarm',
     icon: UserGroupIcon,

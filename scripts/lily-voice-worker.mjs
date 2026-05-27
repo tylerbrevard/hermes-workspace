@@ -483,10 +483,12 @@ export function getHealthPayload(
     config.mode === 'livekit' &&
     livekitAgentEnabled
 
+  const httpPipelineReady = validation.ok
+
   return {
-    ok: livekitMediaReady,
-    ready: livekitMediaReady,
-    status: livekitMediaReady ? 'ready' : 'not_ready',
+    ok: httpPipelineReady,
+    ready: httpPipelineReady,
+    status: httpPipelineReady ? 'ready' : 'not_ready',
     worker: 'lily-voice-worker',
     agentName: config.agentName,
     mode: config.mode,

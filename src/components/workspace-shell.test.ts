@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { MOBILE_HAMBURGER_NAV_ITEMS } from './mobile-hamburger-menu'
+import {
+  MOBILE_HAMBURGER_NAV_ITEMS,
+  MOBILE_PINNED_NAV_IDS,
+  groupMobileNavItems,
+} from './mobile-hamburger-menu'
 import { MOBILE_NAV_TABS } from './mobile-tab-bar'
 import {
   DESKTOP_SIDEBAR_BACKDROP_CLASS,
@@ -16,6 +20,10 @@ describe('workspace shell sidebar backdrop', () => {
 describe('workspace mobile page titles', () => {
   it('covers every secondary visible workspace menu page', () => {
     expect(getWorkspaceMobilePageTitle('/tasks')).toBe('Tasks')
+    expect(getWorkspaceMobilePageTitle('/pto-tracker')).toBe('PTO Tracker')
+    expect(getWorkspaceMobilePageTitle('/wegovy')).toBe('Wegovy Shots')
+    expect(getWorkspaceMobilePageTitle('/zyn-tracker')).toBe('Zyn Tracker')
+    expect(getWorkspaceMobilePageTitle('/food-log')).toBe('Food Log')
     expect(getWorkspaceMobilePageTitle('/meetings')).toBe('Meetings')
     expect(getWorkspaceMobilePageTitle('/presence')).toBe('Presence')
     expect(getWorkspaceMobilePageTitle('/it-ops')).toBe('ConnectWise')
@@ -57,5 +65,49 @@ describe('swarm2 navigation alias handling', () => {
     expect(
       MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === '75-tracker'),
     ).toBe(true)
+    expect(
+      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'pto-tracker'),
+    ).toBe(true)
+    expect(
+      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'wegovy'),
+    ).toBe(true)
+    expect(
+      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'zyn-tracker'),
+    ).toBe(true)
+    expect(
+      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'food-log'),
+    ).toBe(true)
+  })
+
+  it('groups drawer navigation around Tyler workflow modes with five pinned pages', () => {
+    expect(Array.from(MOBILE_PINNED_NAV_IDS)).toEqual([
+      'dashboard',
+      'phone',
+      'chat',
+      'lily',
+      'tasks',
+    ])
+
+    const groups = groupMobileNavItems(MOBILE_HAMBURGER_NAV_ITEMS)
+    expect(groups.map((group) => group.label)).toEqual([
+      'Pinned',
+      'Daily',
+      'Agent Ops',
+      'Knowledge',
+      'Systems',
+      'Settings',
+    ])
+    expect(groups[0]?.items.map((item) => item.id)).toEqual([
+      'chat',
+      'lily',
+      'dashboard',
+      'phone',
+      'tasks',
+    ])
+    expect(
+      groups
+        .find((group) => group.label === 'Agent Ops')
+        ?.items.map((item) => item.id),
+    ).toContain('conductor')
   })
 })

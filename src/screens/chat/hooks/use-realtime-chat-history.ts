@@ -384,9 +384,9 @@ export function useRealtimeChatHistory({
             const completedAssistant =
               realtimeMessages.length > 0
                 ? (() => {
-                    const last = realtimeMessages[realtimeMessages.length - 1] as
-                      | Record<string, unknown>
-                      | undefined
+                    const last = realtimeMessages[
+                      realtimeMessages.length - 1
+                    ] as Record<string, unknown> | undefined
                     return last?.role === 'assistant' ? last : null
                   })()
                 : null
@@ -396,31 +396,40 @@ export function useRealtimeChatHistory({
             clearCompletedStreaming()
 
             // Background refetch for long-term consistency — doesn't block render
-            queryClient.invalidateQueries({ queryKey: key, refetchType: 'all' }).then(() => {
-              // Re-inject the completed assistant message if compaction dropped it
-              if (completedAssistant) {
-                const refetchData =
-                  queryClient.getQueryData<Record<string, unknown>>(key)
-                const refetchedMessages =
-                  (refetchData?.messages as Array<Record<string, unknown>>) ?? []
-                const assistantTail = (completedAssistant.content ?? completedAssistant.text ?? '')
-                  .toString()
-                  .slice(-64)
-                const alreadyPresent = refetchedMessages.some(
-                  (m) =>
-                    m.role === 'assistant' &&
-                    ((m.content ?? m.text ?? '') as string).toString().slice(-64) === assistantTail,
-                )
-                if (!alreadyPresent) {
-                  appendHistoryMessage(
-                    queryClient,
-                    effectiveFriendlyId,
-                    effectiveSessionKey,
-                    completedAssistant as unknown as import('@/types/chat').ChatMessage,
+            queryClient
+              .invalidateQueries({ queryKey: key, refetchType: 'all' })
+              .then(() => {
+                // Re-inject the completed assistant message if compaction dropped it
+                if (completedAssistant) {
+                  const refetchData =
+                    queryClient.getQueryData<Record<string, unknown>>(key)
+                  const refetchedMessages =
+                    (refetchData?.messages as Array<Record<string, unknown>>) ??
+                    []
+                  const assistantTail = (
+                    completedAssistant.content ??
+                    completedAssistant.text ??
+                    ''
                   )
+                    .toString()
+                    .slice(-64)
+                  const alreadyPresent = refetchedMessages.some(
+                    (m) =>
+                      m.role === 'assistant' &&
+                      ((m.content ?? m.text ?? '') as string)
+                        .toString()
+                        .slice(-64) === assistantTail,
+                  )
+                  if (!alreadyPresent) {
+                    appendHistoryMessage(
+                      queryClient,
+                      effectiveFriendlyId,
+                      effectiveSessionKey,
+                      completedAssistant as unknown as ChatMessage,
+                    )
+                  }
                 }
-              }
-            })
+              })
 
             // Check for compaction — significant message count drop
             const newData =

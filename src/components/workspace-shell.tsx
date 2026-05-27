@@ -21,8 +21,6 @@ import {
   useState,
 } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { HugeiconsIcon } from '@hugeicons/react'
-import { CheckListIcon } from '@hugeicons/core-free-icons'
 import type { AuthStatus } from '@/lib/claude-auth'
 import { fetchClaudeAuthStatus } from '@/lib/claude-auth'
 import { cn } from '@/lib/utils'
@@ -47,8 +45,6 @@ import { CommandPalette } from '@/components/command-palette'
 import { WorkspaceImprovementDrawer } from '@/components/workspace-improvement-drawer'
 import { useSettings } from '@/hooks/use-settings'
 import { apiPath } from '@/lib/base-path'
-import { WORKSPACE_IMPROVEMENT_OPEN_EVENT } from '@/lib/workspace-improvement-progress'
-import { findWorkspaceImprovementPage } from '@/lib/workspace-improvements'
 // ActivityTicker moved to dashboard-only (too noisy for global header)
 
 const TerminalWorkspace = lazy(() =>
@@ -62,10 +58,15 @@ export const DESKTOP_SIDEBAR_BACKDROP_CLASS =
 
 export function getWorkspaceMobilePageTitle(pathname: string) {
   if (pathname.startsWith('/phone')) return 'Phone Cockpit'
+  if (pathname.startsWith('/health')) return 'Health'
   if (pathname.startsWith('/lily')) return 'LILY'
   if (pathname.startsWith('/terminal')) return 'Terminal'
   if (pathname.startsWith('/files')) return 'Files'
   if (pathname.startsWith('/75-tracker')) return '75 Hard/Soft'
+  if (pathname.startsWith('/pto-tracker')) return 'PTO Tracker'
+  if (pathname.startsWith('/wegovy')) return 'Wegovy Shots'
+  if (pathname.startsWith('/zyn-tracker')) return 'Zyn Tracker'
+  if (pathname.startsWith('/food-log')) return 'Food Log'
   if (pathname.startsWith('/jobs')) return 'Jobs'
   if (pathname.startsWith('/tasks')) return 'Tasks'
   if (pathname.startsWith('/conductor')) return 'Conductor'
@@ -83,6 +84,18 @@ export function getWorkspaceMobilePageTitle(pathname: string) {
   if (pathname.startsWith('/settings')) return 'Settings'
   if (pathname.startsWith('/debug')) return 'Debug'
   if (pathname.startsWith('/activity')) return 'Activity'
+  return null
+}
+
+export function getWorkspaceHiddenPageTitle(pathname: string) {
+  if (pathname.startsWith('/chat') || pathname === '/' || pathname === '/new') {
+    return 'Chat'
+  }
+  if (pathname.startsWith('/playground')) return 'HermesWorld'
+  if (pathname.startsWith('/files')) return 'Files'
+  if (pathname.startsWith('/terminal')) return 'Terminal'
+  if (pathname.startsWith('/conductor')) return 'Conductor'
+  if (pathname.startsWith('/memory')) return 'Memory'
   return null
 }
 
@@ -127,25 +140,12 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
 
   // Map pathname to tab index (mirrors TABS order in mobile-tab-bar)
   const getTabIndex = useCallback((path: string): number => {
-    if (path === '/dashboard') return 0
+    if (path === '/dashboard' || path.startsWith('/phone')) return 0
     if (path.startsWith('/chat') || path === '/new' || path === '/') return 1
-<<<<<<< HEAD
-    if (path.startsWith('/files')) return 2
-    if (path.startsWith('/terminal')) return 3
-    if (path.startsWith('/life-os')) return 4
-    if (path.startsWith('/jobs')) return 5
-    if (path === '/swarm' || path.startsWith('/swarm2')) return 6
-    if (path.startsWith('/memory')) return 7
-    if (path.startsWith('/skills')) return 8
-    if (path.startsWith('/mcp')) return 9
-    if (path.startsWith('/profiles')) return 10
-    if (path.startsWith('/settings')) return 11
-=======
     if (path.startsWith('/lily')) return 2
     if (path.startsWith('/files')) return 3
     if (path.startsWith('/terminal')) return 4
     if (path === '/swarm' || path.startsWith('/swarm2')) return 5
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     return -1
   }, [])
 
@@ -185,7 +185,9 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       }
 
       try {
-        const res = await fetch(apiPath('/api/connection-status'), { cache: 'no-store' })
+        const res = await fetch(apiPath('/api/connection-status'), {
+          cache: 'no-store',
+        })
         if (!res.ok || cancelled) return
         const data = (await res.json()) as {
           ok?: boolean
@@ -208,55 +210,24 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   }, [connectionVerified])
 
   // Derive active session from URL
-<<<<<<< HEAD
-  const mobilePageTitle = (() => {
-    if (pathname.startsWith('/terminal')) return 'Terminal'
-    if (pathname.startsWith('/life-os')) return 'Life OS'
-    if (pathname.startsWith('/files')) return 'Files'
-    if (pathname.startsWith('/jobs')) return 'Jobs'
-    if (pathname.startsWith('/conductor')) return 'Conductor'
-    if (pathname.startsWith('/operations')) return 'Operations'
-    if (pathname.startsWith('/swarm2') || pathname === '/swarm') return 'Swarm'
-    if (pathname.startsWith('/memory')) return 'Memory'
-    if (pathname.startsWith('/skills')) return 'Skills'
-    if (pathname.startsWith('/mcp')) return 'MCP'
-    if (pathname.startsWith('/profiles')) return 'Profiles'
-    if (pathname.startsWith('/settings')) return 'Settings'
-    if (pathname.startsWith('/debug')) return 'Debug'
-    if (pathname.startsWith('/activity')) return 'Activity'
-    return null
-  })()
-=======
   const mobilePageTitle = getWorkspaceMobilePageTitle(pathname)
-  const mobileImprovementPage = findWorkspaceImprovementPage(pathname)
-  const mobileImprovementAction = mobileImprovementPage ? (
-    <button
-      type="button"
-      aria-label={`Open ${mobileImprovementPage.label} improvements`}
-      onClick={() =>
-        window.dispatchEvent(new CustomEvent(WORKSPACE_IMPROVEMENT_OPEN_EVENT))
-      }
-      className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary-200 text-[11px] font-semibold text-primary-700 active:bg-primary-100 dark:border-neutral-800 dark:text-neutral-200 dark:active:bg-neutral-900"
-    >
-      <HugeiconsIcon icon={CheckListIcon} size={17} strokeWidth={1.8} />
-    </button>
-  ) : null
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
+  const hiddenPageTitle = getWorkspaceHiddenPageTitle(pathname)
 
   const chatMatch = pathname.match(/^\/chat\/(.+)$/)
   const activeFriendlyId = chatMatch ? chatMatch[1] : 'main'
   const isOnChatRoute = Boolean(chatMatch) || pathname === '/new'
   const isOnTerminalRoute = pathname.startsWith('/terminal')
-  const isOnPlaygroundRoute = pathname === '/playground' || pathname.startsWith('/playground/')
-  const isOnHermesWorldLandingRoute = pathname === '/hermes-world' || pathname.startsWith('/hermes-world/') || pathname === '/world' || pathname.startsWith('/world/')
+  const isOnPlaygroundRoute =
+    pathname === '/playground' || pathname.startsWith('/playground/')
+  const isOnHermesWorldLandingRoute =
+    pathname === '/hermes-world' ||
+    pathname.startsWith('/hermes-world/') ||
+    pathname === '/world' ||
+    pathname.startsWith('/world/')
   const isEmbeddedSurface =
-<<<<<<< HEAD
-    search?.embed === '1' || search?.embed === 'true' || search?.mode === 'embed'
-=======
     routeSearch.embed === '1' ||
     routeSearch.embed === 'true' ||
     routeSearch.mode === 'embed'
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   const isChromeFreeSurface = isEmbeddedSurface || isOnHermesWorldLandingRoute
   const hideChatSidebar = isOnChatRoute && chatFocusMode
   const showDesktopSidebarBackdrop =
@@ -412,11 +383,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         <div
           className={cn(
             'grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden',
-<<<<<<< HEAD
-            hideChatSidebar || isChromeFreeSurface ? 'md:grid-cols-1' : 'md:grid-cols-[auto_1fr]',
-=======
             hideChatSidebar ? 'md:grid-cols-1' : 'md:grid-cols-[auto_1fr]',
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
           )}
         >
           {/* Activity ticker bar */}
@@ -459,22 +426,24 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
             ].join(' ')}
             data-tour="chat-area"
           >
+            {hiddenPageTitle ? (
+              <h1 className="sr-only">{hiddenPageTitle}</h1>
+            ) : null}
             {/* Persistent terminal — stays mounted to preserve session across navigation */}
             <div
               className="flex flex-col"
+              aria-hidden={!isOnTerminalRoute}
               style={{
                 position: 'absolute',
                 inset: 0,
+                display: isOnTerminalRoute ? 'flex' : 'none',
                 visibility: isOnTerminalRoute ? 'visible' : 'hidden',
                 pointerEvents: isOnTerminalRoute ? 'auto' : 'none',
                 zIndex: isOnTerminalRoute ? 1 : -1,
               }}
             >
               {isMobile && isOnTerminalRoute && (
-                <MobilePageHeader
-                  title="Terminal"
-                  right={mobileImprovementAction}
-                />
+                <MobilePageHeader title="Terminal" />
               )}
               <div className="flex-1 min-h-0 overflow-hidden">
                 <Suspense fallback={null}>
@@ -503,24 +472,12 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
               {isMobile &&
                 !isOnChatRoute &&
                 !isOnTerminalRoute &&
-                mobilePageTitle && (
-                  <MobilePageHeader
-                    title={mobilePageTitle}
-                    right={mobileImprovementAction}
-                  />
-                )}
+                mobilePageTitle && <MobilePageHeader title={mobilePageTitle} />}
               {children}
             </div>
           </main>
 
           {/* Chat panel — visible on non-chat routes (but not in HermesWorld, which has its own in-game chat) */}
-<<<<<<< HEAD
-          {!isOnChatRoute && !isOnPlaygroundRoute && !isChromeFreeSurface && !isMobile && <ChatPanel />}
-        </div>
-
-        {/* Floating chat toggle — visible on non-chat routes (but not in HermesWorld) */}
-        {!isChromeFreeSurface && !isOnChatRoute && !isOnPlaygroundRoute && !isMobile && <ChatPanelToggle />}
-=======
           {!isOnChatRoute && !isOnPlaygroundRoute && !isMobile && <ChatPanel />}
         </div>
 
@@ -528,7 +485,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         {!isOnChatRoute && !isOnPlaygroundRoute && !isMobile && (
           <ChatPanelToggle />
         )}
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 
         {showDesktopSidebarBackdrop ? (
           <button
@@ -544,14 +500,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         ) : null}
       </div>
 
-<<<<<<< HEAD
-      {!isChromeFreeSurface ? <MobileHamburgerMenu /> : null}
-      {!isChromeFreeSurface ? <MobileTabBar /> : null}
-      {!isChromeFreeSurface && !isMobile && !isOnChatRoute && settings.showSystemMetricsFooter ? (
-        <SystemMetricsFooter leftOffsetPx={sidebarCollapsed ? 48 : 300} />
-      ) : null}
-      {!isChromeFreeSurface ? <CommandPalette pathname={pathname} sessions={sessions} /> : null}
-=======
       <MobileHamburgerMenu />
       <MobileTabBar />
       {!isMobile && !isOnChatRoute && settings.showSystemMetricsFooter ? (
@@ -559,7 +507,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       ) : null}
       <CommandPalette pathname={pathname} sessions={sessions} />
       <WorkspaceImprovementDrawer pathname={pathname} />
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     </>
   )
 }

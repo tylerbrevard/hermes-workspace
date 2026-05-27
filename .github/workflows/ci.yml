@@ -53,6 +53,28 @@ jobs:
             exit 1
           fi
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Mobile route smoke
+        env:
+          PORT: '3002'
+          HERMES_PASSWORD: ci-smoke-test-password
+        run: |
+          set -euo pipefail
+          pnpm start > /tmp/hermes-workspace.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; cat /tmp/hermes-workspace.log || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3002/ >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          pnpm smoke:routes:mobile http://127.0.0.1:3002
+
   test:
     name: Run Tests
     runs-on: ubuntu-latest

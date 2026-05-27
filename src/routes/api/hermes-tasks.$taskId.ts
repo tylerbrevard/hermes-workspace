@@ -1,8 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { randomUUID } from 'node:crypto'
+import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { deleteTask, getTask, moveTask, updateTask } from '../../server/tasks-store'
-import { ensureLocalSession, appendLocalMessage, getLocalMessages } from '../../server/local-session-store'
+import { appendLocalMessage, ensureLocalSession, getLocalMessages } from '../../server/local-session-store'
 import { getSessionMessages } from '../../server/claude-dashboard-api'
 import type { TaskColumn, TaskPriority } from '../../server/tasks-store'
 

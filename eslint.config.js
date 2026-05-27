@@ -1,11 +1,35 @@
 //  @ts-check
 
 import { tanstackConfig } from '@tanstack/eslint-config'
+import reactHooks from 'eslint-plugin-react-hooks'
 
 export default [
+  {
+    ignores: [
+      'dist/**',
+      'electron/server-bundle.cjs',
+      'eslint.config.js',
+      'node_modules/**',
+      'prettier.config.js',
+      'public/**',
+      'server-entry.js',
+      'scripts/generate-pwa-icons.js',
+      'vite.config.ts',
+    ],
+  },
   ...tanstackConfig,
   {
-    ignores: ['eslint.config.js', 'prettier.config.js', 'vite.config.ts'],
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
+    plugins: {
+      'react-hooks': reactHooks,
+    },
+    rules: {
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/require-await': 'off',
+      'no-shadow': 'off',
+    },
   },
   {
     // Block client-side imports of server-only MCP input types.

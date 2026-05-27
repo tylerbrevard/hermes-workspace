@@ -1,5 +1,5 @@
-import type { ComponentProps } from 'react'
 import { HERMESWORLD_CHARACTER_ARCHETYPES } from '../lib/character-config'
+import type { ComponentProps } from 'react'
 
 const PLAYER_ARCHETYPE = HERMESWORLD_CHARACTER_ARCHETYPES.find(
   (entry) => entry.id === 'player-adventurer',

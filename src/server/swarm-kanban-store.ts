@@ -10,7 +10,7 @@ export type SwarmKanbanCard = {
   id: string
   title: string
   spec: string
-  acceptanceCriteria: string[]
+  acceptanceCriteria: Array<string>
   assignedWorker: string | null
   reviewer: string | null
   status: SwarmKanbanLane | string
@@ -19,13 +19,13 @@ export type SwarmKanbanCard = {
   createdBy: string
   createdAt: number
   updatedAt: number
-  parents?: string[]
-  children?: string[]
+  parents?: Array<string>
+  children?: Array<string>
   latestRun?: { summary?: string | null; outcome?: string | null; status?: string | null } | null
   source?: string
 }
 
-type SwarmKanbanFile = { cards: SwarmKanbanCard[] }
+type SwarmKanbanFile = { cards: Array<SwarmKanbanCard> }
 
 type ListFilters = {
   status?: string | null
@@ -37,14 +37,14 @@ type ListFilters = {
 export type CreateSwarmKanbanCardInput = {
   title: string
   spec?: string
-  acceptanceCriteria?: string[]
+  acceptanceCriteria?: Array<string>
   assignedWorker?: string | null
   reviewer?: string | null
   status?: SwarmKanbanLane | null
   missionId?: string | null
   reportPath?: string | null
   createdBy?: string | null
-  parents?: string[]
+  parents?: Array<string>
   idempotencyKey?: string | null
 }
 
@@ -82,7 +82,7 @@ function normalizeStatus(value: unknown): SwarmKanbanLane {
   return SWARM_KANBAN_LANES.includes(value as SwarmKanbanLane) ? (value as SwarmKanbanLane) : 'backlog'
 }
 
-function normalizeCriteria(value: unknown): string[] {
+function normalizeCriteria(value: unknown): Array<string> {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
   if (typeof value === 'string') return value.split('\n').map((item) => item.trim()).filter(Boolean)
   return []
@@ -110,7 +110,7 @@ function normalizeCard(card: (Partial<Omit<SwarmKanbanCard, 'status'>> & { id?: 
   }
 }
 
-export function listSwarmKanbanCards(filters: ListFilters = {}): SwarmKanbanCard[] {
+export function listSwarmKanbanCards(filters: ListFilters = {}): Array<SwarmKanbanCard> {
   let cards = readKanbanFile().cards
   if (filters.status) cards = cards.filter((card) => card.status === normalizeStatus(filters.status))
   if (filters.assignedWorker) cards = cards.filter((card) => card.assignedWorker === filters.assignedWorker)

@@ -5,6 +5,13 @@ import { TasksScreen } from '@/screens/tasks/tasks-screen'
 
 const searchSchema = z.object({
   assignee: z.string().optional(),
+  filter: z
+    .enum(['all', 'active', 'blocked', 'overdue', 'today', 'waiting', 'delegated'])
+    .optional(),
+  create: z.enum(['task']).optional(),
+  column: z
+    .enum(['backlog', 'todo', 'in_progress', 'review', 'blocked', 'done', 'deleted'])
+    .optional(),
 })
 
 export const Route = createFileRoute('/tasks')({

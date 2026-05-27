@@ -4,10 +4,12 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
+  Apple01Icon,
   ArrowDown01Icon,
   ArrowUp01Icon,
   BrainIcon,
   Building01Icon,
+  Calendar01Icon,
   Castle02Icon,
   Chat01Icon,
   CheckListIcon,
@@ -16,11 +18,13 @@ import {
   DashboardSquare01Icon,
   Dumbbell01Icon,
   File01Icon,
+  InjectionIcon,
   McpServerIcon,
   MessageMultiple01Icon,
   PuzzleIcon,
   Rocket01Icon,
   Settings01Icon,
+  Target02Icon,
   UserGroupIcon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
@@ -45,10 +49,7 @@ import {
   CHAT_RUN_COMMAND_EVENT,
 } from '@/screens/chat/chat-events'
 import { cn } from '@/lib/utils'
-<<<<<<< HEAD
-=======
 import { WORKSPACE_IMPROVEMENT_OPEN_EVENT } from '@/lib/workspace-improvement-progress'
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 
 type CommandPaletteProps = {
   pathname: string
@@ -57,7 +58,7 @@ type CommandPaletteProps = {
 
 type CommandAction = {
   id: string
-  group: 'Screens' | 'Recent Sessions' | 'Slash Commands'
+  group: 'Actions' | 'Screens' | 'Recent Sessions' | 'Slash Commands'
   label: string
   keywords: string
   shortcut?: string
@@ -70,6 +71,7 @@ type ScoredAction = CommandAction & {
 }
 
 const SCREEN_GROUP_ORDER = [
+  'Actions',
   'Screens',
   'Recent Sessions',
   'Slash Commands',
@@ -114,6 +116,17 @@ function scoreCommandAction(action: CommandAction, query: string) {
 
   if (queryIndex !== normalizedQuery.length) return 0
   return 180 - gaps - Math.max(0, haystack.length - normalizedQuery.length)
+}
+
+function isEditableEventTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false
+  const tagName = target.tagName.toLowerCase()
+  return (
+    target.isContentEditable ||
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select'
+  )
 }
 
 export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
@@ -198,8 +211,6 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         onSelect: () => void navigate({ to: '/chat' }),
       },
       {
-<<<<<<< HEAD
-=======
         id: 'screen-lily',
         group: 'Screens',
         label: 'LILY',
@@ -227,7 +238,6 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         onSelect: () => void navigate({ to: '/playground' }),
       },
       {
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
         id: 'screen-files',
         group: 'Screens',
         label: 'Files',
@@ -248,20 +258,13 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
       {
         id: 'screen-jobs',
         group: 'Screens',
-<<<<<<< HEAD
-        label: 'Life OS',
-        keywords: 'pai pulse life operating system terminal dashboard',
-=======
         label: 'Jobs',
         keywords: 'automation cron heartbeat schedule runs',
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
         shortcut: 'Go',
         icon: Clock01Icon,
         onSelect: () => void navigate({ to: '/jobs' }),
       },
       {
-<<<<<<< HEAD
-=======
         id: 'screen-tasks',
         group: 'Screens',
         label: 'Tasks',
@@ -279,6 +282,46 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         shortcut: 'Go',
         icon: Dumbbell01Icon,
         onSelect: () => void navigate({ to: '/75-tracker' }),
+      },
+      {
+        id: 'screen-pto-tracker',
+        group: 'Screens',
+        label: 'PTO Tracker',
+        keywords:
+          'pto time off flex sick calendar direct reports attendance presence inactivity',
+        shortcut: 'Go',
+        icon: Calendar01Icon,
+        onSelect: () => void navigate({ to: '/pto-tracker' }),
+      },
+      {
+        id: 'screen-wegovy',
+        group: 'Screens',
+        label: 'Wegovy Shots',
+        keywords:
+          'wegovy shot injection semaglutide dose weight side effects medication',
+        shortcut: 'Go',
+        icon: InjectionIcon,
+        onSelect: () => void navigate({ to: '/wegovy' }),
+      },
+      {
+        id: 'screen-zyn-tracker',
+        group: 'Screens',
+        label: 'Zyn Tracker',
+        keywords:
+          'zyn nicotine pouch pouches daily count strength craving trigger limit',
+        shortcut: 'Go',
+        icon: Target02Icon,
+        onSelect: () => void navigate({ to: '/zyn-tracker' }),
+      },
+      {
+        id: 'screen-food-log',
+        group: 'Screens',
+        label: 'Food Log',
+        keywords:
+          'food calorie calories macros protein carbs fat meal cal ai nutrition',
+        shortcut: 'Go',
+        icon: Apple01Icon,
+        onSelect: () => void navigate({ to: '/food-log' }),
       },
       {
         id: 'screen-conductor',
@@ -317,7 +360,6 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         onSelect: () => void navigate({ to: '/swarm' }),
       },
       {
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
         id: 'screen-memory',
         group: 'Screens',
         label: 'Memory',
@@ -383,14 +425,9 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
       {
         id: 'screen-it-ops',
         group: 'Screens',
-<<<<<<< HEAD
-        label: 'IT Ops / ConnectWise',
-        keywords: 'connectwise tickets standups analytics support service board sla',
-=======
         label: 'ConnectWise',
         keywords:
           'connectwise tickets standups analytics support service board sla',
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
         shortcut: 'Go',
         icon: Building01Icon,
         onSelect: () => void navigate({ to: '/it-ops' }),
@@ -511,9 +548,119 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
     [pathname],
   )
 
+  const quickActionActions = useMemo<Array<CommandAction>>(
+    () => [
+      {
+        id: 'action-create-task',
+        group: 'Actions',
+        label: 'Create task',
+        keywords: 'new task todo backlog capture action item keyboard',
+        shortcut: isMacPlatform ? '⌘⇧T' : 'Ctrl ⇧T',
+        icon: CheckListIcon,
+        onSelect: () =>
+          void navigate({
+            to: '/tasks',
+            search: { create: 'task', column: 'backlog', filter: 'active' },
+          }),
+      },
+      {
+        id: 'action-capture-note',
+        group: 'Actions',
+        label: 'Capture note',
+        keywords: 'quick note mobile phone cockpit memory inbox capture',
+        shortcut: isMacPlatform ? '⌘⇧N' : 'Ctrl ⇧N',
+        icon: MessageMultiple01Icon,
+        onSelect: () =>
+          void navigate({
+            to: '/phone',
+            search: { capture: 'note' },
+          }),
+      },
+      {
+        id: 'action-draft-email',
+        group: 'Actions',
+        label: 'Draft email',
+        keywords: 'reply later mail message draft phone cockpit',
+        shortcut: isMacPlatform ? '⌘⇧D' : 'Ctrl ⇧D',
+        icon: MessageMultiple01Icon,
+        onSelect: () =>
+          void navigate({
+            to: '/phone',
+            search: { capture: 'draft' },
+          }),
+      },
+      {
+        id: 'action-start-agent-job',
+        group: 'Actions',
+        label: 'Start agent job',
+        keywords: 'conductor mission worker swarm automation job run',
+        shortcut: isMacPlatform ? '⌘⇧J' : 'Ctrl ⇧J',
+        icon: Rocket01Icon,
+        onSelect: () => void navigate({ to: '/conductor' }),
+      },
+      {
+        id: 'action-open-model-settings',
+        group: 'Actions',
+        label: 'Open model settings',
+        keywords: 'settings model provider claude api key local openai',
+        shortcut: 'Settings',
+        icon: Settings01Icon,
+        onSelect: () =>
+          void navigate({ to: '/settings', search: { section: 'claude' } }),
+      },
+      {
+        id: 'action-open-voice-settings',
+        group: 'Actions',
+        label: 'Open voice settings',
+        keywords: 'settings lily voice microphone speaker livekit speech',
+        shortcut: 'Settings',
+        icon: Settings01Icon,
+        onSelect: () =>
+          void navigate({ to: '/settings', search: { section: 'voice' } }),
+      },
+      {
+        id: 'action-open-appearance-settings',
+        group: 'Actions',
+        label: 'Open appearance settings',
+        keywords: 'settings theme appearance skin palette dark light color',
+        shortcut: 'Settings',
+        icon: Settings01Icon,
+        onSelect: () =>
+          void navigate({
+            to: '/settings',
+            search: { section: 'appearance' },
+          }),
+      },
+      {
+        id: 'action-open-notification-settings',
+        group: 'Actions',
+        label: 'Open notification settings',
+        keywords: 'settings notifications alerts threshold usage suggestions',
+        shortcut: 'Settings',
+        icon: Settings01Icon,
+        onSelect: () =>
+          void navigate({
+            to: '/settings',
+            search: { section: 'notifications' },
+          }),
+      },
+    ],
+    [isMacPlatform, navigate],
+  )
+
   const actions = useMemo(
-    () => [...screenActions, ...recentSessionActions, ...slashCommandActions],
-    [recentSessionActions, screenActions, slashCommandActions],
+    () => [
+      ...quickActionActions,
+      ...screenActions,
+      ...recentSessionActions,
+      ...slashCommandActions,
+    ],
+    [
+      quickActionActions,
+      recentSessionActions,
+      screenActions,
+      slashCommandActions,
+    ],
   )
 
   const filteredActions = useMemo<Array<ScoredAction>>(() => {
@@ -578,6 +725,42 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
   }, [isDesktop])
 
   useEffect(() => {
+    function handleQuickActionShortcut(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        !isDesktop ||
+        !(event.metaKey || event.ctrlKey) ||
+        !event.shiftKey ||
+        event.altKey ||
+        isEditableEventTarget(event.target)
+      ) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      const actionByKey: Record<string, string> = {
+        t: 'action-create-task',
+        n: 'action-capture-note',
+        d: 'action-draft-email',
+        j: 'action-start-agent-job',
+      }
+      const actionId = actionByKey[key]
+      if (!actionId) return
+      const action = quickActionActions.find((item) => item.id === actionId)
+      if (!action) return
+
+      event.preventDefault()
+      action.onSelect()
+      setOpen(false)
+    }
+
+    window.addEventListener('keydown', handleQuickActionShortcut, true)
+    return () =>
+      window.removeEventListener('keydown', handleQuickActionShortcut, true)
+  }, [isDesktop, quickActionActions])
+
+  useEffect(() => {
     if (!open) return
 
     function handleOpenKey(event: KeyboardEvent) {
@@ -636,7 +819,7 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
           onValueChange={setQuery}
           mode="none"
         >
-          <CommandInput placeholder="Search screens, sessions, and commands" />
+          <CommandInput placeholder="Search actions, screens, sessions, and commands" />
           <CommandPanel className="flex min-h-0 flex-1 flex-col">
             {groupedActions.length === 0 ? (
               <div className="flex h-72 items-center justify-center text-sm text-primary-600">

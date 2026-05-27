@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { chromium } from 'playwright'
 
@@ -23,7 +24,13 @@ const outputDir =
     mobile ? 'workspace-visual-smoke-mobile' : 'workspace-visual-smoke',
   )
 const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'))
-const BROWSER_CLEANUP_TIMEOUT_MS = 5_000
+const BROWSER_CLEANUP_TIMEOUT_MS = 30_000
+const ROUTE_GOTO_TIMEOUT_MS = Number(
+  process.env.WORKSPACE_VISUAL_GOTO_TIMEOUT_MS || 45_000,
+)
+const EXPECTED_TEXT_TIMEOUT_MS = Number(
+  process.env.WORKSPACE_VISUAL_EXPECTED_TIMEOUT_MS || 30_000,
+)
 const visibleRoutes = routes.filter((route) => mobile || !route.mobileOnly)
 
 function readEnv() {
@@ -44,9 +51,52 @@ function readEnv() {
 }
 
 function chromeExecutablePath() {
+  if (process.env.WORKSPACE_VISUAL_CHROME_EXECUTABLE) {
+    return process.env.WORKSPACE_VISUAL_CHROME_EXECUTABLE
+  }
+  if (fs.existsSync(chromium.executablePath())) return undefined
   const macChrome =
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   return fs.existsSync(macChrome) ? macChrome : undefined
+}
+
+function readWorkspaceSessionToken() {
+  const sessionPath = path.join(
+    env.HERMES_HOME || env.CLAUDE_HOME || path.join(os.homedir(), '.hermes'),
+    'workspace-sessions.json',
+  )
+  try {
+    const parsed = JSON.parse(fs.readFileSync(sessionPath, 'utf8'))
+    return (
+      Object.entries(parsed.tokens || {})
+        .filter(
+          ([, expiry]) => typeof expiry === 'number' && expiry > Date.now(),
+        )
+        .sort((left, right) => right[1] - left[1])[0]?.[0] ?? null
+    )
+  } catch {
+    return null
+  }
+}
+
+async function installWorkspaceSession() {
+  const token = readWorkspaceSessionToken()
+  if (!token) return false
+
+  const url = new URL(baseUrl)
+  await context.addCookies([
+    {
+      name: 'claude-auth',
+      value: token,
+      domain: url.hostname,
+      path: url.pathname.replace(/\/$/, '') || '/',
+      httpOnly: true,
+      secure: url.protocol === 'https:',
+      sameSite: 'Strict',
+      expires: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
+    },
+  ])
+  return true
 }
 
 async function withCleanupTimeout(label, action) {
@@ -70,6 +120,42 @@ async function withCleanupTimeout(label, action) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isTransientNavigationError(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /ERR_CONNECTION_REFUSED|ERR_ABORTED|frame was detached|Target page, context or browser has been closed/i.test(
+    message,
+  )
+}
+
+async function gotoRoute(page, url) {
+  let lastError
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: ROUTE_GOTO_TIMEOUT_MS,
+      })
+      if (page.url().includes('__hermes_recovered=')) {
+        await sleep(2_000)
+        await page.goto(url, {
+          waitUntil: 'domcontentloaded',
+          timeout: ROUTE_GOTO_TIMEOUT_MS,
+        })
+      }
+      return
+    } catch (error) {
+      lastError = error
+      if (!isTransientNavigationError(error) || attempt === 3) break
+      await sleep(2_000 * attempt)
+    }
+  }
+  throw lastError
+}
+
 fs.mkdirSync(outputDir, { recursive: true })
 
 const env = readEnv()
@@ -82,9 +168,11 @@ const context = await browser.newContext({
   deviceScaleFactor: mobile ? 2 : 1,
   isMobile: mobile,
   hasTouch: mobile,
+  serviceWorkers: 'block',
 })
 
-if (env.HERMES_PASSWORD) {
+const hasWorkspaceSession = await installWorkspaceSession()
+if (!hasWorkspaceSession && env.HERMES_PASSWORD) {
   const auth = await context.request.post(`${baseUrl}/api/auth`, {
     data: { password: env.HERMES_PASSWORD },
     headers: { 'content-type': 'application/json' },
@@ -99,11 +187,17 @@ let failed = 0
 
 for (const {
   route,
+  mobileSmokeText,
+  mobileVisibleSelector,
   smokeText,
+  visibleSelector,
   visualText,
   screenshotName: name,
 } of visibleRoutes) {
-  const expectedText = visualText || smokeText
+  const expectedText =
+    mobile && mobileSmokeText ? mobileSmokeText : visualText || smokeText
+  const expectedVisibleSelector =
+    mobile && mobileVisibleSelector ? mobileVisibleSelector : visibleSelector
   const page = await context.newPage()
   const errors = []
   const consoleErrors = []
@@ -119,10 +213,7 @@ for (const {
 
   const screenshotPath = path.join(outputDir, `${name}.png`)
   try {
-    await page.goto(`${baseUrl}${route}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30_000,
-    })
+    await gotoRoute(page, `${baseUrl}${route}`)
     await page
       .waitForLoadState('networkidle', { timeout: 10_000 })
       .catch(() => {})
@@ -135,8 +226,14 @@ for (const {
     await page.waitForFunction(
       (expected) => document.body.innerText.includes(expected),
       expectedText,
-      { timeout: 8_000 },
+      { timeout: EXPECTED_TEXT_TIMEOUT_MS },
     )
+    if (expectedVisibleSelector) {
+      await page
+        .locator(expectedVisibleSelector)
+        .first()
+        .waitFor({ state: 'visible', timeout: EXPECTED_TEXT_TIMEOUT_MS })
+    }
     await page.screenshot({ path: screenshotPath, fullPage: true })
     const bodyText = await page.locator('body').innerText({ timeout: 10_000 })
     const image = fs.statSync(screenshotPath)
@@ -172,9 +269,12 @@ for (const {
 
     results.push({
       route,
+      label: name,
+      screenshotName: name,
       screenshot: screenshotPath,
       ok: true,
       expectedText,
+      expectedVisibleSelector,
       layout,
       consoleErrors,
     })
@@ -182,7 +282,19 @@ for (const {
   } catch (error) {
     failed += 1
     const message = error instanceof Error ? error.message : String(error)
-    results.push({ route, screenshot: screenshotPath, ok: false, message })
+    await page
+      .screenshot({ path: screenshotPath, fullPage: true })
+      .catch(() => {})
+    results.push({
+      route,
+      label: name,
+      screenshotName: name,
+      screenshot: screenshotPath,
+      ok: false,
+      expectedText,
+      expectedVisibleSelector,
+      message,
+    })
     console.error(`fail ${route}: ${message}`)
   } finally {
     await page.close()
@@ -200,6 +312,12 @@ fs.writeFileSync(
       capturedAt: new Date().toISOString(),
       baseUrl,
       viewport: mobile ? 'mobile' : 'desktop',
+      screenshotLabels: results.map((result) => ({
+        route: result.route,
+        label: result.label,
+        screenshotName: result.screenshotName,
+        screenshot: result.screenshot,
+      })),
       results,
     },
     null,

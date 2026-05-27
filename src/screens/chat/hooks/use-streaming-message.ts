@@ -444,7 +444,6 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         typeof window !== 'undefined' &&
         window.localStorage?.getItem('hermes:debug:sse') === '1'
       ) {
-        // eslint-disable-next-line no-console
         console.log(
           '[hermes-sse]',
           event,
@@ -456,7 +455,12 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
 
       // hb_signal/keepalive events from server: just mark activity, never let them
       // surface as user-visible thinking or tool rows.
-      if (event === 'hb_signal' || event === 'heartbeat' || event === 'keepalive' || event === 'ping') {
+      if (
+        event === 'hb_signal' ||
+        event === 'heartbeat' ||
+        event === 'keepalive' ||
+        event === 'ping'
+      ) {
         markActivity()
         return
       }
@@ -558,7 +562,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
           // model thinking and would otherwise pollute the TUI activity card.
           const isKeepalivePlaceholder =
             typeof thinking === 'string' &&
-            /^still\s+working[\.\u2026]*\s*$/i.test(thinking.trim())
+            /^still\s+working[.\u2026]*\s*$/i.test(thinking.trim())
           if (isKeepalivePlaceholder) break
           if (thinking) {
             markActivity()

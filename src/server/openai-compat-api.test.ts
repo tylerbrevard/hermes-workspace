@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { openaiChat, parseOpenAIStream } from './openai-compat-api'
 
-function createStreamResponse(chunks: string[]): Response {
+function createStreamResponse(chunks: Array<string>): Response {
   const encoder = new TextEncoder()
   return new Response(
     new ReadableStream({

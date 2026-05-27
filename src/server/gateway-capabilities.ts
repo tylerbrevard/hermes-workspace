@@ -664,7 +664,7 @@ const DASHBOARD_BACKED_APIS = new Set([
 
 export function getCapabilityWarningMessage(
   next: GatewayCapabilities,
-  criticalMissing: string[],
+  criticalMissing: Array<string>,
 ): string | null {
   if (criticalMissing.length === 0 || (!next.health && !next.dashboard.available)) {
     return null
@@ -684,7 +684,10 @@ export function getCapabilityWarningMessage(
   return `[gateway] Missing Hermes APIs detected. ${CLAUDE_UPGRADE_INSTRUCTIONS}`
 }
 
-function logCapabilities(next: GatewayCapabilities): void {
+export function buildCapabilityLogSummary(next: GatewayCapabilities): {
+  summary: string
+  criticalMissing: Array<string>
+} {
   const core: Array<string> = []
   const enhanced: Array<string> = []
   const missing: Array<string> = []
@@ -716,12 +719,21 @@ function logCapabilities(next: GatewayCapabilities): void {
   else missing.push('dashboard')
 
   const mode = getGatewayMode()
-  const summary = `[gateway] gateway=${CLAUDE_API} dashboard=${next.dashboard.url} mode=${mode} core=[${core.join(', ')}] enhanced=[${enhanced.join(', ')}] missing=[${missing.join(', ')}]`
+  const criticalMissing = missing.filter((key) => !OPTIONAL_APIS.has(key))
+  const optionalMissing = missing.filter((key) => OPTIONAL_APIS.has(key))
+  const optionalSegment =
+    optionalMissing.length > 0 ? ` optionalMissing=[${optionalMissing.join(', ')}]` : ''
+  const summary = `[gateway] gateway=${CLAUDE_API} dashboard=${next.dashboard.url} mode=${mode} core=[${core.join(', ')}] enhanced=[${enhanced.join(', ')}] missing=[${criticalMissing.join(', ')}]${optionalSegment}`
+
+  return { summary, criticalMissing }
+}
+
+function logCapabilities(next: GatewayCapabilities): void {
+  const { summary, criticalMissing } = buildCapabilityLogSummary(next)
   if (summary === lastLoggedSummary) return
   lastLoggedSummary = summary
   console.log(summary)
 
-  const criticalMissing = missing.filter((key) => !OPTIONAL_APIS.has(key))
   const warning = getCapabilityWarningMessage(next, criticalMissing)
   if (warning) {
     console.warn(warning)

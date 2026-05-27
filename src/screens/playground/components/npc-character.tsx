@@ -1,6 +1,6 @@
+import { HERMESWORLD_CHARACTER_ARCHETYPES } from '../lib/character-config'
 import type { ComponentProps } from 'react'
 import type { CharacterArchetypeId } from '../lib/character-config'
-import { HERMESWORLD_CHARACTER_ARCHETYPES } from '../lib/character-config'
 
 type NpcCharacterProps = ComponentProps<'group'> & {
   archetypeId: CharacterArchetypeId

@@ -1,13 +1,28 @@
 import { createServer } from 'node:http'
-import { existsSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, extname } from 'node:path'
+import { join, extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import server from './dist/server/server.js'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const CLIENT_DIR = join(__dirname, 'dist', 'client')
+const PTO_TRACKER_REPORT_DIR =
+  process.env.PTO_TRACKER_REPORT_DIR ||
+  join(homedir(), '.hermes', 'workspace', 'runtime', 'reports', 'pto-tracker')
+const HERMES_WORKSPACE_DIR =
+  process.env.HERMES_WORKSPACE || join(homedir(), '.hermes', 'workspace')
+const M5_DISPLAY_DB =
+  process.env.HERMES_M5_DISPLAY_DB ||
+  join(HERMES_WORKSPACE_DIR, 'runtime', 'db', 'workspace', '.m5-display.db')
+const M5_FIRMWARE_DIR = join(HERMES_WORKSPACE_DIR, 'firmware')
+const M5_WEATHER_CACHE = join(
+  HERMES_WORKSPACE_DIR,
+  'runtime',
+  'm5-weather-29607.json',
+)
 const basePath = (() => {
   const raw = (process.env.VITE_APP_BASE_PATH || '').trim()
   if (!raw || raw === '/') return '/'
@@ -18,16 +33,10 @@ const basePath = (() => {
 const port = parseInt(process.env.PORT || '3000', 10)
 const CLAWOS_PROXY_PREFIX =
   basePath === '/' ? '/legacy-clawos' : `${basePath}/legacy-clawos`
-<<<<<<< HEAD
-const CLAWOS_PROXY_ORIGIN = (
-  process.env.CLAWOS_PROXY_ORIGIN || ''
-).replace(/\/$/, '')
-=======
 const CLAWOS_PROXY_ORIGIN = (process.env.CLAWOS_PROXY_ORIGIN || '').replace(
   /\/$/,
   '',
 )
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 const SESSION_STORE_FILE = join(
   process.env.HERMES_HOME ??
     process.env.CLAUDE_HOME ??
@@ -126,8 +135,11 @@ const MIME_TYPES = {
   '.eot': 'application/vnd.ms-fontobject',
   '.map': 'application/json',
   '.txt': 'text/plain',
+  '.md': 'text/markdown; charset=utf-8',
   '.xml': 'application/xml',
   '.webmanifest': 'application/manifest+json',
+  '.csv': 'text/csv; charset=utf-8',
+  '.pdf': 'application/pdf',
 }
 
 function isWorkspaceAuthEnabled() {
@@ -378,6 +390,295 @@ async function maybeProxyClawos(req, res, incomingUrl) {
   return true
 }
 
+async function maybeServePtoTrackerReport(req, res, incomingUrl) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false
+
+  const reportPrefix =
+    basePath === '/' ? '/reports/pto-tracker' : `${basePath}/reports/pto-tracker`
+  const incomingPathname = decodeURIComponent(incomingUrl.pathname)
+  if (
+    !incomingPathname.startsWith(reportPrefix) ||
+    incomingPathname.includes('..')
+  ) {
+    return false
+  }
+
+  if (!hasValidWorkspaceSession(req)) {
+    const redirectTarget = `${basePath}/login?redirect=${encodeURIComponent(
+      incomingPathname + incomingUrl.search,
+    )}`
+    res.writeHead(302, { Location: redirectTarget })
+    res.end()
+    return true
+  }
+
+  const relativePath =
+    incomingPathname.slice(reportPrefix.length).replace(/^\/+/, '') ||
+    'latest.html'
+  const reportRoot = resolve(PTO_TRACKER_REPORT_DIR)
+  const filePath = resolve(reportRoot, relativePath)
+  if (filePath !== reportRoot && !filePath.startsWith(`${reportRoot}/`)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' })
+    res.end('Forbidden')
+    return true
+  }
+
+  try {
+    const fileStat = await stat(filePath)
+    if (!fileStat.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+      res.end('Not found')
+      return true
+    }
+
+    const ext = extname(filePath).toLowerCase()
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream'
+    const data = await readFile(filePath)
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': data.length,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    })
+    if (req.method === 'HEAD') {
+      res.end()
+      return true
+    }
+    res.end(data)
+    return true
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+    res.end('Not found')
+    return true
+  }
+}
+
+function sqliteJson(sql) {
+  if (!existsSync(M5_DISPLAY_DB)) return []
+  const output = execFileSync('sqlite3', ['-json', M5_DISPLAY_DB, sql], {
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  }).trim()
+  return output ? JSON.parse(output) : []
+}
+
+function execSql(sql) {
+  execFileSync('sqlite3', [M5_DISPLAY_DB, sql], {
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  })
+}
+
+function sqlString(value) {
+  return `'${String(value || '').replaceAll("'", "''")}'`
+}
+
+async function maybeServeM5Ota(req, res, incomingUrl) {
+  const incomingPathname = decodeURIComponent(incomingUrl.pathname)
+  const routePath = basePath === '/' ? '/api/iot/m5-ota' : `${basePath}/api/iot/m5-ota`
+  if (incomingPathname !== routePath) return false
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'Method not allowed' }))
+    return true
+  }
+
+  try {
+    const firmware = sqliteJson(
+      'select version, filename, file_size, description, uploaded_at from m5_firmware order by uploaded_at desc',
+    )
+    const download = incomingUrl.searchParams.get('download')
+    const version = incomingUrl.searchParams.get('version')
+
+    if (download === 'true' && version) {
+      const selected = firmware.find((item) => item.version === version)
+      if (!selected) {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Firmware version not found' }))
+        return true
+      }
+      const filePath = join(M5_FIRMWARE_DIR, selected.filename)
+      if (!existsSync(filePath)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Firmware file not found on disk' }))
+        return true
+      }
+      const data = readFileSync(filePath)
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${selected.filename}"`,
+        'Content-Length': data.length,
+        'Cache-Control': 'no-store',
+      })
+      if (req.method === 'HEAD') {
+        res.end()
+        return true
+      }
+      res.end(data)
+      return true
+    }
+
+    const deviceId = incomingUrl.searchParams.get('deviceId') || ''
+    const reportedVersion =
+      incomingUrl.searchParams.get('currentVersion') ||
+      incomingUrl.searchParams.get('firmware') ||
+      ''
+    if (deviceId && reportedVersion) {
+      execSql(
+        `update m5_devices set firmware_version = ${sqlString(reportedVersion)} where device_id = ${sqlString(deviceId)};`,
+      )
+    }
+    const device = deviceId
+      ? sqliteJson(
+          `select firmware_version from m5_devices where device_id = ${sqlString(deviceId)} limit 1`,
+        )[0] || null
+      : null
+    const latest = firmware[0] || null
+    const currentVersion = device?.firmware_version || null
+    const body = {
+      latest: latest
+        ? {
+            version: latest.version,
+            file_size: latest.file_size,
+            uploaded_at: latest.uploaded_at,
+          }
+        : null,
+      available: Boolean(latest && currentVersion && latest.version !== currentVersion),
+      currentVersion,
+      allVersions: firmware.map((item) => ({
+        version: item.version,
+        file_size: item.file_size,
+        description: item.description,
+        uploaded_at: item.uploaded_at,
+      })),
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    })
+    res.end(JSON.stringify(body))
+    return true
+  } catch (error) {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : 'Failed to process OTA request',
+      }),
+    )
+    return true
+  }
+}
+
+function readJsonFile(path, fallback) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return fallback
+  }
+}
+
+function writeJsonFile(path, value) {
+  mkdirSync(resolve(path, '..'), { recursive: true })
+  writeFileSync(path, JSON.stringify(value, null, 2), 'utf8')
+}
+
+function readFreshWeatherCache(maxAgeMs) {
+  const cached = readJsonFile(M5_WEATHER_CACHE, null)
+  if (!cached?.updatedAt) return null
+  const age = Date.now() - Date.parse(cached.updatedAt)
+  if (!Number.isFinite(age) || age > maxAgeMs) return null
+  return cached
+}
+
+function roundedNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.round(value)
+    : null
+}
+
+async function getM5WeatherWidget() {
+  const fresh = readFreshWeatherCache(10 * 60 * 1000)
+  if (fresh) return fresh
+
+  try {
+    const response = await fetch(
+      'https://api.open-meteo.com/v1/forecast?latitude=34.80&longitude=-82.31&current=temperature_2m,apparent_temperature,weather_code&temperature_unit=fahrenheit&timezone=America%2FNew_York',
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000) },
+    )
+    if (!response.ok) throw new Error(`weather returned ${response.status}`)
+    const payload = await response.json()
+    const weather = {
+      zip: '29607',
+      label: 'Feels',
+      temperatureF: roundedNumber(payload.current?.temperature_2m),
+      feelsLikeF: roundedNumber(payload.current?.apparent_temperature),
+      weatherCode: roundedNumber(payload.current?.weather_code),
+      observedAt:
+        typeof payload.current?.time === 'string' ? payload.current.time : null,
+      updatedAt: new Date().toISOString(),
+      source: 'open-meteo',
+    }
+    writeJsonFile(M5_WEATHER_CACHE, weather)
+    return weather
+  } catch {
+    const cached = readJsonFile(M5_WEATHER_CACHE, null)
+    if (cached) return { ...cached, stale: true }
+    return {
+      zip: '29607',
+      label: 'Feels',
+      temperatureF: null,
+      feelsLikeF: null,
+      weatherCode: null,
+      observedAt: null,
+      updatedAt: new Date().toISOString(),
+      source: 'unavailable',
+      stale: true,
+    }
+  }
+}
+
+async function maybeServeM5ConfigWithWeather(req, res, incomingUrl) {
+  const incomingPathname = decodeURIComponent(incomingUrl.pathname)
+  const routePath = basePath === '/' ? '/api/iot/config' : `${basePath}/api/iot/config`
+  if (incomingPathname !== routePath || req.method !== 'GET') return false
+
+  const headers = new Headers()
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value) headers.set(key, Array.isArray(value) ? value.join(', ') : value)
+  }
+  const request = new Request(incomingUrl.toString(), {
+    method: req.method,
+    headers,
+  })
+  const response = await server.fetch(request)
+  const contentType = response.headers.get('content-type') || ''
+  if (!response.ok || !contentType.includes('application/json')) {
+    await writeFetchResponse(res, response)
+    return true
+  }
+
+  const payload = await response.json()
+  const weather = await getM5WeatherWidget()
+  const body = {
+    ...payload,
+    weather,
+    config: {
+      ...(payload && typeof payload.config === 'object' && payload.config !== null
+        ? payload.config
+        : {}),
+      weather,
+    },
+  }
+  const jsonBody = JSON.stringify(body)
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(jsonBody),
+    'Cache-Control': 'no-store',
+  })
+  res.end(jsonBody)
+  return true
+}
+
 async function tryServeStatic(req, res) {
   const url = new URL(
     req.url || '/',
@@ -390,8 +691,14 @@ async function tryServeStatic(req, res) {
   if (pathname.includes('..')) return false
 
   if (basePath !== '/') {
-    if (!pathname.startsWith(basePath)) return false
-    pathname = pathname.slice(basePath.length) || '/'
+    if (pathname.startsWith('/assets/')) {
+      // Old HTML or dynamic import maps can still ask for root-relative assets
+      // after the workspace is mounted under /workspace. Serve those directly
+      // so module scripts are not forced through an SSR redirect.
+    } else {
+      if (!pathname.startsWith(basePath)) return false
+      pathname = pathname.slice(basePath.length) || '/'
+    }
   }
 
   // Asset requests should never fall through to the SSR handler. If a browser
@@ -503,6 +810,19 @@ async function requestHandler(req, res) {
 
   const proxied = await maybeProxyClawos(req, res, incomingUrl)
   if (proxied) return
+
+  const servedPtoTracker = await maybeServePtoTrackerReport(
+    req,
+    res,
+    incomingUrl,
+  )
+  if (servedPtoTracker) return
+
+  const servedM5Ota = await maybeServeM5Ota(req, res, incomingUrl)
+  if (servedM5Ota) return
+
+  const servedM5Config = await maybeServeM5ConfigWithWeather(req, res, incomingUrl)
+  if (servedM5Config) return
 
   // Try static files first (client assets)
   if (req.method === 'GET' || req.method === 'HEAD') {

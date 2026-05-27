@@ -1,6 +1,7 @@
-import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Component,  Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useGLTF } from '@react-three/drei'
-import * as THREE from 'three'
+import type {ReactNode} from 'react';
+import type * as THREE from 'three'
 
 class GlbErrorBoundary extends Component<
   { children: ReactNode; onError?: () => void },
@@ -65,7 +66,7 @@ function GlbInner({ url, scale, yOffset }: { url: string; scale: number; yOffset
   const { scene } = useGLTF(url) as any
   const ref = useRef<THREE.Group>(null)
   const cloned = useMemo(() => {
-    const s = (scene as THREE.Object3D).clone(true)
+    const s = (scene).clone(true)
     s.traverse((obj: any) => {
       if (obj.isMesh) {
         obj.frustumCulled = true

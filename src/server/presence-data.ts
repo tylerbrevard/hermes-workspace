@@ -6,16 +6,25 @@ const HOME = process.env.HOME || '/Users/tylerlyon'
 const HERMES_WORKSPACE =
   process.env.HERMES_WORKSPACE || join(HOME, '.hermes', 'workspace')
 const HERMES_DB_DIR = join(HERMES_WORKSPACE, 'runtime', 'db', 'workspace')
-const GRAPH_WRAPPER = join(HERMES_WORKSPACE, 'scripts', 'run_hermes_venv_python.sh')
+const GRAPH_WRAPPER = join(
+  HERMES_WORKSPACE,
+  'scripts',
+  'run_hermes_venv_python.sh',
+)
 const GRAPH_BRIDGE = join(HERMES_WORKSPACE, 'scripts', 'graph_bridge.py')
 const TYLER_GUID = 'b906d90e-689b-464e-8904-aed5180b463a'
 const PRESENCE_STATE = join(HERMES_WORKSPACE, '.presence_state.json')
-const M5_DB = process.env.HERMES_M5_DISPLAY_DB || join(HERMES_DB_DIR, '.m5-display.db')
+const M5_DB =
+  process.env.HERMES_M5_DISPLAY_DB || join(HERMES_DB_DIR, '.m5-display.db')
 const IOT_CONFIG = join(HERMES_WORKSPACE, '.iot-config.json')
 const M5_WORDS = join(HERMES_WORKSPACE, '.m5_words.json')
+const M5_WEATHER_CACHE = join(
+  HERMES_WORKSPACE,
+  'runtime',
+  'm5-weather-29607.json',
+)
 const MEETINGS_DB =
-  process.env.HERMES_MEETINGS_DB ||
-  join(HERMES_DB_DIR, '.meetings.db')
+  process.env.HERMES_MEETINGS_DB || join(HERMES_DB_DIR, '.meetings.db')
 const LEGACY_PRESENCE_ORIGIN = (
   process.env.HERMES_LEGACY_PRESENCE_ORIGIN?.trim() ||
   process.env.CLAWOS_INTERNAL_ORIGIN?.trim() ||
@@ -34,6 +43,18 @@ type TeamsPresence = {
   timestamp?: string
   error?: string
   source?: string
+}
+
+type M5WeatherWidget = {
+  zip: string
+  label: string
+  temperatureF: number | null
+  feelsLikeF: number | null
+  weatherCode: number | null
+  observedAt: string | null
+  updatedAt: string
+  source: string
+  stale?: boolean
 }
 
 type WordPool = {
@@ -86,6 +107,68 @@ function writeJsonFile(path: string, value: unknown) {
   writeFileSync(path, JSON.stringify(value, null, 2), 'utf8')
 }
 
+function readFreshWeatherCache(maxAgeMs: number): M5WeatherWidget | null {
+  const cached = readJsonFile<M5WeatherWidget | null>(M5_WEATHER_CACHE, null)
+  if (!cached?.updatedAt) return null
+  const age = Date.now() - Date.parse(cached.updatedAt)
+  if (!Number.isFinite(age) || age > maxAgeMs) return null
+  return cached
+}
+
+function roundedNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.round(value)
+    : null
+}
+
+async function getM5WeatherWidget(): Promise<M5WeatherWidget> {
+  const fresh = readFreshWeatherCache(10 * 60 * 1000)
+  if (fresh) return fresh
+
+  try {
+    const response = await fetch(
+      'https://api.open-meteo.com/v1/forecast?latitude=34.80&longitude=-82.31&current=temperature_2m,apparent_temperature,weather_code&temperature_unit=fahrenheit&timezone=America%2FNew_York',
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000) },
+    )
+    if (!response.ok) throw new Error(`weather returned ${response.status}`)
+    const payload = (await response.json()) as {
+      current?: {
+        time?: string
+        temperature_2m?: number
+        apparent_temperature?: number
+        weather_code?: number
+      }
+    }
+    const weather: M5WeatherWidget = {
+      zip: '29607',
+      label: 'Feels',
+      temperatureF: roundedNumber(payload.current?.temperature_2m),
+      feelsLikeF: roundedNumber(payload.current?.apparent_temperature),
+      weatherCode: roundedNumber(payload.current?.weather_code),
+      observedAt:
+        typeof payload.current?.time === 'string' ? payload.current.time : null,
+      updatedAt: new Date().toISOString(),
+      source: 'open-meteo',
+    }
+    writeJsonFile(M5_WEATHER_CACHE, weather)
+    return weather
+  } catch {
+    const cached = readJsonFile<M5WeatherWidget | null>(M5_WEATHER_CACHE, null)
+    if (cached) return { ...cached, stale: true }
+    return {
+      zip: '29607',
+      label: 'Feels',
+      temperatureF: null,
+      feelsLikeF: null,
+      weatherCode: null,
+      observedAt: null,
+      updatedAt: new Date().toISOString(),
+      source: 'unavailable',
+      stale: true,
+    }
+  }
+}
+
 function queryDb<T>(dbPath: string, sql: string): Array<T> {
   if (!existsSync(dbPath)) return []
   const output = execFileSync('sqlite3', ['-json', dbPath, sql], {
@@ -109,7 +192,9 @@ async function fetchLegacyPresenceJson<T>(pathName: string): Promise<T> {
     signal: AbortSignal.timeout(8000),
   })
   if (!response.ok) {
-    throw new Error(`legacy presence API ${pathName} returned ${response.status}`)
+    throw new Error(
+      `legacy presence API ${pathName} returned ${response.status}`,
+    )
   }
   return (await response.json()) as T
 }
@@ -120,14 +205,20 @@ function sqlString(value: unknown) {
 
 function normalizePresence(value?: string) {
   const normalized = (value || '').toLowerCase().replace(/[^a-z]/g, '')
-  if (normalized.includes('donotdisturb') || normalized.includes('urgentinterruptionsonly')) {
+  if (
+    normalized.includes('donotdisturb') ||
+    normalized.includes('urgentinterruptionsonly')
+  ) {
     return 'donotdisturb'
   }
-  if (normalized.includes('busy') || normalized.includes('inameeting')) return 'busy'
-  if (normalized.includes('berightback') || normalized.includes('brb')) return 'berightback'
+  if (normalized.includes('busy') || normalized.includes('inameeting'))
+    return 'busy'
+  if (normalized.includes('berightback') || normalized.includes('brb'))
+    return 'berightback'
   if (normalized.includes('away')) return 'away'
   if (normalized.includes('available')) return 'available'
-  if (normalized.includes('offline') || normalized.includes('unknown')) return 'offline'
+  if (normalized.includes('offline') || normalized.includes('unknown'))
+    return 'offline'
   return normalized || 'unknown'
 }
 
@@ -168,7 +259,9 @@ function teamsStatusPayload(status: string, activity = '') {
 function inferPresenceFromLocal(): TeamsPresence | null {
   const state = readJsonFile<any>(PRESENCE_STATE, {})
   const tyler = state.tyler || {}
-  const raw = String(tyler.location || tyler.status || (state.tyler_is_home ? 'home' : '')).toLowerCase()
+  const raw = String(
+    tyler.location || tyler.status || (state.tyler_is_home ? 'home' : ''),
+  ).toLowerCase()
   if (!raw) return null
   if (raw === 'home') {
     return {
@@ -176,7 +269,8 @@ function inferPresenceFromLocal(): TeamsPresence | null {
       activity: 'Available',
       color: PRESENCE_COLORS.Available,
       inferred: true,
-      timestamp: tyler.lastUpdate || state.tyler_last_home || new Date().toISOString(),
+      timestamp:
+        tyler.lastUpdate || state.tyler_last_home || new Date().toISOString(),
     }
   }
   if (raw === 'away' || raw === 'office' || raw === 'traveling') {
@@ -185,7 +279,8 @@ function inferPresenceFromLocal(): TeamsPresence | null {
       activity: 'Away',
       color: PRESENCE_COLORS.Away,
       inferred: true,
-      timestamp: tyler.lastUpdate || state.tyler_last_away || new Date().toISOString(),
+      timestamp:
+        tyler.lastUpdate || state.tyler_last_away || new Date().toISOString(),
     }
   }
   if (raw === 'sleeping') {
@@ -207,13 +302,28 @@ function graphJson<T>(method: string, endpoint: string, body?: unknown): T {
     encoding: 'utf8',
     timeout: 45_000,
     maxBuffer: 8 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
   }).trim()
   return output ? (JSON.parse(output) as T) : (null as T)
 }
 
+function concisePresenceError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (
+    /graph\.microsoft\.com|NameResolutionError|getaddrinfo|ENOTFOUND/i.test(
+      message,
+    )
+  ) {
+    return 'Microsoft Graph is unreachable from this machine; using local presence fallback.'
+  }
+  return message.split('\n')[0]?.slice(0, 240) || 'Unknown presence error'
+}
+
 export async function getTeamsPresence(): Promise<TeamsPresence> {
   try {
-    const presence = await fetchLegacyPresenceJson<TeamsPresence>('/api/teams-presence')
+    const presence = await fetchLegacyPresenceJson<TeamsPresence>(
+      '/api/teams-presence',
+    )
     const availability = presence.availability || 'PresenceUnknown'
     return {
       ...presence,
@@ -237,7 +347,8 @@ export async function getTeamsPresence(): Promise<TeamsPresence> {
     const availability = presence.availability || 'PresenceUnknown'
     if (availability === 'PresenceUnknown') {
       const inferred = inferPresenceFromLocal()
-      if (inferred) return { ...inferred, fallback: true, source: 'local-presence' }
+      if (inferred)
+        return { ...inferred, fallback: true, source: 'local-presence' }
     }
     return {
       availability,
@@ -249,9 +360,15 @@ export async function getTeamsPresence(): Promise<TeamsPresence> {
     }
   } catch (error) {
     const inferred = inferPresenceFromLocal()
-    const message = error instanceof Error ? error.message : String(error)
+    const message = concisePresenceError(error)
     if (inferred) return { ...inferred, fallback: true, error: message }
-    return { availability: 'PresenceUnknown', activity: 'PresenceUnknown', color: 'gray', error: message, authRequired: message.includes('401') }
+    return {
+      availability: 'PresenceUnknown',
+      activity: 'PresenceUnknown',
+      color: 'gray',
+      error: message,
+      authRequired: message.includes('401'),
+    }
   }
 }
 
@@ -319,12 +436,17 @@ function configLabels(deviceId: string) {
   }
   return {
     labels,
-    tunnelUrl: typeof config.tunnelUrl === 'string' ? config.tunnelUrl : undefined,
-    updatedAt: typeof config.updatedAt === 'number' ? config.updatedAt : undefined,
+    tunnelUrl:
+      typeof config.tunnelUrl === 'string' ? config.tunnelUrl : undefined,
+    updatedAt:
+      typeof config.updatedAt === 'number' ? config.updatedAt : undefined,
   }
 }
 
-function deriveCurrentLabel(config: Record<string, unknown>, fallback = 'Unknown'): string {
+function deriveCurrentLabel(
+  config: Record<string, unknown>,
+  fallback = 'Unknown',
+): string {
   const candidate =
     config.currentWord ||
     config.word ||
@@ -336,21 +458,27 @@ function deriveCurrentLabel(config: Record<string, unknown>, fallback = 'Unknown
     config.labelAway ||
     config.labelOffline ||
     config.labelUnknown
-  return typeof candidate === 'string' && candidate.trim() ? candidate : fallback
+  return typeof candidate === 'string' && candidate.trim()
+    ? candidate
+    : fallback
 }
 
 function getDeviceRow(deviceId: string) {
-  return queryDb<any>(
-    M5_DB,
-    `SELECT * FROM m5_devices WHERE device_id = ${sqlString(deviceId)} LIMIT 1;`,
-  )[0] || null
+  return (
+    queryDb<any>(
+      M5_DB,
+      `SELECT * FROM m5_devices WHERE device_id = ${sqlString(deviceId)} LIMIT 1;`,
+    )[0] || null
+  )
 }
 
 function getDisplayConfig(deviceId: string) {
-  return queryDb<any>(
-    M5_DB,
-    `SELECT * FROM m5_display_config WHERE device_id = ${sqlString(deviceId)} LIMIT 1;`,
-  )[0] || null
+  return (
+    queryDb<any>(
+      M5_DB,
+      `SELECT * FROM m5_display_config WHERE device_id = ${sqlString(deviceId)} LIMIT 1;`,
+    )[0] || null
+  )
 }
 
 function upsertM5Device(input: {
@@ -383,8 +511,13 @@ export async function getLegacyTeamsPresence() {
   const presence = await getTeamsPresence()
   return {
     ...presence,
-    displayName: presence.displayName || DISPLAY_NAMES[presence.availability || ''] || presence.availability || 'Unknown',
-    color: presence.color || PRESENCE_COLORS[presence.availability || ''] || 'gray',
+    displayName:
+      presence.displayName ||
+      DISPLAY_NAMES[presence.availability || ''] ||
+      presence.availability ||
+      'Unknown',
+    color:
+      presence.color || PRESENCE_COLORS[presence.availability || ''] || 'gray',
   }
 }
 
@@ -451,7 +584,9 @@ export function getLegacyIotConfig(searchParams: URLSearchParams) {
       ? device.current_word
       : deriveCurrentLabel(config)
   const availability =
-    typeof device?.status === 'string' && device.status.trim() ? device.status : 'Unknown'
+    typeof device?.status === 'string' && device.status.trim()
+      ? device.status
+      : 'Unknown'
   const fetchInterval =
     typeof config.fetchInterval === 'number'
       ? config.fetchInterval
@@ -462,7 +597,10 @@ export function getLegacyIotConfig(searchParams: URLSearchParams) {
     ...config,
     deviceId,
     serverUrl: 'https://tylers-mac-mini-1.tail7b21e.ts.net',
-    displayMode: displayConfig?.display_mode || 'teams',
+    displayMode:
+      typeof config.displayMode === 'string'
+        ? config.displayMode
+        : displayConfig?.display_mode || 'teams',
     fetchInterval,
     label: statusLabel,
     word: statusLabel,
@@ -490,6 +628,21 @@ export function getLegacyIotConfig(searchParams: URLSearchParams) {
     ...mergedConfig,
     config: mergedConfig,
     timestamp: new Date().toISOString(),
+  }
+}
+
+export async function getLegacyIotConfigWithWeather(searchParams: URLSearchParams) {
+  const config = getLegacyIotConfig(searchParams)
+  const weather = await getM5WeatherWidget()
+  return {
+    ...config,
+    weather,
+    config: {
+      ...(typeof config.config === 'object' && config.config !== null
+        ? config.config
+        : {}),
+      weather,
+    },
   }
 }
 
@@ -521,13 +674,19 @@ export function updateLegacyIotConfig(body: Record<string, unknown>) {
 
   const currentLabel = deriveCurrentLabel(nextConfig)
   const availability =
-    typeof nextConfig.availability === 'string' ? nextConfig.availability : currentLabel
+    typeof nextConfig.availability === 'string'
+      ? nextConfig.availability
+      : currentLabel
   const fetchInterval =
     typeof nextConfig.fetchInterval === 'number'
       ? nextConfig.fetchInterval
       : typeof nextConfig.sensorInterval === 'number'
         ? nextConfig.sensorInterval
         : 30
+  const displayMode =
+    typeof nextConfig.displayMode === 'string'
+      ? nextConfig.displayMode
+      : 'teams'
   upsertM5Device({
     deviceId,
     status: availability,
@@ -537,8 +696,8 @@ export function updateLegacyIotConfig(body: Record<string, unknown>) {
   execSql(
     M5_DB,
     `INSERT INTO m5_display_config (device_id, display_mode, updated_at)
-     VALUES (${sqlString(deviceId)}, 'teams', ${sqlString(new Date().toISOString())})
-     ON CONFLICT(device_id) DO UPDATE SET display_mode = 'teams', updated_at = excluded.updated_at;`,
+     VALUES (${sqlString(deviceId)}, ${sqlString(displayMode)}, ${sqlString(new Date().toISOString())})
+     ON CONFLICT(device_id) DO UPDATE SET display_mode = excluded.display_mode, updated_at = excluded.updated_at;`,
   )
 
   return {
@@ -548,7 +707,7 @@ export function updateLegacyIotConfig(body: Record<string, unknown>) {
       ...nextConfig,
       deviceId,
       serverUrl: 'https://tylers-mac-mini-1.tail7b21e.ts.net',
-      displayMode: 'teams',
+      displayMode,
       label: currentLabel,
       word: currentLabel,
       currentWord: currentLabel,
@@ -562,13 +721,13 @@ export function updateLegacyIotConfig(body: Record<string, unknown>) {
 
 export function getM5Devices() {
   ensureM5Schema()
-  const rows = queryDb<any>(
-    M5_DB,
-    'SELECT * FROM m5_devices ORDER BY name;',
-  )
+  const rows = queryDb<any>(M5_DB, 'SELECT * FROM m5_devices ORDER BY name;')
   return rows.map((row) => {
     const lastSeen = row.last_seen ? new Date(row.last_seen) : new Date(0)
-    const minutesAgo = Math.max(0, Math.round((Date.now() - lastSeen.getTime()) / 60_000))
+    const minutesAgo = Math.max(
+      0,
+      Math.round((Date.now() - lastSeen.getTime()) / 60_000),
+    )
     const extra = configLabels(row.device_id || row.id)
     return {
       id: row.device_id || String(row.id),
@@ -591,16 +750,29 @@ export function getM5Devices() {
   })
 }
 
-export function updateDeviceConfig(deviceId: string, brightness?: number, fetchInterval?: number) {
+export function updateDeviceConfig(
+  deviceId: string,
+  brightness?: number,
+  fetchInterval?: number,
+) {
   ensureM5Schema()
   const sets: Array<string> = []
-  if (typeof brightness === 'number') sets.push(`brightness = ${Math.round(brightness)}`)
-  if (typeof fetchInterval === 'number') sets.push(`fetch_interval = ${Math.round(fetchInterval)}`)
+  if (typeof brightness === 'number')
+    sets.push(`brightness = ${Math.round(brightness)}`)
+  if (typeof fetchInterval === 'number')
+    sets.push(`fetch_interval = ${Math.round(fetchInterval)}`)
   if (!sets.length) return
-  execSql(M5_DB, `UPDATE m5_devices SET ${sets.join(', ')} WHERE device_id = ${sqlString(deviceId)};`)
+  execSql(
+    M5_DB,
+    `UPDATE m5_devices SET ${sets.join(', ')} WHERE device_id = ${sqlString(deviceId)};`,
+  )
 }
 
-export function updateDeviceLabel(deviceId: string, status: string, word: string) {
+export function updateDeviceLabel(
+  deviceId: string,
+  status: string,
+  word: string,
+) {
   ensureM5Schema()
   execSql(
     M5_DB,
@@ -610,7 +782,12 @@ export function updateDeviceLabel(deviceId: string, status: string, word: string
 
 export function getWordPools(): Array<WordPool> {
   const defaults: Array<WordPool> = [
-    { id: 'default', name: 'Default', words: ['HELLO', 'WORLD', 'CODING', 'MAGIC'], active: true },
+    {
+      id: 'default',
+      name: 'Default',
+      words: ['HELLO', 'WORLD', 'CODING', 'MAGIC'],
+      active: true,
+    },
   ]
   const pools = readJsonFile<Array<WordPool>>(M5_WORDS, defaults)
   if (!existsSync(M5_WORDS)) writeJsonFile(M5_WORDS, pools)
@@ -622,7 +799,10 @@ function saveWordPools(pools: Array<WordPool>) {
 }
 
 export function activatePool(poolId: string) {
-  const pools = getWordPools().map((pool) => ({ ...pool, active: pool.id === poolId }))
+  const pools = getWordPools().map((pool) => ({
+    ...pool,
+    active: pool.id === poolId,
+  }))
   saveWordPools(pools)
   return { success: true }
 }
@@ -635,7 +815,10 @@ export function rotateWords() {
 
 export async function getTeamsPreview() {
   const presence = await getTeamsPresence()
-  return teamsStatusPayload(presence.availability || 'Unknown', presence.activity || '')
+  return teamsStatusPayload(
+    presence.availability || 'Unknown',
+    presence.activity || '',
+  )
 }
 
 function getActiveMeetingTitle() {
@@ -651,11 +834,12 @@ function getActiveMeetingTitle() {
   return active?.title || null
 }
 
-function buildSyncDiagnostics(presence: TeamsPresence, devices: ReturnType<typeof getM5Devices>) {
+function buildSyncDiagnostics(
+  presence: TeamsPresence,
+  devices: ReturnType<typeof getM5Devices>,
+) {
   const sortedDevices = [...devices].sort(
-    (left, right) =>
-      left.lastSeenMinutesAgo -
-      right.lastSeenMinutesAgo,
+    (left, right) => left.lastSeenMinutesAgo - right.lastSeenMinutesAgo,
   )
   const freshestDevice = sortedDevices.length > 0 ? sortedDevices[0] : null
   if (!freshestDevice) {
@@ -668,7 +852,8 @@ function buildSyncDiagnostics(presence: TeamsPresence, devices: ReturnType<typeo
           ? 'auth-required'
           : presence.stale
             ? 'stale'
-            : presence.source || (presence.inferred || presence.fallback ? 'inferred' : 'graph'),
+            : presence.source ||
+              (presence.inferred || presence.fallback ? 'inferred' : 'graph'),
       teamsError: presence.error || null,
       deviceName: null,
       deviceStatus: '',
@@ -695,7 +880,8 @@ function buildSyncDiagnostics(presence: TeamsPresence, devices: ReturnType<typeo
       ? 'auth-required'
       : presence.stale
         ? 'stale'
-        : presence.source || (presence.inferred || presence.fallback ? 'inferred' : 'graph')
+        : presence.source ||
+          (presence.inferred || presence.fallback ? 'inferred' : 'graph')
 
   let driftReason = 'in_sync'
   let inSync = true

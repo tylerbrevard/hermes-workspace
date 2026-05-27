@@ -105,6 +105,10 @@ const config = defineConfig(({ mode, command }) => {
 
   const startClaudeAgent = async () => {
     if (claudeAgentStarted) return
+    if (process.env.VITEST) {
+      claudeAgentStarted = true
+      return
+    }
     // Skip auto-start when CLAUDE_API_URL is explicitly set to a non-local endpoint
     const explicitUrl =
       env.CLAUDE_API_URL || process.env.CLAUDE_API_URL || claudeApiUrl || ''
@@ -558,13 +562,27 @@ const config = defineConfig(({ mode, command }) => {
         },
       },
     },
+    build: {
+      // The route graph intentionally has a few modules that are both static
+      // imports and best-effort dynamic imports. Rollup cannot split those
+      // dynamic paths, but that is expected and not actionable at build time.
+      chunkSizeWarningLimit: 3000,
+      rollupOptions: {
+        onwarn(warning, warn) {
+          if (warning.message.includes('dynamic import will not move module into another chunk')) {
+            return
+          }
+          warn(warning)
+        },
+      },
+    },
     plugins: [
+      tailwindcss(),
       // devtools(),
       // this is the plugin that enables path aliases
       viteTsConfigPaths({
         projects: ['./tsconfig.json'],
       }),
-      tailwindcss(),
       tanstackStart(),
       viteReact(),
       {
@@ -727,7 +745,7 @@ const config = defineConfig(({ mode, command }) => {
           )
           result = result.replace(/process\.env/g, '{}')
           result = result.replace(/process\.platform/g, '"browser"')
-          return result
+          return { code: result, map: null }
         },
       },
       // Copy pty-helper.py into the server assets directory after build

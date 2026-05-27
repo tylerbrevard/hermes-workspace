@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildDashboardOverview,
-  type DashboardFetcher,
+
+  buildDashboardOverview
 } from './dashboard-aggregator'
+import type {DashboardFetcher} from './dashboard-aggregator';
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -414,6 +415,37 @@ describe('buildDashboardOverview', () => {
     expect(overview.logs?.lines).toHaveLength(5)
     expect(overview.logs?.errorCount).toBe(2)
     expect(overview.logs?.warnCount).toBe(1)
+  })
+
+  it('does not escalate warning-level failed lines to errors', async () => {
+    const fetcher = makeFetcher({
+      '/api/logs': {
+        file: 'agent',
+        lines: [
+          "WARNING tools.mcp_tool: MCP server 'obsidian' keepalive failed, triggering reconnect:\n",
+          'ERROR gateway.run: real failure\n',
+        ],
+      },
+    })
+    const overview = await buildDashboardOverview({ fetcher, logsLimit: 10 })
+    expect(overview.logs?.errorCount).toBe(1)
+    expect(overview.logs?.warnCount).toBe(1)
+  })
+
+  it('ignores duplicate gateway start guard lines', async () => {
+    const fetcher = makeFetcher({
+      '/api/logs': {
+        file: 'agent',
+        lines: [
+          'ERROR gateway.run: Another gateway instance is already running (PID 123)\n',
+          '❌ Gateway already running (PID 123).\n',
+        ],
+      },
+    })
+    const overview = await buildDashboardOverview({ fetcher, logsLimit: 10 })
+    expect(overview.logs?.errorCount).toBe(0)
+    expect(overview.logs?.warnCount).toBe(0)
+    expect(overview.incidents).toEqual([])
   })
 
   it('survives mixed-status inputs (some succeed, some fail)', async () => {

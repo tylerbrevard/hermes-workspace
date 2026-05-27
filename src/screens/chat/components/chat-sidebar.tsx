@@ -1,10 +1,12 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
+  Apple01Icon,
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   BrainIcon,
   Building01Icon,
+  Calendar01Icon,
   Castle02Icon,
   Chat01Icon,
   CheckListIcon,
@@ -13,6 +15,7 @@ import {
   DashboardSquare01Icon,
   Dumbbell01Icon,
   File01Icon,
+  InjectionIcon,
   McpServerIcon,
   MessageMultiple01Icon,
   Moon02Icon,
@@ -22,6 +25,7 @@ import {
   Search01Icon,
   Settings01Icon,
   Sun02Icon,
+  Target02Icon,
   UserGroupIcon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
@@ -227,7 +231,8 @@ function NavItem({
               style={
                 item.badge === 'NEW'
                   ? {
-                      background: 'linear-gradient(180deg, #fde68a 0%, #fbbf24 50%, #d4a017 100%)',
+                      background:
+                        'linear-gradient(180deg, #fde68a 0%, #fbbf24 50%, #d4a017 100%)',
                       color: '#0b1320',
                       boxShadow: '0 0 8px rgba(250,204,21,0.4)',
                       letterSpacing: '0.08em',
@@ -550,7 +555,9 @@ function ChatSidebarComponent({
   useEffect(() => {
     function handleOpenSettingsEvent(event: Event) {
       const detail = (event as CustomEvent<ChatOpenSettingsDetail>).detail
-      handleOpenSettings(detail.section === 'appearance' ? 'appearance' : 'claude')
+      handleOpenSettings(
+        detail.section === 'appearance' ? 'appearance' : 'claude',
+      )
     }
 
     window.addEventListener(CHAT_OPEN_SETTINGS_EVENT, handleOpenSettingsEvent)
@@ -581,21 +588,26 @@ function ChatSidebarComponent({
   const isSkillsActive = pathname === '/skills'
   const isMcpActive = pathname === '/mcp'
   const isFilesActive = pathname === '/files'
+  const isLilyActive = pathname === '/lily'
+  const isPhoneActive = pathname === '/phone'
   const isPlaygroundActive = pathname === '/playground'
   const isAgoraActive = pathname === '/agora'
   const isTerminalActive = pathname === '/terminal'
+  const isHealthActive = pathname === '/health'
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
   const isTasksActive = pathname === '/tasks'
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
+  const isOpsIntelligenceActive = pathname === '/ops-intelligence'
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
-<<<<<<< HEAD
-  const mainRoutes = ['/chat', '/new', '/files', '/terminal', '/life-os']
-=======
   const isSeventyFiveTrackerActive = pathname === '/75-tracker'
+  const isPtoTrackerActive = pathname === '/pto-tracker'
+  const isWegovyActive = pathname === '/wegovy'
+  const isZynTrackerActive = pathname === '/zyn-tracker'
+  const isFoodLogActive = pathname === '/food-log'
+  const isSettingsActive = pathname === '/settings'
   const mainRoutes = ['/chat', '/new', '/lily', '/files', '/terminal']
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   const knowledgeRoutes = ['/memory', '/skills']
   const systemRoutes = ['/settings', '/logs']
 
@@ -615,17 +627,25 @@ function ChatSidebarComponent({
   } as const
 
   // Collapsible section states
-  const [mainExpanded, toggleMain] = usePersistedBool(
-    'claude-sidebar-main-expanded',
+  const [dailyExpanded, toggleDaily] = usePersistedBool(
+    'claude-sidebar-daily-expanded',
+    true,
+  )
+  const [agentOpsExpanded, toggleAgentOps] = usePersistedBool(
+    'claude-sidebar-agent-ops-expanded',
     true,
   )
   const [knowledgeExpanded, toggleKnowledge] = usePersistedBool(
     'claude-sidebar-knowledge-expanded',
     true,
   )
-  const [_systemExpanded, _toggleSystem] = usePersistedBool(
-    'claude-sidebar-system-expanded',
-    false,
+  const [systemsExpanded, toggleSystems] = usePersistedBool(
+    'claude-sidebar-systems-expanded',
+    true,
+  )
+  const [settingsExpanded, toggleSettings] = usePersistedBool(
+    'claude-sidebar-settings-expanded',
+    true,
   )
 
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
@@ -788,7 +808,7 @@ function ChatSidebarComponent({
 
   const isDashboardActive = pathname === '/dashboard'
 
-  const mainItems: Array<NavItemDef> = [
+  const pinnedItems: Array<NavItemDef> = [
     {
       kind: 'link',
       to: '/dashboard',
@@ -798,42 +818,24 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
+      to: '/phone',
+      icon: DashboardSquare01Icon,
+      label: 'Phone Cockpit',
+      active: isPhoneActive,
+    },
+    {
+      kind: 'link',
       to: '/chat',
       icon: MessageMultiple01Icon,
       label: t('nav.chat'),
       active: isChatActive,
     },
-
     {
       kind: 'link',
-      to: '/files',
-      icon: File01Icon,
-      label: t('nav.files'),
-      active: isFilesActive,
-    },
-    {
-      kind: 'link',
-      to: '/terminal',
-      icon: ComputerTerminal01Icon,
-      label: t('nav.terminal'),
-      active: isTerminalActive,
-    },
-    {
-      kind: 'link',
-<<<<<<< HEAD
-      to: '/life-os',
-      icon: Castle02Icon,
-      label: 'Life OS',
-      active: isLifeOsActive,
-    },
-    {
-      kind: 'link',
-=======
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
-      to: '/jobs',
-      icon: Clock01Icon,
-      label: t('nav.jobs'),
-      active: isJobsActive,
+      to: '/lily',
+      icon: Chat01Icon,
+      label: 'LILY',
+      active: isLilyActive,
     },
     {
       kind: 'link',
@@ -842,6 +844,16 @@ function ChatSidebarComponent({
       label: 'Tasks',
       active: isTasksActive,
     },
+  ]
+
+  const dailyItems: Array<NavItemDef> = [
+    {
+      kind: 'link',
+      to: '/meetings',
+      icon: Clock01Icon,
+      label: 'Meetings',
+      active: pathname === '/meetings',
+    },
     {
       kind: 'link',
       to: '/75-tracker',
@@ -849,6 +861,44 @@ function ChatSidebarComponent({
       label: '75 Hard/Soft',
       active: isSeventyFiveTrackerActive,
     },
+    {
+      kind: 'link',
+      to: '/pto-tracker',
+      icon: Calendar01Icon,
+      label: 'PTO Tracker',
+      active: isPtoTrackerActive,
+    },
+    {
+      kind: 'link',
+      to: '/wegovy',
+      icon: InjectionIcon,
+      label: 'Wegovy Shots',
+      active: isWegovyActive,
+    },
+    {
+      kind: 'link',
+      to: '/zyn-tracker',
+      icon: Target02Icon,
+      label: 'Zyn Tracker',
+      active: isZynTrackerActive,
+    },
+    {
+      kind: 'link',
+      to: '/food-log',
+      icon: Apple01Icon,
+      label: 'Food Log',
+      active: isFoodLogActive,
+    },
+    {
+      kind: 'link',
+      to: '/barry',
+      icon: Chat01Icon,
+      label: 'Barry',
+      active: pathname === '/barry',
+    },
+  ]
+
+  const agentOpsItems: Array<NavItemDef> = [
     {
       kind: 'link',
       to: '/conductor',
@@ -865,15 +915,49 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
+      to: '/ops-intelligence',
+      icon: DashboardSquare01Icon,
+      label: 'Ops Intel',
+      active: isOpsIntelligenceActive,
+    },
+    {
+      kind: 'link',
       to: '/swarm',
       icon: UserGroupIcon,
       label: 'Swarm',
       active: isSwarmActive,
     },
-
+    {
+      kind: 'link',
+      to: '/jobs',
+      icon: Clock01Icon,
+      label: t('nav.jobs'),
+      active: isJobsActive,
+    },
+    {
+      kind: 'link',
+      to: '/it-ops',
+      icon: Building01Icon,
+      label: 'ConnectWise',
+      active: pathname === '/it-ops',
+    },
+    {
+      kind: 'link',
+      to: '/presence',
+      icon: UserMultipleIcon,
+      label: 'Presence',
+      active: pathname === '/presence' || pathname === '/presence-hub',
+    },
   ]
 
   const knowledgeItems: Array<NavItemDef> = [
+    {
+      kind: 'link',
+      to: '/files',
+      icon: File01Icon,
+      label: t('nav.files'),
+      active: isFilesActive,
+    },
     {
       kind: 'link',
       to: '/memory',
@@ -905,34 +989,44 @@ function ChatSidebarComponent({
     },
   ]
 
-  const opsItems: Array<NavItemDef> = [
+  const systemsItems: Array<NavItemDef> = [
     {
       kind: 'link',
-      to: '/meetings',
-      icon: Clock01Icon,
-      label: 'Meetings',
-      active: pathname === '/meetings',
+      to: '/terminal',
+      icon: ComputerTerminal01Icon,
+      label: t('nav.terminal'),
+      active: isTerminalActive,
     },
     {
       kind: 'link',
-      to: '/presence',
-      icon: UserMultipleIcon,
-      label: 'Presence',
-      active: pathname === '/presence' || pathname === '/presence-hub',
+      to: '/health',
+      icon: ComputerTerminal01Icon,
+      label: 'Health',
+      active: isHealthActive,
     },
+  ]
+
+  const settingsItems: Array<NavItemDef> = [
     {
       kind: 'link',
-      to: '/it-ops',
-      icon: Building01Icon,
-      label: 'ConnectWise',
-      active: pathname === '/it-ops',
+      to: '/settings',
+      icon: Settings01Icon,
+      label: 'Settings',
+      active: isSettingsActive,
     },
     {
-      kind: 'link',
-      to: '/barry',
-      icon: Chat01Icon,
-      label: 'Barry',
-      active: pathname === '/barry',
+      kind: 'button',
+      icon: Settings01Icon,
+      label: 'Claude settings',
+      active: settingsOpen,
+      onClick: () => handleOpenSettings(),
+    },
+    {
+      kind: 'button',
+      icon: Settings01Icon,
+      label: 'Providers',
+      active: providersOpen,
+      onClick: () => setProvidersOpen(true),
     },
   ]
 
@@ -1090,58 +1184,86 @@ function ChatSidebarComponent({
       {/* Hide when VITE_HERMESWORLD_ENABLED is explicitly '0' */}
       {!isVisuallyCollapsed &&
         (import.meta as any).env?.VITE_HERMESWORLD_ENABLED !== '0' && (
-        <div className="px-2 pb-2">
-          <Link
-            to="/playground"
-            onClick={() => onSelectSession?.()}
-            className={cn(
-              buttonVariants({ variant: 'ghost', size: 'sm' }),
-              'group w-full justify-start gap-2.5 px-3 py-2 text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
-              isPlaygroundActive &&
-                'bg-accent-500/10 text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-900/300/15',
-            )}
-            data-tour="hermesworld"
-          >
-            <HugeiconsIcon
-              icon={Castle02Icon}
-              size={20}
-              strokeWidth={1.5}
-              className="size-5 shrink-0"
-              style={{ color: '#facc15' }}
-            />
-            <span>HermesWorld</span>
-            <span
-              className="ml-auto inline-flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold leading-none"
-              style={{
-                background:
-                  'linear-gradient(180deg, #fde68a 0%, #fbbf24 50%, #d4a017 100%)',
-                color: '#0b1320',
-                boxShadow: '0 0 8px rgba(250,204,21,0.4)',
-                letterSpacing: '0.08em',
-              }}
+          <div className="px-2 pb-2">
+            <Link
+              to="/playground"
+              onClick={() => onSelectSession?.()}
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'group w-full justify-start gap-2.5 px-3 py-2 text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
+                isPlaygroundActive &&
+                  'bg-accent-500/10 text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-900/300/15',
+              )}
+              data-tour="hermesworld"
             >
-              NEW
-            </span>
-          </Link>
-        </div>
-      )}
+              <HugeiconsIcon
+                icon={Castle02Icon}
+                size={20}
+                strokeWidth={1.5}
+                className="size-5 shrink-0"
+                style={{ color: '#facc15' }}
+              />
+              <span>HermesWorld</span>
+              <span
+                className="ml-auto inline-flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold leading-none"
+                style={{
+                  background:
+                    'linear-gradient(180deg, #fde68a 0%, #fbbf24 50%, #d4a017 100%)',
+                  color: '#0b1320',
+                  boxShadow: '0 0 8px rgba(250,204,21,0.4)',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                NEW
+              </span>
+            </Link>
+          </div>
+        )}
 
       {/* ── Scrollable body: nav + sessions ─────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin flex flex-col">
         {/* Navigation sections */}
         <div className={cn('shrink-0 space-y-0.5 px-2', isMobile && 'order-2')}>
           <SectionLabel
-            label="Main"
+            label="Pinned"
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+          />
+          <CollapsibleSection
+            expanded={true}
+            items={pinnedItems}
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+            onSelectSession={onSelectSession}
+          />
+
+          <SectionLabel
+            label="Daily"
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             collapsible
-            expanded={mainExpanded}
-            onToggle={toggleMain}
-            navigateTo={mainNav}
+            expanded={dailyExpanded}
+            onToggle={toggleDaily}
           />
           <CollapsibleSection
-            expanded={mainExpanded || isCollapsed}
-            items={mainItems}
+            expanded={dailyExpanded || isCollapsed}
+            items={dailyItems}
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+            onSelectSession={onSelectSession}
+          />
+
+          <SectionLabel
+            label="Agent Ops"
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+            collapsible
+            expanded={agentOpsExpanded}
+            onToggle={toggleAgentOps}
+          />
+          <CollapsibleSection
+            expanded={agentOpsExpanded || isCollapsed}
+            items={agentOpsItems}
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             onSelectSession={onSelectSession}
@@ -1165,18 +1287,36 @@ function ChatSidebarComponent({
           />
 
           <SectionLabel
-            label="Ops"
+            label="Systems"
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
+            collapsible
+            expanded={systemsExpanded}
+            onToggle={toggleSystems}
           />
           <CollapsibleSection
-            expanded={true}
-            items={opsItems}
+            expanded={systemsExpanded || isCollapsed}
+            items={systemsItems}
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             onSelectSession={onSelectSession}
           />
 
+          <SectionLabel
+            label="Settings"
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+            collapsible
+            expanded={settingsExpanded}
+            onToggle={toggleSettings}
+          />
+          <CollapsibleSection
+            expanded={settingsExpanded || isCollapsed}
+            items={settingsItems}
+            isCollapsed={isVisuallyCollapsed}
+            transition={transition}
+            onSelectSession={onSelectSession}
+          />
         </div>
 
         {/* Sessions list */}

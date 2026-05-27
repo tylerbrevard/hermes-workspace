@@ -112,7 +112,7 @@ function deriveOrigin(
 }
 
 type SkillsTab = 'installed' | 'marketplace' | 'featured'
-type SkillsSort = 'name' | 'category'
+type SkillsSort = 'name' | 'category' | 'lastUsed'
 
 type SecurityRisk = {
   level: 'safe' | 'low' | 'medium' | 'high'
@@ -447,7 +447,9 @@ export const Route = createFileRoute('/api/skills')({
           const origin = (url.searchParams.get('origin') || 'All').trim()
           const sortParam = (url.searchParams.get('sort') || 'name').trim()
           const sort: SkillsSort =
-            sortParam === 'category' || sortParam === 'name'
+            sortParam === 'category' ||
+            sortParam === 'name' ||
+            sortParam === 'lastUsed'
               ? sortParam
               : 'name'
           const page = Math.max(1, Number(url.searchParams.get('page') || '1'))

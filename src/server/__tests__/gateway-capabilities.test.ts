@@ -61,6 +61,36 @@ describe('gateway-capabilities', () => {
   })
 
   describe('capability warnings', () => {
+    it('keeps optional API gaps out of the critical missing list', async () => {
+      process.env.HERMES_API_URL = 'http://gateway.test'
+      const mod = await loadMod()
+      const { summary, criticalMissing } = mod.buildCapabilityLogSummary({
+        health: true,
+        chatCompletions: true,
+        models: true,
+        streaming: true,
+        probed: true,
+        sessions: true,
+        enhancedChat: false,
+        skills: true,
+        memory: true,
+        config: true,
+        jobs: true,
+        mcp: false,
+        mcpFallback: true,
+        conductor: false,
+        kanban: true,
+        dashboard: {
+          available: true,
+          url: 'http://127.0.0.1:9119',
+        },
+      })
+
+      expect(criticalMissing).toEqual([])
+      expect(summary).toContain('missing=[]')
+      expect(summary).toContain('optionalMissing=[enhancedChat, mcp]')
+    })
+
     it('tells users to start the dashboard when only dashboard-backed APIs are missing', async () => {
       const mod = await loadMod()
       expect(

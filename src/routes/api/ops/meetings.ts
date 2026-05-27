@@ -98,11 +98,11 @@ type HeatmapDay = {
 }
 
 type MeetingsPayload = {
-  meetings?: Meeting[]
+  meetings?: Array<Meeting>
   total?: number
   hasMore?: boolean
   analytics?: Record<string, unknown>
-  sparkline?: number[]
+  sparkline?: Array<number>
   graphSource?: string
   graphWarning?: string
   lastSync?: string

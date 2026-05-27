@@ -91,7 +91,7 @@ export class PlaygroundHubV2 {
   state: DurableObjectState
   env: Env
   presence = new Map<string, PresenceMsg & { ts: number }>()
-  chatRing: any[] = []
+  chatRing: Array<any> = []
   peakToday = 0
   peakDay = ''
   lastBroadcastCount = -1
@@ -101,7 +101,7 @@ export class PlaygroundHubV2 {
   leavesToday = 0
   chatsToday = 0
   playerDaily = new Map<string, PlayerDailySummary>()
-  eventRing: AnalyticsEvent[] = []
+  eventRing: Array<AnalyticsEvent> = []
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state
@@ -115,16 +115,16 @@ export class PlaygroundHubV2 {
       // Restore presence map from storage so we survive hibernation.
       const presStored = await this.state.storage.get<Array<[string, PresenceMsg & { ts: number }]>>('presence')
       if (presStored) this.presence = new Map(presStored)
-      const chatStored = await this.state.storage.get<any[]>('chatRing')
+      const chatStored = await this.state.storage.get<Array<any>>('chatRing')
       if (chatStored) this.chatRing = chatStored
       const analyticsStored = await this.state.storage.get<{
         day: string
-        uniqueToday: string[]
+        uniqueToday: Array<string>
         joinsToday: number
         leavesToday: number
         chatsToday: number
         playerDaily: Array<[string, PlayerDailySummary]>
-        eventRing: AnalyticsEvent[]
+        eventRing: Array<AnalyticsEvent>
       }>('analytics')
       if (analyticsStored) {
         this.analyticsDay = analyticsStored.day || ''
@@ -273,7 +273,7 @@ export class PlaygroundHubV2 {
       const ts = (p as any).ts
       if (typeof ts === 'number' && ts < cutoff) {
         this.presence.delete(id)
-        const world = (p.world || p.worldId) as string | undefined
+        const world = (p.world || p.worldId)
         this.broadcast(null, { kind: 'leave', id }, { world })
         removed = true
       }
@@ -336,7 +336,7 @@ export class PlaygroundHubV2 {
   byWorld(): Record<string, number> {
     const out: Record<string, number> = {}
     for (const p of this.presence.values()) {
-      const w = (p.world || p.worldId) as string | undefined
+      const w = (p.world || p.worldId)
       if (!w) continue
       out[w] = (out[w] || 0) + 1
     }
@@ -467,7 +467,7 @@ export class PlaygroundHubV2 {
       const presences = []
       for (const [id, p] of this.presence) {
         if (id === body.id) continue
-        const pw = (p.world || p.worldId) as string | undefined
+        const pw = (p.world || p.worldId)
         if (world && pw && pw !== world) continue
         presences.push(p)
       }
@@ -531,7 +531,7 @@ export class PlaygroundHubV2 {
       try { body = await request.json() } catch { return new Response('bad json', { status: 400, headers: cors }) }
       if (!body || typeof body.id !== 'string') return new Response('missing id', { status: 400, headers: cors })
       const prior = this.presence.get(body.id)
-      const world = (prior?.world || prior?.worldId) as string | undefined
+      const world = (prior?.world || prior?.worldId)
       this.presence.delete(body.id)
       this.leavesToday += 1
       this.notePlayer(body.id, {
@@ -668,7 +668,7 @@ export class PlaygroundHubV2 {
       this.saveAttach(socket, meta)
     } else if (msg.kind === 'leave' && typeof msg.id === 'string') {
       const prior = this.presence.get(msg.id)
-      const world = (prior?.world || prior?.worldId) as string | undefined
+      const world = (prior?.world || prior?.worldId)
       this.presence.delete(msg.id)
       this.leavesToday += 1
       this.notePlayer(msg.id, {

@@ -1,15 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { buildResolvedSessionHeaders } from '../../lib/send-stream-session-headers'
 import { buildWorkspaceScopedTextMessage } from '../../lib/workspace-message-scope'
-import {
-  collectSyntheticLiveToolEvents,
-  createSyntheticLiveToolTracker,
-} from './-send-stream-live-tools'
 import { resolveSessionKey } from '../../server/session-utils'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { requireJsonContentType } from '../../server/rate-limit'
 import { publishChatEvent } from '../../server/chat-event-bus'
-import { loadWorkspaceCatalog } from './workspace'
 import {
   registerActiveSendRun,
   unregisterActiveSendRun,
@@ -23,14 +18,14 @@ import {
 } from '../../server/run-store'
 import { getChatMode } from '../../server/gateway-capabilities'
 import {
-  ensureLocalSession,
   appendLocalMessage,
+  ensureLocalSession,
   getLocalMessages,
   touchLocalSession,
 } from '../../server/local-session-store'
 import {
-  getLocalProviderDef,
   getDiscoveredModels,
+  getLocalProviderDef,
 } from '../../server/local-provider-discovery'
 import { openaiChat } from '../../server/openai-compat-api'
 import { streamResponses } from '../../server/responses-api'
@@ -44,6 +39,11 @@ import {
   listSessions,
   streamChat,
 } from '../../server/claude-api'
+import { loadWorkspaceCatalog } from './workspace'
+import {
+  collectSyntheticLiveToolEvents,
+  createSyntheticLiveToolTracker,
+} from './-send-stream-live-tools'
 import type {
   OpenAICompatContentPart,
   OpenAICompatMessage,
@@ -399,7 +399,7 @@ export const Route = createFileRoute('/api/send-stream')({
         let persistedRunReady: Promise<unknown> | null = null
         let unregisterTimer: ReturnType<typeof setTimeout> | null = null
         let streamTimeoutTimer: ReturnType<typeof setTimeout> | null = null
-        let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+        const heartbeatTimer: ReturnType<typeof setInterval> | null = null
         const abortController = new AbortController()
         let closeStream = () => {
           streamClosed = true
@@ -595,7 +595,7 @@ export const Route = createFileRoute('/api/send-stream')({
                   const useResponsesApi =
                     process.env.HERMES_USE_RESPONSES === '1' && !localBaseUrl
                   if (useResponsesApi) {
-                    let thinking = ''
+                    const thinking = ''
                     // Track tool calls by callId so a `tool.completed`
                     // followed by `tool.output` can carry the full
                     // arguments forward without losing them.
@@ -643,7 +643,7 @@ export const Route = createFileRoute('/api/send-stream')({
                           })
                           const argsForCard =
                             ev.args && typeof ev.args === 'object'
-                              ? (ev.args as Record<string, unknown>)
+                              ? (ev.args)
                               : undefined
                           persistActiveRun((runSessionKey, activeId) =>
                             upsertRunToolCall(runSessionKey, activeId, {
@@ -677,7 +677,7 @@ export const Route = createFileRoute('/api/send-stream')({
                           const state = toolStateByCallId.get(ev.callId)
                           const argsForCard =
                             state?.args && typeof state.args === 'object'
-                              ? (state.args as Record<string, unknown>)
+                              ? (state.args)
                               : undefined
                           const name = state?.name || 'tool'
                           persistActiveRun((runSessionKey, activeId) =>
@@ -1422,10 +1422,10 @@ export const Route = createFileRoute('/api/send-stream')({
                             )
                             const recent = persistedMessages.slice(
                               sliceFrom,
-                            ) as Array<Record<string, unknown>>
+                            )
                             let lastAssistantIndex = -1
                             for (let i = recent.length - 1; i >= 0; i--) {
-                              const m = recent[i] as Record<string, unknown>
+                              const m = recent[i]
                               if (m && m.role === 'assistant') {
                                 lastAssistantIndex = i
                                 break
@@ -1434,7 +1434,7 @@ export const Route = createFileRoute('/api/send-stream')({
                             if (lastAssistantIndex >= 0) {
                               const lastAssistant = recent[
                                 lastAssistantIndex
-                              ] as Record<string, unknown>
+                              ]
                               const rawToolCalls = (lastAssistant.tool_calls ??
                                 (lastAssistant as any).toolCalls) as
                                 | Array<Record<string, unknown>>

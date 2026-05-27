@@ -31,7 +31,7 @@ function assertHermesScript(path: string) {
   }
 }
 
-function runHermesScript(scriptPath: string, args: string[], timeout = 120_000) {
+function runHermesScript(scriptPath: string, args: Array<string>, timeout = 120_000) {
   assertHermesScript(HERMES_PYTHON)
   assertHermesScript(scriptPath)
   const output = execFileSync(HERMES_PYTHON, [scriptPath, ...args], {
@@ -133,7 +133,7 @@ export function syncExtractedMeetingActionsToTodo() {
   return { success: true, output }
 }
 
-export function sendMeetingItemsToTodo(items: unknown[]) {
+export function sendMeetingItemsToTodo(items: Array<unknown>) {
   const todoItems = items.filter(
     (item): item is TodoItemInput => item !== null && typeof item === 'object',
   )

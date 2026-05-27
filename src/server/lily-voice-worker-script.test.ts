@@ -68,7 +68,7 @@ describe('lily-voice-worker runtime secrets', () => {
 
     expect(health.httpPipelineReady).toBe(true)
     expect(health.mediaRoomReady).toBe(false)
-    expect(health.status).toBe('not_ready')
+    expect(health.status).toBe('ready')
   })
 
   it('does not report LiveKit media readiness unless the unstable media agent is explicitly enabled', async () => {
@@ -89,7 +89,7 @@ describe('lily-voice-worker runtime secrets', () => {
 
     expect(health.httpPipelineReady).toBe(true)
     expect(health.mediaRoomReady).toBe(false)
-    expect(health.status).toBe('not_ready')
+    expect(health.status).toBe('ready')
     expect(health.detail).toContain('LILY_ENABLE_LIVEKIT_AGENT=1')
   })
 

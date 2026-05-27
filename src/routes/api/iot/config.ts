@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import {
-  getLegacyIotConfig,
+  getLegacyIotConfigWithWeather,
   updateLegacyIotConfig,
 } from '../../../server/presence-data'
 
@@ -11,7 +11,7 @@ export const Route = createFileRoute('/api/iot/config')({
       GET: async ({ request }) => {
         try {
           const url = new URL(request.url)
-          return json(getLegacyIotConfig(url.searchParams))
+          return json(await getLegacyIotConfigWithWeather(url.searchParams))
         } catch (error) {
           return json(
             {

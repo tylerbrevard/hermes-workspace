@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 
 /**
  * Per-session model preference.
@@ -23,6 +23,11 @@ type Actions = {
   setModel: (sessionKey: string, model: string) => void
   clearModel: (sessionKey: string) => void
 }
+
+const browserSessionModelStorage =
+  typeof window === 'undefined'
+    ? undefined
+    : createJSONStorage<State>(() => window.localStorage)
 
 export const useSessionModelStore = create<State & Actions>()(
   persist(
@@ -52,7 +57,7 @@ export const useSessionModelStore = create<State & Actions>()(
     }),
     {
       name: 'hermes-session-model',
-      storage: createJSONStorage(() => localStorage),
+      storage: browserSessionModelStorage,
       partialize: (state) => ({ models: state.models }),
     },
   ),

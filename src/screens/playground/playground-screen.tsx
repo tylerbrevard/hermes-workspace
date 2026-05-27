@@ -1,15 +1,15 @@
 import {
   Component,
-  lazy,
+
   Suspense,
+  lazy,
   useEffect,
   useMemo,
   useRef,
-  useState,
-  type ReactNode,
+  useState
 } from 'react'
 import { PlaygroundActionBar } from './components/playground-actionbar'
-import { PlaygroundChat, type ChatMessage } from './components/playground-chat'
+import {  PlaygroundChat } from './components/playground-chat'
 import { PlaygroundHeroCanvas } from './components/playground-hero-canvas'
 import { PlaygroundHud } from './components/playground-hud'
 import { PlaygroundMinimap } from './components/playground-minimap'
@@ -33,10 +33,13 @@ import {
 } from './lib/playground-narration'
 import {
   PLAYGROUND_WORLDS,
-  itemById,
-  type PlaygroundItemId,
-  type PlaygroundWorldId,
+
+
+  itemById
 } from './lib/playground-rpg'
+import type {ChatMessage} from './components/playground-chat';
+import type {ReactNode} from 'react';
+import type {PlaygroundItemId, PlaygroundWorldId} from './lib/playground-rpg';
 import type { RemotePlayer } from './hooks/use-playground-multiplayer'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 
@@ -1233,7 +1236,7 @@ function TitleScreen({
                 margin: 0,
                 textShadow: '0 0 8px rgba(245,217,122,0.3)',
               }}
-            >{`_   _                             __        __         _     _ 
+            >{`_   _                             __        __         _     _
 | | | | ___ _ __ _ __ ___   ___  __\\ \\      / /__  _ __| | __| |
 | |_| |/ _ \\ '__| '_ \` _ \\ / _ \\/ __\\ \\ /\\ / / _ \\| '__| |/ _\` |
 |  _  |  __/ |  | | | | | |  __/\\__ \\\\ V  V / (_) | |  | | (_| |

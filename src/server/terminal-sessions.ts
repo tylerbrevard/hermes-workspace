@@ -61,6 +61,9 @@ export function createTerminalSession(params: {
   rows?: number
 }): TerminalSession {
   const emitter = new EventEmitter()
+  // A single PTY can be reattached by refreshed tabs, terminal previews, and
+  // multi-pane agent views. Keep listener warnings for real leaks elsewhere.
+  emitter.setMaxListeners(64)
   const sessionId = randomUUID()
 
   const home = process.env.HOME || homedir() || '/tmp'

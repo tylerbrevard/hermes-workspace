@@ -9,7 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ZynTrackerRouteImport } from './routes/zyn-tracker'
 import { Route as WorldRouteImport } from './routes/world'
+import { Route as WegovyRouteImport } from './routes/wegovy'
 import { Route as VtCapitalRouteImport } from './routes/vt-capital'
 import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as TasksRouteImport } from './routes/tasks'
@@ -18,19 +20,25 @@ import { Route as SwarmRouteImport } from './routes/swarm'
 import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReserveRouteImport } from './routes/reserve'
+import { Route as PtoTrackerRouteImport } from './routes/pto-tracker'
 import { Route as ProfilesRouteImport } from './routes/profiles'
 import { Route as PresenceHubRouteImport } from './routes/presence-hub'
 import { Route as PresenceRouteImport } from './routes/presence'
 import { Route as PlaygroundRouteImport } from './routes/playground'
+import { Route as PhoneRouteImport } from './routes/phone'
+import { Route as OpsIntelligenceRouteImport } from './routes/ops-intelligence'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as MeetingsRouteImport } from './routes/meetings'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as LilyRouteImport } from './routes/lily'
+import { Route as LifeOsRouteImport } from './routes/life-os'
 import { Route as KindleRouteImport } from './routes/kindle'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as ItOpsRouteImport } from './routes/it-ops'
 import { Route as HermesWorldRouteImport } from './routes/hermes-world'
+import { Route as HealthRouteImport } from './routes/health'
+import { Route as FoodLogRouteImport } from './routes/food-log'
 import { Route as FilesRouteImport } from './routes/files'
 import { Route as EarlyAccessRouteImport } from './routes/early-access'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -52,6 +60,7 @@ import { Route as ApiTerminalStreamRouteImport } from './routes/api/terminal-str
 import { Route as ApiTerminalResizeRouteImport } from './routes/api/terminal-resize'
 import { Route as ApiTerminalInputRouteImport } from './routes/api/terminal-input'
 import { Route as ApiTerminalCloseRouteImport } from './routes/api/terminal-close'
+import { Route as ApiTeamsPresenceRouteImport } from './routes/api/teams-presence'
 import { Route as ApiSystemMetricsRouteImport } from './routes/api/system-metrics'
 import { Route as ApiSwarmTmuxStopRouteImport } from './routes/api/swarm-tmux-stop'
 import { Route as ApiSwarmTmuxStartRouteImport } from './routes/api/swarm-tmux-start'
@@ -87,20 +96,21 @@ import { Route as ApiPluginsRouteImport } from './routes/api/plugins'
 import { Route as ApiPlaygroundNpcRouteImport } from './routes/api/playground-npc'
 import { Route as ApiPlaygroundAdminRouteImport } from './routes/api/playground-admin'
 import { Route as ApiPingRouteImport } from './routes/api/ping'
+import { Route as ApiPhoneSummaryRouteImport } from './routes/api/phone-summary'
+import { Route as ApiPhoneCockpitRouteImport } from './routes/api/phone-cockpit'
 import { Route as ApiPathsRouteImport } from './routes/api/paths'
+import { Route as ApiOpsIntelligenceRouteImport } from './routes/api/ops-intelligence'
 import { Route as ApiModelsRouteImport } from './routes/api/models'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiMediaRouteImport } from './routes/api/media'
 import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiLocalProvidersRouteImport } from './routes/api/local-providers'
-<<<<<<< HEAD
-=======
 import { Route as ApiIotRouteImport } from './routes/api/iot'
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 import { Route as ApiIntegrationsRouteImport } from './routes/api/integrations'
 import { Route as ApiHistoryRouteImport } from './routes/api/history'
 import { Route as ApiHermesTasksRouteImport } from './routes/api/hermes-tasks'
 import { Route as ApiHermesConfigRouteImport } from './routes/api/hermes-config'
+import { Route as ApiHealthTrackersRouteImport } from './routes/api/health-trackers'
 import { Route as ApiGatewayStatusRouteImport } from './routes/api/gateway-status'
 import { Route as ApiGatewayReprobeRouteImport } from './routes/api/gateway-reprobe'
 import { Route as ApiFilesRouteImport } from './routes/api/files'
@@ -157,12 +167,17 @@ import { Route as ApiMcpHubSearchRouteImport } from './routes/api/mcp/hub-search
 import { Route as ApiMcpDiscoverRouteImport } from './routes/api/mcp/discover'
 import { Route as ApiMcpConfigureRouteImport } from './routes/api/mcp/configure'
 import { Route as ApiMcpNameRouteImport } from './routes/api/mcp/$name'
+import { Route as ApiLilyLivekitTokenRouteImport } from './routes/api/lily/livekit-token'
+import { Route as ApiLilyHermesChatRouteImport } from './routes/api/lily/hermes-chat'
+import { Route as ApiLilyConfigRouteImport } from './routes/api/lily/config'
 import { Route as ApiKnowledgeSyncRouteImport } from './routes/api/knowledge/sync'
 import { Route as ApiKnowledgeSearchRouteImport } from './routes/api/knowledge/search'
 import { Route as ApiKnowledgeReadRouteImport } from './routes/api/knowledge/read'
 import { Route as ApiKnowledgeListRouteImport } from './routes/api/knowledge/list'
 import { Route as ApiKnowledgeGraphRouteImport } from './routes/api/knowledge/graph'
 import { Route as ApiKnowledgeConfigRouteImport } from './routes/api/knowledge/config'
+import { Route as ApiIotM5OtaRouteImport } from './routes/api/iot/m5-ota'
+import { Route as ApiIotConfigRouteImport } from './routes/api/iot/config'
 import { Route as ApiHermesworldReservationsRouteImport } from './routes/api/hermesworld/reservations'
 import { Route as ApiHermesTasksTaskIdRouteImport } from './routes/api/hermes-tasks.$taskId'
 import { Route as ApiDashboardOverviewRouteImport } from './routes/api/dashboard/overview'
@@ -176,9 +191,19 @@ import { Route as ApiMcpHubSourcesIdRouteImport } from './routes/api/mcp/hub-sou
 import { Route as ApiMcpNameLogsRouteImport } from './routes/api/mcp/$name.logs'
 import { Route as ApiHermesworldReservationsConfirmRouteImport } from './routes/api/hermesworld/reservations/confirm'
 
+const ZynTrackerRoute = ZynTrackerRouteImport.update({
+  id: '/zyn-tracker',
+  path: '/zyn-tracker',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WorldRoute = WorldRouteImport.update({
   id: '/world',
   path: '/world',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WegovyRoute = WegovyRouteImport.update({
+  id: '/wegovy',
+  path: '/wegovy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VtCapitalRoute = VtCapitalRouteImport.update({
@@ -221,6 +246,11 @@ const ReserveRoute = ReserveRouteImport.update({
   path: '/reserve',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PtoTrackerRoute = PtoTrackerRouteImport.update({
+  id: '/pto-tracker',
+  path: '/pto-tracker',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfilesRoute = ProfilesRouteImport.update({
   id: '/profiles',
   path: '/profiles',
@@ -239,6 +269,16 @@ const PresenceRoute = PresenceRouteImport.update({
 const PlaygroundRoute = PlaygroundRouteImport.update({
   id: '/playground',
   path: '/playground',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PhoneRoute = PhoneRouteImport.update({
+  id: '/phone',
+  path: '/phone',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OpsIntelligenceRoute = OpsIntelligenceRouteImport.update({
+  id: '/ops-intelligence',
+  path: '/ops-intelligence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OperationsRoute = OperationsRouteImport.update({
@@ -266,6 +306,11 @@ const LilyRoute = LilyRouteImport.update({
   path: '/lily',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LifeOsRoute = LifeOsRouteImport.update({
+  id: '/life-os',
+  path: '/life-os',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const KindleRoute = KindleRouteImport.update({
   id: '/kindle',
   path: '/kindle',
@@ -284,6 +329,16 @@ const ItOpsRoute = ItOpsRouteImport.update({
 const HermesWorldRoute = HermesWorldRouteImport.update({
   id: '/hermes-world',
   path: '/hermes-world',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HealthRoute = HealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FoodLogRoute = FoodLogRouteImport.update({
+  id: '/food-log',
+  path: '/food-log',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FilesRoute = FilesRouteImport.update({
@@ -389,6 +444,11 @@ const ApiTerminalInputRoute = ApiTerminalInputRouteImport.update({
 const ApiTerminalCloseRoute = ApiTerminalCloseRouteImport.update({
   id: '/api/terminal-close',
   path: '/api/terminal-close',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTeamsPresenceRoute = ApiTeamsPresenceRouteImport.update({
+  id: '/api/teams-presence',
+  path: '/api/teams-presence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSystemMetricsRoute = ApiSystemMetricsRouteImport.update({
@@ -567,9 +627,24 @@ const ApiPingRoute = ApiPingRouteImport.update({
   path: '/api/ping',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPhoneSummaryRoute = ApiPhoneSummaryRouteImport.update({
+  id: '/api/phone-summary',
+  path: '/api/phone-summary',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPhoneCockpitRoute = ApiPhoneCockpitRouteImport.update({
+  id: '/api/phone-cockpit',
+  path: '/api/phone-cockpit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPathsRoute = ApiPathsRouteImport.update({
   id: '/api/paths',
   path: '/api/paths',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpsIntelligenceRoute = ApiOpsIntelligenceRouteImport.update({
+  id: '/api/ops-intelligence',
+  path: '/api/ops-intelligence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiModelsRoute = ApiModelsRouteImport.update({
@@ -597,14 +672,11 @@ const ApiLocalProvidersRoute = ApiLocalProvidersRouteImport.update({
   path: '/api/local-providers',
   getParentRoute: () => rootRouteImport,
 } as any)
-<<<<<<< HEAD
-=======
 const ApiIotRoute = ApiIotRouteImport.update({
   id: '/api/iot',
   path: '/api/iot',
   getParentRoute: () => rootRouteImport,
 } as any)
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 const ApiIntegrationsRoute = ApiIntegrationsRouteImport.update({
   id: '/api/integrations',
   path: '/api/integrations',
@@ -623,6 +695,11 @@ const ApiHermesTasksRoute = ApiHermesTasksRouteImport.update({
 const ApiHermesConfigRoute = ApiHermesConfigRouteImport.update({
   id: '/api/hermes-config',
   path: '/api/hermes-config',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthTrackersRoute = ApiHealthTrackersRouteImport.update({
+  id: '/api/health-trackers',
+  path: '/api/health-trackers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGatewayStatusRoute = ApiGatewayStatusRouteImport.update({
@@ -905,6 +982,21 @@ const ApiMcpNameRoute = ApiMcpNameRouteImport.update({
   path: '/$name',
   getParentRoute: () => ApiMcpRoute,
 } as any)
+const ApiLilyLivekitTokenRoute = ApiLilyLivekitTokenRouteImport.update({
+  id: '/api/lily/livekit-token',
+  path: '/api/lily/livekit-token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLilyHermesChatRoute = ApiLilyHermesChatRouteImport.update({
+  id: '/api/lily/hermes-chat',
+  path: '/api/lily/hermes-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLilyConfigRoute = ApiLilyConfigRouteImport.update({
+  id: '/api/lily/config',
+  path: '/api/lily/config',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiKnowledgeSyncRoute = ApiKnowledgeSyncRouteImport.update({
   id: '/api/knowledge/sync',
   path: '/api/knowledge/sync',
@@ -934,6 +1026,16 @@ const ApiKnowledgeConfigRoute = ApiKnowledgeConfigRouteImport.update({
   id: '/api/knowledge/config',
   path: '/api/knowledge/config',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiIotM5OtaRoute = ApiIotM5OtaRouteImport.update({
+  id: '/m5-ota',
+  path: '/m5-ota',
+  getParentRoute: () => ApiIotRoute,
+} as any)
+const ApiIotConfigRoute = ApiIotConfigRouteImport.update({
+  id: '/config',
+  path: '/config',
+  getParentRoute: () => ApiIotRoute,
 } as any)
 const ApiHermesworldReservationsRoute =
   ApiHermesworldReservationsRouteImport.update({
@@ -1010,19 +1112,25 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
   '/files': typeof FilesRoute
+  '/food-log': typeof FoodLogRoute
+  '/health': typeof HealthRoute
   '/hermes-world': typeof HermesWorldRoute
   '/it-ops': typeof ItOpsRoute
   '/jobs': typeof JobsRoute
   '/kindle': typeof KindleRoute
+  '/life-os': typeof LifeOsRoute
   '/lily': typeof LilyRoute
   '/mcp': typeof McpRoute
   '/meetings': typeof MeetingsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
+  '/ops-intelligence': typeof OpsIntelligenceRoute
+  '/phone': typeof PhoneRoute
   '/playground': typeof PlaygroundRoute
   '/presence': typeof PresenceRoute
   '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
+  '/pto-tracker': typeof PtoTrackerRoute
   '/reserve': typeof ReserveRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
   '/skills': typeof SkillsRoute
@@ -1031,7 +1139,9 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof TasksRoute
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
+  '/wegovy': typeof WegovyRoute
   '/world': typeof WorldRoute
+  '/zyn-tracker': typeof ZynTrackerRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1052,20 +1162,21 @@ export interface FileRoutesByFullPath {
   '/api/files': typeof ApiFilesRoute
   '/api/gateway-reprobe': typeof ApiGatewayReprobeRoute
   '/api/gateway-status': typeof ApiGatewayStatusRoute
+  '/api/health-trackers': typeof ApiHealthTrackersRoute
   '/api/hermes-config': typeof ApiHermesConfigRoute
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
-<<<<<<< HEAD
-=======
   '/api/iot': typeof ApiIotRouteWithChildren
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/ops-intelligence': typeof ApiOpsIntelligenceRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/phone-cockpit': typeof ApiPhoneCockpitRoute
+  '/api/phone-summary': typeof ApiPhoneSummaryRoute
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
   '/api/playground-npc': typeof ApiPlaygroundNpcRoute
@@ -1101,6 +1212,7 @@ export interface FileRoutesByFullPath {
   '/api/swarm-tmux-start': typeof ApiSwarmTmuxStartRoute
   '/api/swarm-tmux-stop': typeof ApiSwarmTmuxStopRoute
   '/api/system-metrics': typeof ApiSystemMetricsRoute
+  '/api/teams-presence': typeof ApiTeamsPresenceRoute
   '/api/terminal-close': typeof ApiTerminalCloseRoute
   '/api/terminal-input': typeof ApiTerminalInputRoute
   '/api/terminal-resize': typeof ApiTerminalResizeRoute
@@ -1120,12 +1232,17 @@ export interface FileRoutesByFullPath {
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
+  '/api/iot/config': typeof ApiIotConfigRoute
+  '/api/iot/m5-ota': typeof ApiIotM5OtaRoute
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
   '/api/knowledge/list': typeof ApiKnowledgeListRoute
   '/api/knowledge/read': typeof ApiKnowledgeReadRoute
   '/api/knowledge/search': typeof ApiKnowledgeSearchRoute
   '/api/knowledge/sync': typeof ApiKnowledgeSyncRoute
+  '/api/lily/config': typeof ApiLilyConfigRoute
+  '/api/lily/hermes-chat': typeof ApiLilyHermesChatRoute
+  '/api/lily/livekit-token': typeof ApiLilyLivekitTokenRoute
   '/api/mcp/$name': typeof ApiMcpNameRouteWithChildren
   '/api/mcp/configure': typeof ApiMcpConfigureRoute
   '/api/mcp/discover': typeof ApiMcpDiscoverRoute
@@ -1178,19 +1295,25 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
   '/files': typeof FilesRoute
+  '/food-log': typeof FoodLogRoute
+  '/health': typeof HealthRoute
   '/hermes-world': typeof HermesWorldRoute
   '/it-ops': typeof ItOpsRoute
   '/jobs': typeof JobsRoute
   '/kindle': typeof KindleRoute
+  '/life-os': typeof LifeOsRoute
   '/lily': typeof LilyRoute
   '/mcp': typeof McpRoute
   '/meetings': typeof MeetingsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
+  '/ops-intelligence': typeof OpsIntelligenceRoute
+  '/phone': typeof PhoneRoute
   '/playground': typeof PlaygroundRoute
   '/presence': typeof PresenceRoute
   '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
+  '/pto-tracker': typeof PtoTrackerRoute
   '/reserve': typeof ReserveRouteWithChildren
   '/skills': typeof SkillsRoute
   '/swarm': typeof SwarmRoute
@@ -1198,7 +1321,9 @@ export interface FileRoutesByTo {
   '/tasks': typeof TasksRoute
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
+  '/wegovy': typeof WegovyRoute
   '/world': typeof WorldRoute
+  '/zyn-tracker': typeof ZynTrackerRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1219,20 +1344,21 @@ export interface FileRoutesByTo {
   '/api/files': typeof ApiFilesRoute
   '/api/gateway-reprobe': typeof ApiGatewayReprobeRoute
   '/api/gateway-status': typeof ApiGatewayStatusRoute
+  '/api/health-trackers': typeof ApiHealthTrackersRoute
   '/api/hermes-config': typeof ApiHermesConfigRoute
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
-<<<<<<< HEAD
-=======
   '/api/iot': typeof ApiIotRouteWithChildren
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/ops-intelligence': typeof ApiOpsIntelligenceRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/phone-cockpit': typeof ApiPhoneCockpitRoute
+  '/api/phone-summary': typeof ApiPhoneSummaryRoute
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
   '/api/playground-npc': typeof ApiPlaygroundNpcRoute
@@ -1268,6 +1394,7 @@ export interface FileRoutesByTo {
   '/api/swarm-tmux-start': typeof ApiSwarmTmuxStartRoute
   '/api/swarm-tmux-stop': typeof ApiSwarmTmuxStopRoute
   '/api/system-metrics': typeof ApiSystemMetricsRoute
+  '/api/teams-presence': typeof ApiTeamsPresenceRoute
   '/api/terminal-close': typeof ApiTerminalCloseRoute
   '/api/terminal-input': typeof ApiTerminalInputRoute
   '/api/terminal-resize': typeof ApiTerminalResizeRoute
@@ -1287,12 +1414,17 @@ export interface FileRoutesByTo {
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
+  '/api/iot/config': typeof ApiIotConfigRoute
+  '/api/iot/m5-ota': typeof ApiIotM5OtaRoute
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
   '/api/knowledge/list': typeof ApiKnowledgeListRoute
   '/api/knowledge/read': typeof ApiKnowledgeReadRoute
   '/api/knowledge/search': typeof ApiKnowledgeSearchRoute
   '/api/knowledge/sync': typeof ApiKnowledgeSyncRoute
+  '/api/lily/config': typeof ApiLilyConfigRoute
+  '/api/lily/hermes-chat': typeof ApiLilyHermesChatRoute
+  '/api/lily/livekit-token': typeof ApiLilyLivekitTokenRoute
   '/api/mcp/$name': typeof ApiMcpNameRouteWithChildren
   '/api/mcp/configure': typeof ApiMcpConfigureRoute
   '/api/mcp/discover': typeof ApiMcpDiscoverRoute
@@ -1346,19 +1478,25 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
   '/files': typeof FilesRoute
+  '/food-log': typeof FoodLogRoute
+  '/health': typeof HealthRoute
   '/hermes-world': typeof HermesWorldRoute
   '/it-ops': typeof ItOpsRoute
   '/jobs': typeof JobsRoute
   '/kindle': typeof KindleRoute
+  '/life-os': typeof LifeOsRoute
   '/lily': typeof LilyRoute
   '/mcp': typeof McpRoute
   '/meetings': typeof MeetingsRoute
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
+  '/ops-intelligence': typeof OpsIntelligenceRoute
+  '/phone': typeof PhoneRoute
   '/playground': typeof PlaygroundRoute
   '/presence': typeof PresenceRoute
   '/presence-hub': typeof PresenceHubRoute
   '/profiles': typeof ProfilesRoute
+  '/pto-tracker': typeof PtoTrackerRoute
   '/reserve': typeof ReserveRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
   '/skills': typeof SkillsRoute
@@ -1367,7 +1505,9 @@ export interface FileRoutesById {
   '/tasks': typeof TasksRoute
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
+  '/wegovy': typeof WegovyRoute
   '/world': typeof WorldRoute
+  '/zyn-tracker': typeof ZynTrackerRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1388,20 +1528,21 @@ export interface FileRoutesById {
   '/api/files': typeof ApiFilesRoute
   '/api/gateway-reprobe': typeof ApiGatewayReprobeRoute
   '/api/gateway-status': typeof ApiGatewayStatusRoute
+  '/api/health-trackers': typeof ApiHealthTrackersRoute
   '/api/hermes-config': typeof ApiHermesConfigRoute
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
-<<<<<<< HEAD
-=======
   '/api/iot': typeof ApiIotRouteWithChildren
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/ops-intelligence': typeof ApiOpsIntelligenceRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/phone-cockpit': typeof ApiPhoneCockpitRoute
+  '/api/phone-summary': typeof ApiPhoneSummaryRoute
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
   '/api/playground-npc': typeof ApiPlaygroundNpcRoute
@@ -1437,6 +1578,7 @@ export interface FileRoutesById {
   '/api/swarm-tmux-start': typeof ApiSwarmTmuxStartRoute
   '/api/swarm-tmux-stop': typeof ApiSwarmTmuxStopRoute
   '/api/system-metrics': typeof ApiSystemMetricsRoute
+  '/api/teams-presence': typeof ApiTeamsPresenceRoute
   '/api/terminal-close': typeof ApiTerminalCloseRoute
   '/api/terminal-input': typeof ApiTerminalInputRoute
   '/api/terminal-resize': typeof ApiTerminalResizeRoute
@@ -1456,12 +1598,17 @@ export interface FileRoutesById {
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
+  '/api/iot/config': typeof ApiIotConfigRoute
+  '/api/iot/m5-ota': typeof ApiIotM5OtaRoute
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
   '/api/knowledge/list': typeof ApiKnowledgeListRoute
   '/api/knowledge/read': typeof ApiKnowledgeReadRoute
   '/api/knowledge/search': typeof ApiKnowledgeSearchRoute
   '/api/knowledge/sync': typeof ApiKnowledgeSyncRoute
+  '/api/lily/config': typeof ApiLilyConfigRoute
+  '/api/lily/hermes-chat': typeof ApiLilyHermesChatRoute
+  '/api/lily/livekit-token': typeof ApiLilyLivekitTokenRoute
   '/api/mcp/$name': typeof ApiMcpNameRouteWithChildren
   '/api/mcp/configure': typeof ApiMcpConfigureRoute
   '/api/mcp/discover': typeof ApiMcpDiscoverRoute
@@ -1516,19 +1663,25 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/early-access'
     | '/files'
+    | '/food-log'
+    | '/health'
     | '/hermes-world'
     | '/it-ops'
     | '/jobs'
     | '/kindle'
+    | '/life-os'
     | '/lily'
     | '/mcp'
     | '/meetings'
     | '/memory'
     | '/operations'
+    | '/ops-intelligence'
+    | '/phone'
     | '/playground'
     | '/presence'
     | '/presence-hub'
     | '/profiles'
+    | '/pto-tracker'
     | '/reserve'
     | '/settings'
     | '/skills'
@@ -1537,7 +1690,9 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/terminal'
     | '/vt-capital'
+    | '/wegovy'
     | '/world'
+    | '/zyn-tracker'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -1558,20 +1713,21 @@ export interface FileRouteTypes {
     | '/api/files'
     | '/api/gateway-reprobe'
     | '/api/gateway-status'
+    | '/api/health-trackers'
     | '/api/hermes-config'
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
-<<<<<<< HEAD
-=======
     | '/api/iot'
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/ops-intelligence'
     | '/api/paths'
+    | '/api/phone-cockpit'
+    | '/api/phone-summary'
     | '/api/ping'
     | '/api/playground-admin'
     | '/api/playground-npc'
@@ -1607,6 +1763,7 @@ export interface FileRouteTypes {
     | '/api/swarm-tmux-start'
     | '/api/swarm-tmux-stop'
     | '/api/system-metrics'
+    | '/api/teams-presence'
     | '/api/terminal-close'
     | '/api/terminal-input'
     | '/api/terminal-resize'
@@ -1626,12 +1783,17 @@ export interface FileRouteTypes {
     | '/api/dashboard/overview'
     | '/api/hermes-tasks/$taskId'
     | '/api/hermesworld/reservations'
+    | '/api/iot/config'
+    | '/api/iot/m5-ota'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
     | '/api/knowledge/list'
     | '/api/knowledge/read'
     | '/api/knowledge/search'
     | '/api/knowledge/sync'
+    | '/api/lily/config'
+    | '/api/lily/hermes-chat'
+    | '/api/lily/livekit-token'
     | '/api/mcp/$name'
     | '/api/mcp/configure'
     | '/api/mcp/discover'
@@ -1684,19 +1846,25 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/early-access'
     | '/files'
+    | '/food-log'
+    | '/health'
     | '/hermes-world'
     | '/it-ops'
     | '/jobs'
     | '/kindle'
+    | '/life-os'
     | '/lily'
     | '/mcp'
     | '/meetings'
     | '/memory'
     | '/operations'
+    | '/ops-intelligence'
+    | '/phone'
     | '/playground'
     | '/presence'
     | '/presence-hub'
     | '/profiles'
+    | '/pto-tracker'
     | '/reserve'
     | '/skills'
     | '/swarm'
@@ -1704,7 +1872,9 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/terminal'
     | '/vt-capital'
+    | '/wegovy'
     | '/world'
+    | '/zyn-tracker'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -1725,20 +1895,21 @@ export interface FileRouteTypes {
     | '/api/files'
     | '/api/gateway-reprobe'
     | '/api/gateway-status'
+    | '/api/health-trackers'
     | '/api/hermes-config'
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
-<<<<<<< HEAD
-=======
     | '/api/iot'
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/ops-intelligence'
     | '/api/paths'
+    | '/api/phone-cockpit'
+    | '/api/phone-summary'
     | '/api/ping'
     | '/api/playground-admin'
     | '/api/playground-npc'
@@ -1774,6 +1945,7 @@ export interface FileRouteTypes {
     | '/api/swarm-tmux-start'
     | '/api/swarm-tmux-stop'
     | '/api/system-metrics'
+    | '/api/teams-presence'
     | '/api/terminal-close'
     | '/api/terminal-input'
     | '/api/terminal-resize'
@@ -1793,12 +1965,17 @@ export interface FileRouteTypes {
     | '/api/dashboard/overview'
     | '/api/hermes-tasks/$taskId'
     | '/api/hermesworld/reservations'
+    | '/api/iot/config'
+    | '/api/iot/m5-ota'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
     | '/api/knowledge/list'
     | '/api/knowledge/read'
     | '/api/knowledge/search'
     | '/api/knowledge/sync'
+    | '/api/lily/config'
+    | '/api/lily/hermes-chat'
+    | '/api/lily/livekit-token'
     | '/api/mcp/$name'
     | '/api/mcp/configure'
     | '/api/mcp/discover'
@@ -1851,19 +2028,25 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/early-access'
     | '/files'
+    | '/food-log'
+    | '/health'
     | '/hermes-world'
     | '/it-ops'
     | '/jobs'
     | '/kindle'
+    | '/life-os'
     | '/lily'
     | '/mcp'
     | '/meetings'
     | '/memory'
     | '/operations'
+    | '/ops-intelligence'
+    | '/phone'
     | '/playground'
     | '/presence'
     | '/presence-hub'
     | '/profiles'
+    | '/pto-tracker'
     | '/reserve'
     | '/settings'
     | '/skills'
@@ -1872,7 +2055,9 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/terminal'
     | '/vt-capital'
+    | '/wegovy'
     | '/world'
+    | '/zyn-tracker'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -1893,20 +2078,21 @@ export interface FileRouteTypes {
     | '/api/files'
     | '/api/gateway-reprobe'
     | '/api/gateway-status'
+    | '/api/health-trackers'
     | '/api/hermes-config'
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
-<<<<<<< HEAD
-=======
     | '/api/iot'
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/ops-intelligence'
     | '/api/paths'
+    | '/api/phone-cockpit'
+    | '/api/phone-summary'
     | '/api/ping'
     | '/api/playground-admin'
     | '/api/playground-npc'
@@ -1942,6 +2128,7 @@ export interface FileRouteTypes {
     | '/api/swarm-tmux-start'
     | '/api/swarm-tmux-stop'
     | '/api/system-metrics'
+    | '/api/teams-presence'
     | '/api/terminal-close'
     | '/api/terminal-input'
     | '/api/terminal-resize'
@@ -1961,12 +2148,17 @@ export interface FileRouteTypes {
     | '/api/dashboard/overview'
     | '/api/hermes-tasks/$taskId'
     | '/api/hermesworld/reservations'
+    | '/api/iot/config'
+    | '/api/iot/m5-ota'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
     | '/api/knowledge/list'
     | '/api/knowledge/read'
     | '/api/knowledge/search'
     | '/api/knowledge/sync'
+    | '/api/lily/config'
+    | '/api/lily/hermes-chat'
+    | '/api/lily/livekit-token'
     | '/api/mcp/$name'
     | '/api/mcp/configure'
     | '/api/mcp/discover'
@@ -2020,19 +2212,25 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   EarlyAccessRoute: typeof EarlyAccessRoute
   FilesRoute: typeof FilesRoute
+  FoodLogRoute: typeof FoodLogRoute
+  HealthRoute: typeof HealthRoute
   HermesWorldRoute: typeof HermesWorldRoute
   ItOpsRoute: typeof ItOpsRoute
   JobsRoute: typeof JobsRoute
   KindleRoute: typeof KindleRoute
+  LifeOsRoute: typeof LifeOsRoute
   LilyRoute: typeof LilyRoute
   McpRoute: typeof McpRoute
   MeetingsRoute: typeof MeetingsRoute
   MemoryRoute: typeof MemoryRoute
   OperationsRoute: typeof OperationsRoute
+  OpsIntelligenceRoute: typeof OpsIntelligenceRoute
+  PhoneRoute: typeof PhoneRoute
   PlaygroundRoute: typeof PlaygroundRoute
   PresenceRoute: typeof PresenceRoute
   PresenceHubRoute: typeof PresenceHubRoute
   ProfilesRoute: typeof ProfilesRoute
+  PtoTrackerRoute: typeof PtoTrackerRoute
   ReserveRoute: typeof ReserveRouteWithChildren
   SettingsRoute: typeof SettingsRouteWithChildren
   SkillsRoute: typeof SkillsRoute
@@ -2041,7 +2239,9 @@ export interface RootRouteChildren {
   TasksRoute: typeof TasksRoute
   TerminalRoute: typeof TerminalRoute
   VtCapitalRoute: typeof VtCapitalRoute
+  WegovyRoute: typeof WegovyRoute
   WorldRoute: typeof WorldRoute
+  ZynTrackerRoute: typeof ZynTrackerRoute
   ApiArtifactsRoute: typeof ApiArtifactsRouteWithChildren
   ApiAuthRoute: typeof ApiAuthRoute
   ApiAuthCheckRoute: typeof ApiAuthCheckRoute
@@ -2062,20 +2262,21 @@ export interface RootRouteChildren {
   ApiFilesRoute: typeof ApiFilesRoute
   ApiGatewayReprobeRoute: typeof ApiGatewayReprobeRoute
   ApiGatewayStatusRoute: typeof ApiGatewayStatusRoute
+  ApiHealthTrackersRoute: typeof ApiHealthTrackersRoute
   ApiHermesConfigRoute: typeof ApiHermesConfigRoute
   ApiHermesTasksRoute: typeof ApiHermesTasksRouteWithChildren
   ApiHistoryRoute: typeof ApiHistoryRoute
   ApiIntegrationsRoute: typeof ApiIntegrationsRoute
-<<<<<<< HEAD
-=======
   ApiIotRoute: typeof ApiIotRouteWithChildren
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   ApiLocalProvidersRoute: typeof ApiLocalProvidersRoute
   ApiMcpRoute: typeof ApiMcpRouteWithChildren
   ApiMediaRoute: typeof ApiMediaRoute
   ApiMemoryRoute: typeof ApiMemoryRouteWithChildren
   ApiModelsRoute: typeof ApiModelsRoute
+  ApiOpsIntelligenceRoute: typeof ApiOpsIntelligenceRoute
   ApiPathsRoute: typeof ApiPathsRoute
+  ApiPhoneCockpitRoute: typeof ApiPhoneCockpitRoute
+  ApiPhoneSummaryRoute: typeof ApiPhoneSummaryRoute
   ApiPingRoute: typeof ApiPingRoute
   ApiPlaygroundAdminRoute: typeof ApiPlaygroundAdminRoute
   ApiPlaygroundNpcRoute: typeof ApiPlaygroundNpcRoute
@@ -2111,6 +2312,7 @@ export interface RootRouteChildren {
   ApiSwarmTmuxStartRoute: typeof ApiSwarmTmuxStartRoute
   ApiSwarmTmuxStopRoute: typeof ApiSwarmTmuxStopRoute
   ApiSystemMetricsRoute: typeof ApiSystemMetricsRoute
+  ApiTeamsPresenceRoute: typeof ApiTeamsPresenceRoute
   ApiTerminalCloseRoute: typeof ApiTerminalCloseRoute
   ApiTerminalInputRoute: typeof ApiTerminalInputRoute
   ApiTerminalResizeRoute: typeof ApiTerminalResizeRoute
@@ -2129,6 +2331,9 @@ export interface RootRouteChildren {
   ApiKnowledgeReadRoute: typeof ApiKnowledgeReadRoute
   ApiKnowledgeSearchRoute: typeof ApiKnowledgeSearchRoute
   ApiKnowledgeSyncRoute: typeof ApiKnowledgeSyncRoute
+  ApiLilyConfigRoute: typeof ApiLilyConfigRoute
+  ApiLilyHermesChatRoute: typeof ApiLilyHermesChatRoute
+  ApiLilyLivekitTokenRoute: typeof ApiLilyLivekitTokenRoute
   ApiModelInfoRoute: typeof ApiModelInfoRoute
   ApiOauthDeviceCodeRoute: typeof ApiOauthDeviceCodeRoute
   ApiOauthPollTokenRoute: typeof ApiOauthPollTokenRoute
@@ -2151,11 +2356,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/zyn-tracker': {
+      id: '/zyn-tracker'
+      path: '/zyn-tracker'
+      fullPath: '/zyn-tracker'
+      preLoaderRoute: typeof ZynTrackerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/world': {
       id: '/world'
       path: '/world'
       fullPath: '/world'
       preLoaderRoute: typeof WorldRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/wegovy': {
+      id: '/wegovy'
+      path: '/wegovy'
+      fullPath: '/wegovy'
+      preLoaderRoute: typeof WegovyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/vt-capital': {
@@ -2214,6 +2433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReserveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pto-tracker': {
+      id: '/pto-tracker'
+      path: '/pto-tracker'
+      fullPath: '/pto-tracker'
+      preLoaderRoute: typeof PtoTrackerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profiles': {
       id: '/profiles'
       path: '/profiles'
@@ -2240,6 +2466,20 @@ declare module '@tanstack/react-router' {
       path: '/playground'
       fullPath: '/playground'
       preLoaderRoute: typeof PlaygroundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/phone': {
+      id: '/phone'
+      path: '/phone'
+      fullPath: '/phone'
+      preLoaderRoute: typeof PhoneRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ops-intelligence': {
+      id: '/ops-intelligence'
+      path: '/ops-intelligence'
+      fullPath: '/ops-intelligence'
+      preLoaderRoute: typeof OpsIntelligenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/operations': {
@@ -2277,6 +2517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LilyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/life-os': {
+      id: '/life-os'
+      path: '/life-os'
+      fullPath: '/life-os'
+      preLoaderRoute: typeof LifeOsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/kindle': {
       id: '/kindle'
       path: '/kindle'
@@ -2303,6 +2550,20 @@ declare module '@tanstack/react-router' {
       path: '/hermes-world'
       fullPath: '/hermes-world'
       preLoaderRoute: typeof HermesWorldRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/health': {
+      id: '/health'
+      path: '/health'
+      fullPath: '/health'
+      preLoaderRoute: typeof HealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/food-log': {
+      id: '/food-log'
+      path: '/food-log'
+      fullPath: '/food-log'
+      preLoaderRoute: typeof FoodLogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/files': {
@@ -2450,6 +2711,13 @@ declare module '@tanstack/react-router' {
       path: '/api/terminal-close'
       fullPath: '/api/terminal-close'
       preLoaderRoute: typeof ApiTerminalCloseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/teams-presence': {
+      id: '/api/teams-presence'
+      path: '/api/teams-presence'
+      fullPath: '/api/teams-presence'
+      preLoaderRoute: typeof ApiTeamsPresenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/system-metrics': {
@@ -2697,11 +2965,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/phone-summary': {
+      id: '/api/phone-summary'
+      path: '/api/phone-summary'
+      fullPath: '/api/phone-summary'
+      preLoaderRoute: typeof ApiPhoneSummaryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/phone-cockpit': {
+      id: '/api/phone-cockpit'
+      path: '/api/phone-cockpit'
+      fullPath: '/api/phone-cockpit'
+      preLoaderRoute: typeof ApiPhoneCockpitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/paths': {
       id: '/api/paths'
       path: '/api/paths'
       fullPath: '/api/paths'
       preLoaderRoute: typeof ApiPathsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ops-intelligence': {
+      id: '/api/ops-intelligence'
+      path: '/api/ops-intelligence'
+      fullPath: '/api/ops-intelligence'
+      preLoaderRoute: typeof ApiOpsIntelligenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/models': {
@@ -2739,8 +3028,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiLocalProvidersRouteImport
       parentRoute: typeof rootRouteImport
     }
-<<<<<<< HEAD
-=======
     '/api/iot': {
       id: '/api/iot'
       path: '/api/iot'
@@ -2748,7 +3035,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiIotRouteImport
       parentRoute: typeof rootRouteImport
     }
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     '/api/integrations': {
       id: '/api/integrations'
       path: '/api/integrations'
@@ -2775,6 +3061,13 @@ declare module '@tanstack/react-router' {
       path: '/api/hermes-config'
       fullPath: '/api/hermes-config'
       preLoaderRoute: typeof ApiHermesConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health-trackers': {
+      id: '/api/health-trackers'
+      path: '/api/health-trackers'
+      fullPath: '/api/health-trackers'
+      preLoaderRoute: typeof ApiHealthTrackersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/gateway-status': {
@@ -3169,6 +3462,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMcpNameRouteImport
       parentRoute: typeof ApiMcpRoute
     }
+    '/api/lily/livekit-token': {
+      id: '/api/lily/livekit-token'
+      path: '/api/lily/livekit-token'
+      fullPath: '/api/lily/livekit-token'
+      preLoaderRoute: typeof ApiLilyLivekitTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lily/hermes-chat': {
+      id: '/api/lily/hermes-chat'
+      path: '/api/lily/hermes-chat'
+      fullPath: '/api/lily/hermes-chat'
+      preLoaderRoute: typeof ApiLilyHermesChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lily/config': {
+      id: '/api/lily/config'
+      path: '/api/lily/config'
+      fullPath: '/api/lily/config'
+      preLoaderRoute: typeof ApiLilyConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/knowledge/sync': {
       id: '/api/knowledge/sync'
       path: '/api/knowledge/sync'
@@ -3210,6 +3524,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/knowledge/config'
       preLoaderRoute: typeof ApiKnowledgeConfigRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/iot/m5-ota': {
+      id: '/api/iot/m5-ota'
+      path: '/m5-ota'
+      fullPath: '/api/iot/m5-ota'
+      preLoaderRoute: typeof ApiIotM5OtaRouteImport
+      parentRoute: typeof ApiIotRoute
+    }
+    '/api/iot/config': {
+      id: '/api/iot/config'
+      path: '/config'
+      fullPath: '/api/iot/config'
+      preLoaderRoute: typeof ApiIotConfigRouteImport
+      parentRoute: typeof ApiIotRoute
     }
     '/api/hermesworld/reservations': {
       id: '/api/hermesworld/reservations'
@@ -3371,6 +3699,19 @@ const ApiHermesTasksRouteWithChildren = ApiHermesTasksRoute._addFileChildren(
   ApiHermesTasksRouteChildren,
 )
 
+interface ApiIotRouteChildren {
+  ApiIotConfigRoute: typeof ApiIotConfigRoute
+  ApiIotM5OtaRoute: typeof ApiIotM5OtaRoute
+}
+
+const ApiIotRouteChildren: ApiIotRouteChildren = {
+  ApiIotConfigRoute: ApiIotConfigRoute,
+  ApiIotM5OtaRoute: ApiIotM5OtaRoute,
+}
+
+const ApiIotRouteWithChildren =
+  ApiIotRoute._addFileChildren(ApiIotRouteChildren)
+
 interface ApiMcpNameRouteChildren {
   ApiMcpNameLogsRoute: typeof ApiMcpNameLogsRoute
 }
@@ -3518,19 +3859,25 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   EarlyAccessRoute: EarlyAccessRoute,
   FilesRoute: FilesRoute,
+  FoodLogRoute: FoodLogRoute,
+  HealthRoute: HealthRoute,
   HermesWorldRoute: HermesWorldRoute,
   ItOpsRoute: ItOpsRoute,
   JobsRoute: JobsRoute,
   KindleRoute: KindleRoute,
+  LifeOsRoute: LifeOsRoute,
   LilyRoute: LilyRoute,
   McpRoute: McpRoute,
   MeetingsRoute: MeetingsRoute,
   MemoryRoute: MemoryRoute,
   OperationsRoute: OperationsRoute,
+  OpsIntelligenceRoute: OpsIntelligenceRoute,
+  PhoneRoute: PhoneRoute,
   PlaygroundRoute: PlaygroundRoute,
   PresenceRoute: PresenceRoute,
   PresenceHubRoute: PresenceHubRoute,
   ProfilesRoute: ProfilesRoute,
+  PtoTrackerRoute: PtoTrackerRoute,
   ReserveRoute: ReserveRouteWithChildren,
   SettingsRoute: SettingsRouteWithChildren,
   SkillsRoute: SkillsRoute,
@@ -3539,7 +3886,9 @@ const rootRouteChildren: RootRouteChildren = {
   TasksRoute: TasksRoute,
   TerminalRoute: TerminalRoute,
   VtCapitalRoute: VtCapitalRoute,
+  WegovyRoute: WegovyRoute,
   WorldRoute: WorldRoute,
+  ZynTrackerRoute: ZynTrackerRoute,
   ApiArtifactsRoute: ApiArtifactsRouteWithChildren,
   ApiAuthRoute: ApiAuthRoute,
   ApiAuthCheckRoute: ApiAuthCheckRoute,
@@ -3560,20 +3909,21 @@ const rootRouteChildren: RootRouteChildren = {
   ApiFilesRoute: ApiFilesRoute,
   ApiGatewayReprobeRoute: ApiGatewayReprobeRoute,
   ApiGatewayStatusRoute: ApiGatewayStatusRoute,
+  ApiHealthTrackersRoute: ApiHealthTrackersRoute,
   ApiHermesConfigRoute: ApiHermesConfigRoute,
   ApiHermesTasksRoute: ApiHermesTasksRouteWithChildren,
   ApiHistoryRoute: ApiHistoryRoute,
   ApiIntegrationsRoute: ApiIntegrationsRoute,
-<<<<<<< HEAD
-=======
   ApiIotRoute: ApiIotRouteWithChildren,
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   ApiLocalProvidersRoute: ApiLocalProvidersRoute,
   ApiMcpRoute: ApiMcpRouteWithChildren,
   ApiMediaRoute: ApiMediaRoute,
   ApiMemoryRoute: ApiMemoryRouteWithChildren,
   ApiModelsRoute: ApiModelsRoute,
+  ApiOpsIntelligenceRoute: ApiOpsIntelligenceRoute,
   ApiPathsRoute: ApiPathsRoute,
+  ApiPhoneCockpitRoute: ApiPhoneCockpitRoute,
+  ApiPhoneSummaryRoute: ApiPhoneSummaryRoute,
   ApiPingRoute: ApiPingRoute,
   ApiPlaygroundAdminRoute: ApiPlaygroundAdminRoute,
   ApiPlaygroundNpcRoute: ApiPlaygroundNpcRoute,
@@ -3609,6 +3959,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSwarmTmuxStartRoute: ApiSwarmTmuxStartRoute,
   ApiSwarmTmuxStopRoute: ApiSwarmTmuxStopRoute,
   ApiSystemMetricsRoute: ApiSystemMetricsRoute,
+  ApiTeamsPresenceRoute: ApiTeamsPresenceRoute,
   ApiTerminalCloseRoute: ApiTerminalCloseRoute,
   ApiTerminalInputRoute: ApiTerminalInputRoute,
   ApiTerminalResizeRoute: ApiTerminalResizeRoute,
@@ -3627,6 +3978,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiKnowledgeReadRoute: ApiKnowledgeReadRoute,
   ApiKnowledgeSearchRoute: ApiKnowledgeSearchRoute,
   ApiKnowledgeSyncRoute: ApiKnowledgeSyncRoute,
+  ApiLilyConfigRoute: ApiLilyConfigRoute,
+  ApiLilyHermesChatRoute: ApiLilyHermesChatRoute,
+  ApiLilyLivekitTokenRoute: ApiLilyLivekitTokenRoute,
   ApiModelInfoRoute: ApiModelInfoRoute,
   ApiOauthDeviceCodeRoute: ApiOauthDeviceCodeRoute,
   ApiOauthPollTokenRoute: ApiOauthPollTokenRoute,

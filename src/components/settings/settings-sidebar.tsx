@@ -28,6 +28,14 @@ export const SETTINGS_NAV_ITEMS: Array<NavItem> = [
   { id: 'language', label: 'Language' },
 ]
 
+const DEFAULT_MOBILE_NAV_IDS = new Set<SettingsNavId>([
+  'connection',
+  'claude',
+  'voice',
+  'appearance',
+  'notifications',
+])
+
 type ItemRendererArgs = {
   item: NavItem
   isActive: boolean
@@ -104,9 +112,12 @@ export function SettingsMobilePills({ activeId }: { activeId: SettingsNavId }) {
     'bg-[var(--theme-accent)] text-[var(--theme-bg)] font-semibold'
   const inactiveClass =
     'bg-primary-100 text-primary-600 hover:bg-primary-200'
+  const visibleItems = SETTINGS_NAV_ITEMS.filter(
+    (item) => DEFAULT_MOBILE_NAV_IDS.has(item.id) || item.id === activeId,
+  )
   return (
     <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-2 md:hidden">
-      {SETTINGS_NAV_ITEMS.map((item) => {
+      {visibleItems.map((item) => {
         const isActive = activeId === item.id
         const className = cn(
           'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',

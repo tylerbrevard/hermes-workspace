@@ -71,12 +71,12 @@ function sqlString(value: unknown) {
   return `'${String(value ?? '').replaceAll("'", "''")}'`
 }
 
-function queryDb<T>(sql: string): T[] {
+function queryDb<T>(sql: string): Array<T> {
   const output = execFileSync('sqlite3', ['-json', MEETINGS_DB_PATH, sql], {
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
   }).trim()
-  return output ? (JSON.parse(output) as T[]) : []
+  return output ? (JSON.parse(output) as Array<T>) : []
 }
 
 function execDb(sql: string) {
@@ -112,7 +112,7 @@ function rowToMeeting(row: MeetingRow): Meeting {
   }
 }
 
-function hydrateMeetings(meetings: Meeting[]) {
+function hydrateMeetings(meetings: Array<Meeting>) {
   if (meetings.length === 0) return meetings
   const ids = meetings.map((meeting) => sqlString(meeting.id)).join(',')
   const actionRows = queryDb<{
@@ -233,7 +233,7 @@ export function listMeetings(options: {
 } = {}) {
   const limit = Math.max(1, Math.min(options.limit || 50, 500))
   const offset = Math.max(0, options.offset || 0)
-  const clauses: string[] = []
+  const clauses: Array<string> = []
   if (options.search?.trim()) {
     const pattern = `%${options.search.trim()}%`
     clauses.push(
@@ -460,7 +460,7 @@ export function setMeetingReviewed(meetingId: string, reviewed: boolean) {
   return { success: true }
 }
 
-export function bulkMarkReviewed(meetingIds: string[]) {
+export function bulkMarkReviewed(meetingIds: Array<string>) {
   if (meetingIds.length === 0) return { success: true, count: 0 }
   execDb(
     `UPDATE meetings SET reviewed = 1 WHERE id IN (${meetingIds.map(sqlString).join(',')});`,
@@ -499,7 +499,7 @@ export function createActionItem(input: {
 
 export function updateActionItem(actionItem: any) {
   if (!actionItem?.id) throw new Error('Action item ID required')
-  const sets: string[] = []
+  const sets: Array<string> = []
   if (actionItem.text !== undefined) sets.push(`text = ${sqlString(actionItem.text)}`)
   if (actionItem.assignee !== undefined) sets.push(`assignee = ${sqlString(actionItem.assignee)}`)
   if (actionItem.dueDate !== undefined) sets.push(`due_date = ${sqlString(actionItem.dueDate)}`)
@@ -520,7 +520,7 @@ export function deleteActionItem(actionItemId: string) {
 
 export function updateIssue(issue: any) {
   if (!issue?.id) throw new Error('Issue ID required')
-  const sets: string[] = []
+  const sets: Array<string> = []
   if (issue.title !== undefined) sets.push(`title = ${sqlString(issue.title)}`)
   if (issue.description !== undefined) sets.push(`description = ${sqlString(issue.description)}`)
   if (issue.status !== undefined) sets.push(`status = ${sqlString(issue.status)}`)
@@ -538,7 +538,7 @@ export function deleteIssue(issueId: string) {
 
 export function updateDecision(decision: any) {
   if (!decision?.id) throw new Error('Decision ID required')
-  const sets: string[] = []
+  const sets: Array<string> = []
   if (decision.text !== undefined) sets.push(`text = ${sqlString(decision.text)}`)
   if (decision.decisionMaker !== undefined) sets.push(`decision_maker = ${sqlString(decision.decisionMaker)}`)
   if (decision.impact !== undefined) sets.push(`impact = ${sqlString(decision.impact)}`)

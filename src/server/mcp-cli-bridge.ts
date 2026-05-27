@@ -11,7 +11,8 @@ export interface CliTestResult {
   error: string | null
 }
 
-const ANSI_RE = /\x1b\[[0-9;]*m/g
+// eslint-disable-next-line no-control-regex -- Intentional ANSI escape stripping.
+const ANSI_RE = new RegExp('\\u001B\\[[0-9;]*m', 'g')
 const DEFAULT_TIMEOUT_MS = 60_000
 
 const HERMES_BIN_CANDIDATES = [
@@ -76,7 +77,11 @@ function execHermes(
       if (settled) return
       settled = true
       clearTimeout(timer)
-      resolve({ code: -1, stdout, stderr: stderr + `\n[spawn error] ${err.message}` })
+      resolve({
+        code: -1,
+        stdout,
+        stderr: stderr + `\n[spawn error] ${err.message}`,
+      })
     })
     child.on('close', (code) => {
       if (settled) return

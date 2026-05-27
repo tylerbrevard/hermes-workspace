@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useMemo, useState } from 'react'
+import { SetupEmptyState } from '@/components/setup-empty-state'
 import { apiPath } from '@/lib/base-path'
 
 type ItOpsData = {
@@ -79,6 +80,10 @@ type ItOpsData = {
       company: string
       dateEntered: string | null
       requiredDate: string | null
+      url?: string | null
+      ticketUrl?: string | null
+      lastUpdatedBy?: string | null
+      lastUpdated?: string | null
     }>
     briefing: string
     errors?: Array<string>
@@ -86,6 +91,25 @@ type ItOpsData = {
   }
   refreshedAt?: string
   error?: string
+}
+
+type ConnectWiseTicket = NonNullable<
+  NonNullable<ItOpsData['analytics']>['recentTickets']
+>[number]
+
+type ConnectWiseAction = {
+  ticket: ConnectWiseTicket
+  kind:
+    | 'sla-breach'
+    | 'sla-risk'
+    | 'approval'
+    | 'unassigned'
+    | 'priority'
+    | 'stale'
+  label: string
+  detail: string
+  severity: 'critical' | 'high' | 'medium'
+  sort: number
 }
 
 function shellClassName() {
@@ -114,6 +138,235 @@ function stripTone(state: 'ok' | 'warn' | 'bad') {
   return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200'
 }
 
+function hoursUntil(value?: string | null) {
+  if (!value) return null
+  const time = new Date(value).getTime()
+  if (Number.isNaN(time)) return null
+  return (time - Date.now()) / 3_600_000
+}
+
+function hoursSince(value?: string | null) {
+  if (!value) return null
+  const time = new Date(value).getTime()
+  if (Number.isNaN(time)) return null
+  return (Date.now() - time) / 3_600_000
+}
+
+function hasApprovalSignal(ticket: ConnectWiseTicket) {
+  const text =
+    `${ticket.summary} ${ticket.status} ${ticket.board}`.toLowerCase()
+  return (
+    text.includes('approval') ||
+    text.includes('approve') ||
+    text.includes('cab')
+  )
+}
+
+function hasHighPrioritySignal(ticket: ConnectWiseTicket) {
+  return /(critical|urgent|emergency|high|priority\s*1|p1|sev\s*1)/i.test(
+    ticket.priority,
+  )
+}
+
+export function buildConnectWiseActionQueue(
+  tickets: Array<ConnectWiseTicket>,
+  limit = 8,
+) {
+  const actions: Array<ConnectWiseAction> = []
+
+  for (const ticket of tickets) {
+    const dueInHours = hoursUntil(ticket.requiredDate)
+    const ageHours = hoursSince(ticket.dateEntered)
+
+    if (dueInHours !== null && dueInHours < 0) {
+      actions.push({
+        ticket,
+        kind: 'sla-breach',
+        label: 'SLA breach',
+        detail: `Required ${Math.abs(Math.round(dueInHours))}h ago`,
+        severity: 'critical',
+        sort: -10_000 + dueInHours,
+      })
+      continue
+    }
+
+    if (dueInHours !== null && dueInHours <= 8) {
+      actions.push({
+        ticket,
+        kind: 'sla-risk',
+        label: 'SLA risk',
+        detail: `Due in ${Math.max(0, Math.round(dueInHours))}h`,
+        severity: 'high',
+        sort: -8_000 + dueInHours,
+      })
+      continue
+    }
+
+    if (hasApprovalSignal(ticket)) {
+      actions.push({
+        ticket,
+        kind: 'approval',
+        label: 'Approval needed',
+        detail: ticket.status || 'Review approval path',
+        severity: 'high',
+        sort: -6_000,
+      })
+      continue
+    }
+
+    if (ticket.owner === 'Unassigned') {
+      actions.push({
+        ticket,
+        kind: 'unassigned',
+        label: 'Assign owner',
+        detail: `${ticket.board || 'Unknown board'} has no owner`,
+        severity: 'high',
+        sort: -5_000,
+      })
+      continue
+    }
+
+    if (hasHighPrioritySignal(ticket)) {
+      actions.push({
+        ticket,
+        kind: 'priority',
+        label: 'Priority watch',
+        detail: ticket.priority || 'High priority',
+        severity: 'medium',
+        sort: -3_000,
+      })
+      continue
+    }
+
+    if (ageHours !== null && ageHours >= 72) {
+      actions.push({
+        ticket,
+        kind: 'stale',
+        label: 'Stale ticket',
+        detail: `${Math.round(ageHours)}h old`,
+        severity: 'medium',
+        sort: -1_000 - ageHours,
+      })
+    }
+  }
+
+  return actions.sort((left, right) => left.sort - right.sort).slice(0, limit)
+}
+
+export function getItOpsSourceState(
+  data: ItOpsData | null,
+  error?: string | null,
+) {
+  if (error && /auth|unauthorized|token|connectwise/i.test(error)) {
+    return 'auth-required'
+  }
+  if (!data?.analytics?.recentTickets?.length) return 'zero-ticket'
+  if (data.analytics.errors?.length || data.overview?.warning)
+    return 'stale-source'
+  return 'healthy'
+}
+
+export function buildItOpsBriefing(data: ItOpsData | null) {
+  return [
+    '# IT Ops Briefing',
+    '',
+    `ConnectWise source: ${data?.analytics?.fetchedAt || 'unknown'}`,
+    `Graph/standup source: ${data?.overview?.generatedAt || 'unknown'}`,
+    `Open tickets: ${data?.analytics?.ticketStats.open ?? 0}`,
+    `SLA compliance: ${data?.analytics?.ticketStats.slaCompliancePct ?? 0}%`,
+    `Approvals: ${buildConnectWiseActionQueue(data?.analytics?.recentTickets || []).filter((action) => action.kind === 'approval').length}`,
+  ].join('\n')
+}
+
+export function getNativePsaGuidance() {
+  return 'Use native ConnectWise approval/workflow links first. Warn before any external or non-native workaround.'
+}
+
+export function getConnectWiseTicketUrl(ticket: ConnectWiseTicket) {
+  return ticket.ticketUrl || ticket.url || null
+}
+
+export function getTicketSlaLabel(ticket: ConnectWiseTicket, now = Date.now()) {
+  const due = ticket.requiredDate
+    ? new Date(ticket.requiredDate).getTime()
+    : NaN
+  if (!Number.isFinite(due)) return 'No required date'
+  const dueInHours = (due - now) / 3_600_000
+  if (dueInHours < 0) return `Breach ${Math.abs(Math.round(dueInHours))}h`
+  if (dueInHours <= 8) return `Due ${Math.max(0, Math.round(dueInHours))}h`
+  return `Due ${Math.round(dueInHours / 24)}d`
+}
+
+export function getTicketApprovalBoundary(ticket: ConnectWiseTicket) {
+  return hasApprovalSignal(ticket)
+    ? 'Native ConnectWise approval'
+    : 'Workspace-derived insight'
+}
+
+export function buildClientUpdate(ticket: ConnectWiseTicket) {
+  return [
+    `Client update for ticket #${ticket.id}`,
+    '',
+    `Summary: ${ticket.summary}`,
+    `Status: ${ticket.status || 'unknown'}`,
+    `Owner: ${ticket.owner || 'unassigned'}`,
+    `Next step: We are tracking this through the native ConnectWise workflow and will update the ticket as work progresses.`,
+  ].join('\n')
+}
+
+export function buildInternalTicketBrief(ticket: ConnectWiseTicket) {
+  return [
+    `#${ticket.id} ${ticket.summary}`,
+    `Company: ${ticket.company || 'unknown'}`,
+    `Board: ${ticket.board || 'unknown'}`,
+    `Status: ${ticket.status || 'unknown'}`,
+    `Priority: ${ticket.priority || 'unknown'}`,
+    `Owner: ${ticket.owner || 'unassigned'}`,
+    `SLA: ${getTicketSlaLabel(ticket)}`,
+    `Boundary: ${getTicketApprovalBoundary(ticket)}`,
+    getConnectWiseTicketUrl(ticket)
+      ? `ConnectWise: ${getConnectWiseTicketUrl(ticket)}`
+      : 'ConnectWise: open by ticket id in PSA',
+  ].join('\n')
+}
+
+export function buildItOpsDiagnosticsExport(data: ItOpsData | null) {
+  return JSON.stringify(
+    {
+      source: {
+        connectWiseFetchedAt: data?.analytics?.fetchedAt || null,
+        standupGeneratedAt: data?.overview?.generatedAt || null,
+        refreshedAt: data?.refreshedAt || null,
+        errors: data?.analytics?.errors || [],
+        warning: data?.overview?.warning || null,
+      },
+      ticketStats: data?.analytics?.ticketStats || null,
+      sourceState: getItOpsSourceState(data),
+      nativePsaBoundary: getNativePsaGuidance(),
+      actionQueue: buildConnectWiseActionQueue(
+        data?.analytics?.recentTickets || [],
+      ).map((action) => ({
+        kind: action.kind,
+        label: action.label,
+        ticketId: action.ticket.id,
+        severity: action.severity,
+      })),
+    },
+    null,
+    2,
+  )
+}
+
+function actionTone(severity: ConnectWiseAction['severity']) {
+  if (severity === 'critical') {
+    return 'border-red-300 bg-red-50 text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-100'
+  }
+  if (severity === 'high') {
+    return 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100'
+  }
+  return 'border-primary-200 bg-primary-50/80 text-primary-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100'
+}
+
 export function ItOpsScreen() {
   const [data, setData] = useState<ItOpsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -121,6 +374,9 @@ export function ItOpsScreen() {
   const [ticketSearch, setTicketSearch] = useState('')
   const [boardFilter, setBoardFilter] = useState('All')
   const [priorityFilter, setPriorityFilter] = useState('All')
+  const [ticketMode, setTicketMode] = useState<
+    'all' | 'approvals' | 'sla-risk' | 'unassigned' | 'recently-touched'
+  >('all')
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
 
   async function load() {
@@ -158,7 +414,11 @@ export function ItOpsScreen() {
     () => [
       'All',
       ...Array.from(
-        new Set((data?.analytics?.recentTickets || []).map((ticket) => ticket.board).filter(Boolean)),
+        new Set(
+          (data?.analytics?.recentTickets || [])
+            .map((ticket) => ticket.board)
+            .filter(Boolean),
+        ),
       ).sort(),
     ],
     [data?.analytics?.recentTickets],
@@ -167,7 +427,11 @@ export function ItOpsScreen() {
     () => [
       'All',
       ...Array.from(
-        new Set((data?.analytics?.recentTickets || []).map((ticket) => ticket.priority).filter(Boolean)),
+        new Set(
+          (data?.analytics?.recentTickets || [])
+            .map((ticket) => ticket.priority)
+            .filter(Boolean),
+        ),
       ).sort(),
     ],
     [data?.analytics?.recentTickets],
@@ -176,9 +440,26 @@ export function ItOpsScreen() {
     const q = ticketSearch.trim().toLowerCase()
     return (data?.analytics?.recentTickets || []).filter((ticket) => {
       const boardMatches = boardFilter === 'All' || ticket.board === boardFilter
-      const priorityMatches = priorityFilter === 'All' || ticket.priority === priorityFilter
+      const priorityMatches =
+        priorityFilter === 'All' || ticket.priority === priorityFilter
       if (!boardMatches) return false
       if (!priorityMatches) return false
+      if (ticketMode === 'approvals' && !hasApprovalSignal(ticket)) return false
+      if (
+        ticketMode === 'sla-risk' &&
+        !buildConnectWiseActionQueue([ticket]).some(
+          (action) =>
+            action.kind === 'sla-breach' || action.kind === 'sla-risk',
+        )
+      )
+        return false
+      if (ticketMode === 'unassigned' && ticket.owner !== 'Unassigned')
+        return false
+      if (
+        ticketMode === 'recently-touched' &&
+        !/tyler/i.test(`${ticket.lastUpdatedBy || ''} ${ticket.owner || ''}`)
+      )
+        return false
       if (!q) return true
       return [
         String(ticket.id),
@@ -193,7 +474,13 @@ export function ItOpsScreen() {
         .toLowerCase()
         .includes(q)
     })
-  }, [boardFilter, data?.analytics?.recentTickets, priorityFilter, ticketSearch])
+  }, [
+    boardFilter,
+    data?.analytics?.recentTickets,
+    priorityFilter,
+    ticketSearch,
+    ticketMode,
+  ])
   const selectedTicket = useMemo(
     () =>
       (data?.analytics?.recentTickets || []).find(
@@ -201,6 +488,48 @@ export function ItOpsScreen() {
       ) || null,
     [data?.analytics?.recentTickets, selectedTicketId],
   )
+  const actionQueue = useMemo(
+    () => buildConnectWiseActionQueue(data?.analytics?.recentTickets || []),
+    [data?.analytics?.recentTickets],
+  )
+  const slaActionCount = actionQueue.filter(
+    (action) => action.kind === 'sla-breach' || action.kind === 'sla-risk',
+  ).length
+  const approvalActionCount = actionQueue.filter(
+    (action) => action.kind === 'approval',
+  ).length
+  const sourceState = getItOpsSourceState(data, error)
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target?.closest('input, textarea, select, button, [contenteditable]')
+      ) {
+        return
+      }
+      if (!visibleTickets.length) return
+      const selectedIndex = Math.max(
+        0,
+        visibleTickets.findIndex(
+          (ticket) => String(ticket.id) === selectedTicketId,
+        ),
+      )
+      if (event.key === 'ArrowDown' || event.key.toLowerCase() === 'j') {
+        event.preventDefault()
+        const next =
+          visibleTickets[Math.min(visibleTickets.length - 1, selectedIndex + 1)]
+        setSelectedTicketId(String(next.id))
+      }
+      if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        const next = visibleTickets[Math.max(0, selectedIndex - 1)]
+        setSelectedTicketId(String(next.id))
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedTicketId, visibleTickets])
 
   function exportExceptionReport() {
     const lines = [
@@ -210,13 +539,23 @@ export function ItOpsScreen() {
       `Source pull: ${data?.analytics?.fetchedAt || data?.refreshedAt || 'unknown'}`,
       '',
       '## Errors',
-      ...(connectWiseErrors.length > 0 ? connectWiseErrors.map((item) => `- ${item}`) : ['- none reported']),
+      ...(connectWiseErrors.length > 0
+        ? connectWiseErrors.map((item) => `- ${item}`)
+        : ['- none reported']),
       '',
       '## Visible Tickets',
       ...visibleTickets.map(
         (ticket) =>
           `- #${ticket.id} ${ticket.summary} | ${ticket.company} | ${ticket.board} | ${ticket.status} | ${ticket.priority} | ${ticket.owner}`,
       ),
+      '',
+      '## Action Queue',
+      ...(actionQueue.length > 0
+        ? actionQueue.map(
+            (action) =>
+              `- ${action.label}: #${action.ticket.id} ${action.ticket.summary} | ${action.detail}`,
+          )
+        : ['- none']),
     ]
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
@@ -225,6 +564,17 @@ export function ItOpsScreen() {
     anchor.download = 'connectwise-exception-report.md'
     anchor.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function copySelectedTicket(template: 'client' | 'internal') {
+    if (!selectedTicket) return
+    await navigator.clipboard
+      .writeText(
+        template === 'client'
+          ? buildClientUpdate(selectedTicket)
+          : buildInternalTicketBrief(selectedTicket),
+      )
+      .catch(() => {})
   }
 
   return (
@@ -239,7 +589,8 @@ export function ItOpsScreen() {
               IT Ops / ConnectWise
             </h1>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              ConnectWise ticket health, service-board load, standup patterns, and action ownership.
+              ConnectWise ticket health, service-board load, standup patterns,
+              and action ownership.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -262,18 +613,50 @@ export function ItOpsScreen() {
           </div>
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-4">
-          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(error ? 'bad' : connectWiseErrors.length > 0 ? 'warn' : 'ok')}`}>
-            ConnectWise {error ? 'offline' : connectWiseErrors.length > 0 ? 'degraded' : 'healthy'}
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(error ? 'bad' : connectWiseErrors.length > 0 ? 'warn' : 'ok')}`}
+          >
+            ConnectWise{' '}
+            {error
+              ? 'offline'
+              : connectWiseErrors.length > 0
+                ? 'degraded'
+                : 'healthy'}
           </span>
-          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone((data?.analytics?.ticketStats.open ?? 0) > 0 ? 'ok' : 'warn')}`}>
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${stripTone((data?.analytics?.ticketStats.open ?? 0) > 0 ? 'ok' : 'warn')}`}
+          >
             Tickets {data?.analytics?.ticketStats.open ?? 0} open
           </span>
-          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(data?.overview?.warning ? 'warn' : 'ok')}`}>
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(data?.overview?.warning ? 'warn' : 'ok')}`}
+          >
             Standups {data?.overview?.totalMeetings ?? 0} tracked
           </span>
           <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-            {formatFreshness(data?.analytics?.fetchedAt || data?.overview?.generatedAt || data?.refreshedAt)}
+            {formatFreshness(
+              data?.analytics?.fetchedAt ||
+                data?.overview?.generatedAt ||
+                data?.refreshedAt,
+            )}
           </span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-primary-500 dark:text-neutral-400">
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Source state: {sourceState}
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Native PSA actions only
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            {getNativePsaGuidance()}
+          </span>
+          {actionQueue.length > 0 ? (
+            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+              {actionQueue.length} ticket action
+              {actionQueue.length === 1 ? '' : 's'} queued
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -297,6 +680,143 @@ export function ItOpsScreen() {
         </div>
       ) : null}
 
+      <section className={`${shellClassName()} md:hidden`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+              Mobile IT Ops
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-primary-900 dark:text-neutral-100">
+              {slaActionCount + approvalActionCount}
+            </div>
+            <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+              SLA or approval blockers
+            </div>
+          </div>
+          <span
+            className={`rounded-full border px-3 py-1 text-xs ${stripTone(
+              slaActionCount > 0
+                ? 'bad'
+                : approvalActionCount > 0
+                  ? 'warn'
+                  : 'ok',
+            )}`}
+          >
+            {sourceState}
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {actionQueue.slice(0, 3).map((action) => (
+            <button
+              key={`mobile-${action.kind}-${action.ticket.id}`}
+              type="button"
+              onClick={() => setSelectedTicketId(String(action.ticket.id))}
+              className={`rounded-xl border px-3 py-2 text-left ${actionTone(action.severity)}`}
+            >
+              <div className="text-xs font-semibold uppercase tracking-[0.12em]">
+                {action.label}
+              </div>
+              <div className="mt-1 line-clamp-1 text-sm font-medium">
+                #{action.ticket.id} {action.ticket.summary}
+              </div>
+            </button>
+          ))}
+          {actionQueue.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50/50 px-3 py-3 text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+              No urgent blockers in the current ConnectWise pull.
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className={shellClassName()}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
+              Action queue
+            </div>
+            <h2 className="mt-1 text-base font-semibold text-primary-900 dark:text-neutral-100">
+              Tickets, approvals, and SLA risk
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-primary-600 dark:text-neutral-400">
+              The next items to touch first, ranked by due date, approval
+              wording, owner gaps, priority, and age.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="text-lg font-semibold text-primary-900 dark:text-neutral-100">
+                {actionQueue.length}
+              </div>
+              <div className="text-primary-600 dark:text-neutral-400">
+                actions
+              </div>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+              <div className="text-lg font-semibold">{slaActionCount}</div>
+              <div>SLA</div>
+            </div>
+            <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="text-lg font-semibold text-primary-900 dark:text-neutral-100">
+                {approvalActionCount}
+              </div>
+              <div className="text-primary-600 dark:text-neutral-400">
+                approvals
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 lg:grid-cols-2">
+          {actionQueue.map((action) => (
+            <article
+              key={`${action.kind}-${action.ticket.id}`}
+              className={`rounded-xl border px-3 py-3 ${actionTone(action.severity)}`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em]">
+                    {action.label}
+                  </div>
+                  <div className="mt-1 truncate text-sm font-semibold">
+                    #{action.ticket.id} {action.ticket.summary}
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[11px]">
+                  {action.detail}
+                </span>
+              </div>
+              <div className="mt-2 text-xs opacity-80">
+                {action.ticket.company} · {action.ticket.board} ·{' '}
+                {action.ticket.status} · {action.ticket.owner}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTicketId(String(action.ticket.id))}
+                  className="rounded-lg border border-current/20 px-2 py-1 text-xs font-medium"
+                >
+                  Focus ticket
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard.writeText(String(action.ticket.id))
+                  }
+                  className="rounded-lg border border-current/20 px-2 py-1 text-xs font-medium"
+                >
+                  Copy id
+                </button>
+              </div>
+            </article>
+          ))}
+          {actionQueue.length === 0 ? (
+            <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 text-sm text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
+              No ticket actions detected from the current ConnectWise pull.
+            </div>
+          ) : null}
+        </div>
+      </section>
+
       <div className="grid gap-4 md:grid-cols-4">
         <section className={shellClassName()}>
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
@@ -317,7 +837,8 @@ export function ItOpsScreen() {
             {data?.analytics?.ticketStats.slaCompliancePct ?? 0}%
           </div>
           <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            Avg resolution {data?.analytics?.ticketStats.avgResolutionHours ?? 0}h
+            Avg resolution{' '}
+            {data?.analytics?.ticketStats.avgResolutionHours ?? 0}h
           </div>
         </section>
         <section className={shellClassName()}>
@@ -339,7 +860,8 @@ export function ItOpsScreen() {
             {data?.overview?.totalMeetings ?? 0}
           </div>
           <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            {data?.overview?.dateRange?.from || '—'} to {data?.overview?.dateRange?.to || '—'}
+            {data?.overview?.dateRange?.from || '—'} to{' '}
+            {data?.overview?.dateRange?.to || '—'}
           </div>
         </section>
       </div>
@@ -363,14 +885,21 @@ export function ItOpsScreen() {
                 Service boards
               </div>
               <div className="mt-3 grid gap-2">
-                {(data?.analytics?.queueBreakdown || []).slice(0, 6).map((item) => (
-                  <div key={item.queue} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-primary-800 dark:text-neutral-200">{item.queue}</span>
-                    <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                      {item.count}
-                    </span>
-                  </div>
-                ))}
+                {(data?.analytics?.queueBreakdown || [])
+                  .slice(0, 6)
+                  .map((item) => (
+                    <div
+                      key={item.queue}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span className="text-primary-800 dark:text-neutral-200">
+                        {item.queue}
+                      </span>
+                      <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
+                        {item.count}
+                      </span>
+                    </div>
+                  ))}
               </div>
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900">
@@ -378,14 +907,21 @@ export function ItOpsScreen() {
                 Priority load
               </div>
               <div className="mt-3 grid gap-2">
-                {(data?.analytics?.priorityBreakdown || []).slice(0, 6).map((item) => (
-                  <div key={item.priority} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-primary-800 dark:text-neutral-200">{item.priority}</span>
-                    <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                      {item.count}
-                    </span>
-                  </div>
-                ))}
+                {(data?.analytics?.priorityBreakdown || [])
+                  .slice(0, 6)
+                  .map((item) => (
+                    <div
+                      key={item.priority}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span className="text-primary-800 dark:text-neutral-200">
+                        {item.priority}
+                      </span>
+                      <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
+                        {item.count}
+                      </span>
+                    </div>
+                  ))}
                 {(data?.analytics?.priorityBreakdown || []).length === 0 ? (
                   <div className="text-sm text-primary-500 dark:text-neutral-400">
                     No priority data available.
@@ -403,14 +939,18 @@ export function ItOpsScreen() {
                     type="search"
                     aria-label="Search ConnectWise tickets"
                     value={ticketSearch}
-                    onChange={(event) => setTicketSearch(event.currentTarget.value)}
+                    onChange={(event) =>
+                      setTicketSearch(event.currentTarget.value)
+                    }
                     placeholder="Search tickets"
                     className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                   />
                   <select
                     aria-label="Filter tickets by service board"
                     value={boardFilter}
-                    onChange={(event) => setBoardFilter(event.currentTarget.value)}
+                    onChange={(event) =>
+                      setBoardFilter(event.currentTarget.value)
+                    }
                     className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                   >
                     {ticketBoards.map((board) => (
@@ -422,7 +962,9 @@ export function ItOpsScreen() {
                   <select
                     aria-label="Filter tickets by priority"
                     value={priorityFilter}
-                    onChange={(event) => setPriorityFilter(event.currentTarget.value)}
+                    onChange={(event) =>
+                      setPriorityFilter(event.currentTarget.value)
+                    }
                     className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                   >
                     {ticketPriorities.map((priority) => (
@@ -430,6 +972,22 @@ export function ItOpsScreen() {
                         {priority}
                       </option>
                     ))}
+                  </select>
+                  <select
+                    aria-label="Filter ConnectWise ticket mode"
+                    value={ticketMode}
+                    onChange={(event) =>
+                      setTicketMode(
+                        event.currentTarget.value as typeof ticketMode,
+                      )
+                    }
+                    className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+                  >
+                    <option value="all">All</option>
+                    <option value="approvals">Needs Tyler approval</option>
+                    <option value="sla-risk">SLA risk</option>
+                    <option value="unassigned">Unassigned</option>
+                    <option value="recently-touched">Touched by Tyler</option>
                   </select>
                 </div>
               </div>
@@ -448,26 +1006,67 @@ export function ItOpsScreen() {
                       #{ticket.id} {ticket.summary}
                     </div>
                     <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                      {ticket.company} · {ticket.board} · {ticket.status} · {ticket.priority} · {ticket.owner}
+                      {ticket.company} · {ticket.board} · {ticket.status} ·{' '}
+                      {ticket.priority} · {ticket.owner}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                      <span
+                        className={`rounded-full border px-2 py-1 ${stripTone(
+                          getTicketSlaLabel(ticket).startsWith('Breach')
+                            ? 'bad'
+                            : getTicketSlaLabel(ticket).startsWith('Due ')
+                              ? 'warn'
+                              : 'ok',
+                        )}`}
+                      >
+                        {getTicketSlaLabel(ticket)}
+                      </span>
+                      <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                        Owner: {ticket.owner || 'Unassigned'}
+                      </span>
+                      <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                        {getTicketApprovalBoundary(ticket)}
+                      </span>
+                      {ticket.lastUpdatedBy ? (
+                        <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                          Last touched: {ticket.lastUpdatedBy}
+                        </span>
+                      ) : null}
                     </div>
                     <button
                       type="button"
                       onClick={() =>
                         setSelectedTicketId((current) =>
-                          current === String(ticket.id) ? null : String(ticket.id),
+                          current === String(ticket.id)
+                            ? null
+                            : String(ticket.id),
                         )
                       }
                       className="mt-2 text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
                     >
-                      {selectedTicketId === String(ticket.id) ? 'Hide details' : 'Show details'}
+                      {selectedTicketId === String(ticket.id)
+                        ? 'Hide details'
+                        : 'Show details'}
                     </button>
                     <button
                       type="button"
-                      onClick={() => navigator.clipboard.writeText(String(ticket.id))}
+                      onClick={() =>
+                        navigator.clipboard.writeText(String(ticket.id))
+                      }
                       className="ml-3 mt-2 text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
                     >
                       Copy ticket id
                     </button>
+                    {getConnectWiseTicketUrl(ticket) ? (
+                      <a
+                        href={getConnectWiseTicketUrl(ticket) || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-3 mt-2 inline-block text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
+                      >
+                        Open in ConnectWise
+                      </a>
+                    ) : null}
                   </div>
                 ))}
                 {selectedTicket ? (
@@ -483,24 +1082,66 @@ export function ItOpsScreen() {
                       <div>Owner: {selectedTicket.owner || 'unknown'}</div>
                       <div>Board: {selectedTicket.board || 'unknown'}</div>
                       <div>Status: {selectedTicket.status || 'unknown'}</div>
-                      <div>Priority: {selectedTicket.priority || 'unknown'}</div>
-                      <div>Entered: {selectedTicket.dateEntered || 'unknown'}</div>
-                      <div>Required: {selectedTicket.requiredDate || 'not set'}</div>
+                      <div>
+                        Priority: {selectedTicket.priority || 'unknown'}
+                      </div>
+                      <div>
+                        Entered: {selectedTicket.dateEntered || 'unknown'}
+                      </div>
+                      <div>
+                        Required: {selectedTicket.requiredDate || 'not set'}
+                      </div>
+                      <div>SLA: {getTicketSlaLabel(selectedTicket)}</div>
+                      <div>
+                        Boundary: {getTicketApprovalBoundary(selectedTicket)}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void copySelectedTicket('client')}
+                        className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                      >
+                        Copy client update
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void copySelectedTicket('internal')}
+                        className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                      >
+                        Copy internal brief
+                      </button>
+                      {getConnectWiseTicketUrl(selectedTicket) ? (
+                        <a
+                          href={
+                            getConnectWiseTicketUrl(selectedTicket) || undefined
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                        >
+                          Open native PSA ticket
+                        </a>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}
                 {visibleTickets.length === 0 ? (
-                  <div className="text-sm text-primary-500 dark:text-neutral-400">
-                    <div className="font-medium text-primary-700 dark:text-neutral-200">No recent open tickets available.</div>
-                    <div className="mt-1">Refresh ConnectWise to confirm this is a healthy empty state.</div>
-                    <button
-                      type="button"
-                      onClick={() => void load()}
-                      className="mt-3 rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    >
-                      Refresh tickets
-                    </button>
-                  </div>
+                  <SetupEmptyState
+                    title="No recent open tickets available."
+                    description="ConnectWise returned no actionable tickets for this view."
+                    nextAction="Refresh the pull; if tickets should appear, verify ConnectWise credentials and board filters before trusting the empty queue."
+                    detail=".config/hermes/tokens/connectwise_config.json"
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => void load()}
+                        className="rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                      >
+                        Refresh tickets
+                      </button>
+                    }
+                  />
                 ) : null}
               </div>
             </div>
@@ -509,14 +1150,23 @@ export function ItOpsScreen() {
                 Team performance
               </div>
               <div className="mt-3 grid gap-2">
-                {(data?.analytics?.teamPerformance || []).slice(0, 6).map((member) => (
-                  <div key={member.name} className="rounded-lg border border-primary-200 bg-primary-50/70 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950">
-                    <div className="font-medium text-primary-900 dark:text-neutral-100">{member.name}</div>
-                    <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                      {member.ticketsAssigned} assigned · {member.ticketsResolved} resolved · avg {member.avgResolutionHours}h
+                {(data?.analytics?.teamPerformance || [])
+                  .slice(0, 6)
+                  .map((member) => (
+                    <div
+                      key={member.name}
+                      className="rounded-lg border border-primary-200 bg-primary-50/70 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950"
+                    >
+                      <div className="font-medium text-primary-900 dark:text-neutral-100">
+                        {member.name}
+                      </div>
+                      <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
+                        {member.ticketsAssigned} assigned ·{' '}
+                        {member.ticketsResolved} resolved · avg{' '}
+                        {member.avgResolutionHours}h
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
@@ -527,19 +1177,26 @@ export function ItOpsScreen() {
             Recurring issues
           </h2>
           <div className="mt-3 grid gap-2">
-            {(data?.overview?.recurringIssues || []).slice(0, 8).map((issue) => (
-              <div key={issue.label} className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium text-primary-900 dark:text-neutral-100">{issue.label}</div>
-                  <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                    {issue.count} mentions
-                  </span>
+            {(data?.overview?.recurringIssues || [])
+              .slice(0, 8)
+              .map((issue) => (
+                <div
+                  key={issue.label}
+                  className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-medium text-primary-900 dark:text-neutral-100">
+                      {issue.label}
+                    </div>
+                    <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
+                      {issue.count} mentions
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
+                    {issue.firstSeen || '—'} to {issue.lastSeen || '—'}
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                  {issue.firstSeen || '—'} to {issue.lastSeen || '—'}
-                </div>
-              </div>
-            ))}
+              ))}
             {(data?.overview?.recurringIssues || []).length === 0 ? (
               <div className="text-sm text-primary-500 dark:text-neutral-400">
                 No recurring issue clusters found.
@@ -556,12 +1213,21 @@ export function ItOpsScreen() {
           </h2>
           <div className="mt-3 grid gap-2">
             {directReportActions.slice(0, 12).map((item) => (
-              <div key={item.id} className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <div
+                key={item.id}
+                className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-900"
+              >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium text-primary-900 dark:text-neutral-100">{item.assignee}</div>
-                  <span className="text-xs text-primary-500 dark:text-neutral-400">{item.meetingDate}</span>
+                  <div className="font-medium text-primary-900 dark:text-neutral-100">
+                    {item.assignee}
+                  </div>
+                  <span className="text-xs text-primary-500 dark:text-neutral-400">
+                    {item.meetingDate}
+                  </span>
                 </div>
-                <div className="mt-1 text-sm text-primary-700 dark:text-neutral-300">{item.task}</div>
+                <div className="mt-1 text-sm text-primary-700 dark:text-neutral-300">
+                  {item.task}
+                </div>
               </div>
             ))}
             {directReportActions.length === 0 ? (
@@ -577,23 +1243,32 @@ export function ItOpsScreen() {
             Recent standups
           </h2>
           <div className="mt-3 grid gap-2">
-            {(data?.overview?.recentMeetings || []).slice(0, 8).map((meeting) => (
-              <div key={meeting.id} className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-                <div className="font-medium text-primary-900 dark:text-neutral-100">{meeting.title}</div>
-                <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">{meeting.date}</div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                  <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                    {(meeting.actionItems || []).length} action item(s)
-                  </span>
-                  <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                    {(meeting.issues || []).length} issue(s)
-                  </span>
-                  <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                    {(meeting.absentDirectReports || []).length} absent
-                  </span>
+            {(data?.overview?.recentMeetings || [])
+              .slice(0, 8)
+              .map((meeting) => (
+                <div
+                  key={meeting.id}
+                  className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                  <div className="font-medium text-primary-900 dark:text-neutral-100">
+                    {meeting.title}
+                  </div>
+                  <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
+                    {meeting.date}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                    <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
+                      {(meeting.actionItems || []).length} action item(s)
+                    </span>
+                    <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
+                      {(meeting.issues || []).length} issue(s)
+                    </span>
+                    <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
+                      {(meeting.absentDirectReports || []).length} absent
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
             {(data?.overview?.recentMeetings || []).length === 0 ? (
               <div className="text-sm text-primary-500 dark:text-neutral-400">
                 No recent standup records available.

@@ -1,8 +1,10 @@
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
+  Apple01Icon,
   BrainIcon,
   Building01Icon,
+  Calendar01Icon,
   Cancel01Icon,
   Castle02Icon,
   Chat01Icon,
@@ -11,27 +13,28 @@ import {
   DashboardSquare01Icon,
   Dumbbell01Icon,
   File01Icon,
+  InjectionIcon,
   McpServerIcon,
   Menu01Icon,
   PuzzleIcon,
   Rocket01Icon,
   Search01Icon,
   Settings01Icon,
+  Target02Icon,
+  Task01Icon,
   UserGroupIcon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
 import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { hapticTap } from '@/lib/haptics'
+import { withBasePath } from '@/lib/base-path'
 import { getTheme, getThemeVariant, isDarkTheme, setTheme } from '@/lib/theme'
 import {
   selectChatProfileDisplayName,
   useChatSettingsStore,
 } from '@/hooks/use-chat-settings'
 
-<<<<<<< HEAD
-export const MOBILE_HAMBURGER_NAV_ITEMS = [
-=======
 const HERMESWORLD_ENABLED =
   (import.meta as any).env?.VITE_HERMESWORLD_ENABLED !== '0'
 
@@ -44,14 +47,87 @@ type MobileHamburgerNavItem = {
   external?: boolean
 }
 
+type MobileNavGroupLabel =
+  | 'Pinned'
+  | 'Daily'
+  | 'Agent Ops'
+  | 'Knowledge'
+  | 'Systems'
+  | 'Settings'
+
+export const MOBILE_PINNED_NAV_IDS = [
+  'dashboard',
+  'phone',
+  'chat',
+  'lily',
+  'tasks',
+] as const
+
+export const MOBILE_NAV_GROUP_ORDER: Array<MobileNavGroupLabel> = [
+  'Pinned',
+  'Daily',
+  'Agent Ops',
+  'Knowledge',
+  'Systems',
+  'Settings',
+]
+
+const MOBILE_NAV_GROUP_BY_ID: Record<string, MobileNavGroupLabel> = {
+  dashboard: 'Daily',
+  phone: 'Daily',
+  chat: 'Daily',
+  lily: 'Daily',
+  tasks: 'Daily',
+  meetings: 'Daily',
+  '75-tracker': 'Daily',
+  'pto-tracker': 'Daily',
+  wegovy: 'Daily',
+  'zyn-tracker': 'Daily',
+  'food-log': 'Daily',
+  barry: 'Daily',
+  conductor: 'Agent Ops',
+  operations: 'Agent Ops',
+  'ops-intelligence': 'Agent Ops',
+  swarm: 'Agent Ops',
+  jobs: 'Agent Ops',
+  'it-ops': 'Agent Ops',
+  presence: 'Agent Ops',
+  files: 'Knowledge',
+  memory: 'Knowledge',
+  skills: 'Knowledge',
+  mcp: 'Knowledge',
+  profiles: 'Knowledge',
+  terminal: 'Systems',
+  playground: 'Systems',
+  settings: 'Settings',
+}
+
+export function groupMobileNavItems(items: Array<MobileHamburgerNavItem>) {
+  const pinned = new Set<string>(MOBILE_PINNED_NAV_IDS)
+  return MOBILE_NAV_GROUP_ORDER.map((label) => ({
+    label,
+    items: items.filter((item) =>
+      label === 'Pinned'
+        ? pinned.has(item.id)
+        : !pinned.has(item.id) && MOBILE_NAV_GROUP_BY_ID[item.id] === label,
+    ),
+  })).filter((group) => group.items.length > 0)
+}
+
 export const MOBILE_HAMBURGER_NAV_ITEMS: Array<MobileHamburgerNavItem> = [
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
   {
     id: 'chat',
     label: 'Chat',
     icon: Chat01Icon,
     to: '/chat/main',
     match: (p: string) => p.startsWith('/chat') || p === '/new' || p === '/',
+  },
+  {
+    id: 'lily',
+    label: 'LILY',
+    icon: Chat01Icon,
+    to: '/lily',
+    match: (p: string) => p.startsWith('/lily'),
   },
   {
     id: 'dashboard',
@@ -61,12 +137,23 @@ export const MOBILE_HAMBURGER_NAV_ITEMS: Array<MobileHamburgerNavItem> = [
     match: (p: string) => p.startsWith('/dashboard'),
   },
   {
-    id: 'playground',
-    label: 'HermesWorld',
-    icon: Castle02Icon,
-    to: '/playground',
-    match: (p: string) => p.startsWith('/playground'),
+    id: 'phone',
+    label: 'Phone Cockpit',
+    icon: DashboardSquare01Icon,
+    to: '/phone',
+    match: (p: string) => p.startsWith('/phone'),
   },
+  ...(HERMESWORLD_ENABLED
+    ? [
+        {
+          id: 'playground',
+          label: 'HermesWorld',
+          icon: Castle02Icon,
+          to: '/playground',
+          match: (p: string) => p.startsWith('/playground'),
+        },
+      ]
+    : []),
   {
     id: 'files',
     label: 'Files',
@@ -82,16 +169,6 @@ export const MOBILE_HAMBURGER_NAV_ITEMS: Array<MobileHamburgerNavItem> = [
     match: (p: string) => p.startsWith('/terminal'),
   },
   {
-<<<<<<< HEAD
-    id: 'life-os',
-    label: 'Life OS',
-    icon: Castle02Icon,
-    to: '/life-os',
-    match: (p: string) => p.startsWith('/life-os'),
-  },
-  {
-=======
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     id: 'jobs',
     label: 'Jobs',
     icon: Clock01Icon,
@@ -99,11 +176,46 @@ export const MOBILE_HAMBURGER_NAV_ITEMS: Array<MobileHamburgerNavItem> = [
     match: (p: string) => p.startsWith('/jobs'),
   },
   {
+    id: 'tasks',
+    label: 'Tasks',
+    icon: Task01Icon,
+    to: '/tasks',
+    match: (p: string) => p.startsWith('/tasks'),
+  },
+  {
     id: '75-tracker',
     label: '75 Hard/Soft',
     icon: Dumbbell01Icon,
     to: '/75-tracker',
     match: (p: string) => p.startsWith('/75-tracker'),
+  },
+  {
+    id: 'pto-tracker',
+    label: 'PTO Tracker',
+    icon: Calendar01Icon,
+    to: '/pto-tracker',
+    match: (p: string) => p.startsWith('/pto-tracker'),
+  },
+  {
+    id: 'wegovy',
+    label: 'Wegovy Shots',
+    icon: InjectionIcon,
+    to: '/wegovy',
+    match: (p: string) => p.startsWith('/wegovy'),
+  },
+  {
+    id: 'zyn-tracker',
+    label: 'Zyn Tracker',
+    icon: Target02Icon,
+    to: '/zyn-tracker',
+    match: (p: string) => p.startsWith('/zyn-tracker'),
+  },
+  {
+    id: 'food-log',
+    label: 'Food Log',
+    icon: Apple01Icon,
+    to: '/food-log',
+    match: (p: string) => p.startsWith('/food-log'),
   },
   {
     id: 'conductor',
@@ -118,6 +230,13 @@ export const MOBILE_HAMBURGER_NAV_ITEMS: Array<MobileHamburgerNavItem> = [
     icon: UserMultipleIcon,
     to: '/operations',
     match: (p: string) => p.startsWith('/operations'),
+  },
+  {
+    id: 'ops-intelligence',
+    label: 'Ops Intel',
+    icon: DashboardSquare01Icon,
+    to: '/ops-intelligence',
+    match: (p: string) => p.startsWith('/ops-intelligence'),
   },
   {
     id: 'swarm',
@@ -244,19 +363,19 @@ export function MobileHamburgerMenu() {
       [item.id, item.label, item.to].join(' ').toLowerCase().includes(q),
     )
   }, [navQuery])
+  const groupedNavItems = useMemo(
+    () => groupMobileNavItems(filteredNavItems),
+    [filteredNavItems],
+  )
 
-  function handleNav(to: string) {
+  function handleNav(to: string, external?: boolean) {
     hapticTap()
-<<<<<<< HEAD
-    void navigate({ to })
-=======
     if (external) {
       window.location.assign(withBasePath(to))
     } else {
       void navigate({ to })
     }
     setNavQuery('')
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
     setOpen(false)
   }
 
@@ -361,41 +480,53 @@ export function MobileHamburgerMenu() {
 
         {/* Nav items */}
         <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pt-3">
-          {filteredNavItems.map((item) => {
-            const isActive = item.match(pathname)
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleNav(item.to)}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-3 rounded-xl text-left w-full',
-                  'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150 active:scale-[0.98]',
-                )}
-                style={
-                  isActive
-                    ? {
-                        background:
-                          'var(--theme-accent-subtle, color-mix(in srgb, var(--theme-accent, #6366f1) 12%, transparent))',
-                        color:
-                          'var(--theme-accent, var(--color-accent, #6366f1))',
-                      }
-                    : {
-                        color:
-                          'var(--theme-muted, var(--color-ink-muted, #555))',
-                      }
-                }
+          {groupedNavItems.map((group) => (
+            <div key={group.label} className="space-y-1">
+              <div
+                className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                style={{ color: 'var(--color-muted, #888)' }}
               >
-                <HugeiconsIcon
-                  icon={item.icon}
-                  size={20}
-                  strokeWidth={isActive ? 2 : 1.6}
-                />
-                <span className="text-[15px] font-medium">{item.label}</span>
-              </button>
-            )
-          })}
-          {filteredNavItems.length === 0 ? (
+                {group.label}
+              </div>
+              {group.items.map((item) => {
+                const isActive = item.match(pathname)
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleNav(item.to, item.external)}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-3 rounded-xl text-left w-full',
+                      'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-150 active:scale-[0.98]',
+                    )}
+                    style={
+                      isActive
+                        ? {
+                            background:
+                              'var(--theme-accent-subtle, color-mix(in srgb, var(--theme-accent, #6366f1) 12%, transparent))',
+                            color:
+                              'var(--theme-accent, var(--color-accent, #6366f1))',
+                          }
+                        : {
+                            color:
+                              'var(--theme-muted, var(--color-ink-muted, #555))',
+                          }
+                    }
+                  >
+                    <HugeiconsIcon
+                      icon={item.icon}
+                      size={20}
+                      strokeWidth={isActive ? 2 : 1.6}
+                    />
+                    <span className="text-[15px] font-medium">
+                      {item.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+          {groupedNavItems.length === 0 ? (
             <div
               className="rounded-xl border px-3 py-4 text-center text-[13px]"
               style={{

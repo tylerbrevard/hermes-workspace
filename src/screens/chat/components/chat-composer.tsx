@@ -36,8 +36,8 @@ import type {
 } from '@/components/slash-command-menu'
 import {
   DEFAULT_SLASH_COMMANDS,
-  mergeSlashCommands,
   SlashCommandMenu,
+  mergeSlashCommands,
 } from '@/components/slash-command-menu'
 import {
   PromptInput,

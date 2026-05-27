@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-import { createFileRoute, redirect } from '@tanstack/react-router'
-=======
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
@@ -27,9 +24,24 @@ type LilyConfig = {
 type LilyMessage = {
   role: 'user' | 'assistant'
   content: string
+  localOnly?: boolean
 }
 
 type LilyPersonality = 'concise' | 'operator' | 'warm'
+
+type LilyTimelineEvent = {
+  id: string
+  kind: 'transcript' | 'decision' | 'task' | 'memory'
+  label: string
+  detail: string
+  createdAt: string
+}
+
+type LilyConversationPreset = {
+  id: string
+  label: string
+  prompt: string
+}
 
 const LILY_MODEL_OPTIONS = [
   { id: '', label: 'Hermes default' },
@@ -59,6 +71,248 @@ const LILY_PERSONALITY_OPTIONS: Array<{
     detail: 'Softer tone while staying brief.',
   },
 ]
+
+export const LILY_CONVERSATION_PRESETS: Array<LilyConversationPreset> = [
+  {
+    id: 'daily-brief',
+    label: 'Daily brief',
+    prompt:
+      'Give me a daily brief: meetings, urgent tasks, waiting replies, and the one thing I should do next.',
+  },
+  {
+    id: 'meeting-prep',
+    label: 'Meeting prep',
+    prompt:
+      'Prep me for the next meeting. Include context, likely decisions, open action items, and risks.',
+  },
+  {
+    id: 'task-triage',
+    label: 'Task triage',
+    prompt:
+      'Triage my tasks into do now, delegate, schedule, and ignore. Call out anything waiting on me.',
+  },
+  {
+    id: 'system-check',
+    label: 'System check',
+    prompt:
+      'Check Hermes workspace health, voice loop readiness, source freshness, and what changed recently.',
+  },
+]
+
+export function buildLilyDiagnostics(input: {
+  micPermission: string
+  browserVoiceLabel: string
+  liveKitConnected: boolean
+  tokenStatus: string
+  workerStatus?: string
+  status: string
+  error?: string
+}) {
+  return [
+    'LILY diagnostics',
+    `[browser] mic=${input.micPermission}; speech=${input.browserVoiceLabel}`,
+    `[worker] status=${input.workerStatus || 'checking'}`,
+    `[network] livekit=${input.liveKitConnected ? 'connected' : 'not connected'}; token=${input.tokenStatus}`,
+    `[config] status=${input.status}; error=${input.error || 'none'}`,
+  ].join('\n')
+}
+
+export function getLilyFailureCta(input: {
+  micPermission: string
+  browserSupported: boolean
+  liveKitConnected: boolean
+  workerStatus?: string
+  tokenStatus: string
+}) {
+  if (input.micPermission === 'denied') return 'Grant mic'
+  if (!input.browserSupported) return 'Switch browser'
+  if (input.workerStatus && input.workerStatus !== 'online') {
+    return 'Start worker'
+  }
+  if (/unavailable|refreshing|no livekit token/i.test(input.tokenStatus)) {
+    return 'Refresh token'
+  }
+  if (!input.liveKitConnected) return 'Use typed fallback'
+  return 'Voice loop ready'
+}
+
+export function getLilyVoiceReadiness(input: {
+  configured: boolean
+  micPermission: string
+  browserSupported: boolean
+  workerStatus?: string
+  tokenStatus: string
+  liveKitConnected: boolean
+}) {
+  if (input.liveKitConnected) {
+    return {
+      state: 'ready' as const,
+      label: 'Voice ready',
+      blocker: 'none',
+      canStart: true,
+    }
+  }
+  if (input.micPermission === 'denied') {
+    return {
+      state: 'unavailable' as const,
+      label: 'Voice unavailable',
+      blocker: 'Microphone permission is blocked',
+      canStart: false,
+    }
+  }
+  if (input.workerStatus && input.workerStatus !== 'online') {
+    return {
+      state: 'degraded' as const,
+      label: 'Voice degraded',
+      blocker: `Voice worker is ${input.workerStatus}`,
+      canStart: false,
+    }
+  }
+  if (!input.configured && !input.browserSupported) {
+    return {
+      state: 'unavailable' as const,
+      label: 'Voice unavailable',
+      blocker: 'LiveKit is not configured and browser speech is unavailable',
+      canStart: false,
+    }
+  }
+  if (
+    !input.configured ||
+    /no livekit token|unavailable/i.test(input.tokenStatus)
+  ) {
+    return {
+      state: 'degraded' as const,
+      label: 'Typed fallback active',
+      blocker: input.configured
+        ? 'LiveKit token is not active yet'
+        : 'LiveKit keys are missing',
+      canStart: input.browserSupported,
+    }
+  }
+  if (!input.browserSupported) {
+    return {
+      state: 'degraded' as const,
+      label: 'Voice transport only',
+      blocker: 'Browser Listen is unavailable',
+      canStart: input.configured,
+    }
+  }
+  return {
+    state: 'ready' as const,
+    label: 'Voice ready',
+    blocker: 'none',
+    canStart: true,
+  }
+}
+
+export function getLilySetupChecklist(input: {
+  configured: boolean
+  micPermission: string
+  browserSupported: boolean
+  workerStatus?: string
+  liveKitConnected: boolean
+}) {
+  return [
+    {
+      id: 'microphone',
+      label: 'Microphone permission',
+      status:
+        input.micPermission === 'granted'
+          ? 'ready'
+          : input.micPermission === 'denied'
+            ? 'blocked'
+            : 'needs action',
+      action:
+        input.micPermission === 'denied'
+          ? 'Allow microphone in browser site settings, then retry.'
+          : 'Approve microphone when prompted.',
+    },
+    {
+      id: 'browser',
+      label: 'Browser speech',
+      status: input.browserSupported ? 'ready' : 'degraded',
+      action: input.browserSupported
+        ? 'Browser Listen is available.'
+        : 'Use Chrome for wake-word listening, or continue with typed fallback.',
+    },
+    {
+      id: 'worker',
+      label: 'LILY voice worker',
+      status:
+        !input.workerStatus || input.workerStatus === 'online'
+          ? 'ready'
+          : 'blocked',
+      action:
+        !input.workerStatus || input.workerStatus === 'online'
+          ? 'Worker is reachable.'
+          : 'Start the worker before relying on full voice mode.',
+    },
+    {
+      id: 'transport',
+      label: 'LiveKit transport',
+      status: input.liveKitConnected
+        ? 'ready'
+        : input.configured
+          ? 'needs action'
+          : 'degraded',
+      action: input.configured
+        ? 'Start LILY to issue a fresh token.'
+        : 'Configure LiveKit keys in Settings.',
+    },
+  ]
+}
+
+export function getMicrophonePermissionGuidance(input: {
+  micPermission: string
+  userAgent: string
+}) {
+  if (input.micPermission !== 'denied') {
+    return 'Approve the microphone prompt when it appears. If no prompt appears, open browser site settings for this Workspace URL.'
+  }
+  if (/chrome|crios|chromium/i.test(input.userAgent)) {
+    return 'Chrome: click the site settings icon in the address bar, set Microphone to Allow, then retry LILY.'
+  }
+  if (/safari/i.test(input.userAgent)) {
+    return 'Safari: open Settings for This Website, allow Microphone, then retry LILY.'
+  }
+  return 'Open this browser site settings, allow Microphone for Hermes Workspace, then retry LILY.'
+}
+
+export function normalizeLiveKitError(error?: string) {
+  const value = error || ''
+  if (/expired|token/i.test(value)) return 'LiveKit token expired or invalid'
+  if (/network|websocket|timeout|failed to fetch/i.test(value)) {
+    return 'LiveKit network connection failed'
+  }
+  if (/permission|microphone|audio/i.test(value)) {
+    return 'Microphone access failed'
+  }
+  return value || 'LiveKit transport unavailable'
+}
+
+export function buildLilySessionSummary(
+  messages: Array<LilyMessage>,
+  timeline: Array<LilyTimelineEvent>,
+) {
+  const lastUser = [...messages]
+    .reverse()
+    .find((message) => message.role === 'user')
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((message) => message.role === 'assistant')
+  const recentTimeline = timeline
+    .slice(0, 3)
+    .map((event) => `- ${event.label}: ${event.detail}`)
+  return [
+    '# LILY session summary',
+    '',
+    `Last user: ${lastUser?.content || 'none'}`,
+    `Last LILY: ${lastAssistant?.content || 'none'}`,
+    '',
+    'Recent events:',
+    recentTimeline.length > 0 ? recentTimeline.join('\n') : '- none',
+  ].join('\n')
+}
 
 type LiveKitModule = {
   Room: new (options?: Record<string, unknown>) => LiveKitRoom
@@ -156,8 +410,8 @@ const HELIX_DUST = buildHelixDust(118)
 const STARTER_MESSAGES: Array<LilyMessage> = [
   {
     role: 'assistant',
-    content:
-      'LILY is online. Start hands-free mode, then say "LILY" followed by what you need.',
+    content: 'I am here. Type or start voice and we can talk back and forth.',
+    localOnly: true,
   },
 ]
 
@@ -251,11 +505,47 @@ export function getLiveKitTokenRefreshDelay(
   return Math.max(0, expires - now - 90_000)
 }
 
-function getBrowserVoiceSupport(): {
+export function getBrowserVoiceSupportForUserAgent({
+  userAgent,
+  hasSpeechRecognition,
+}: {
+  userAgent: string
+  hasSpeechRecognition: boolean
+}): {
   supported: boolean
   label: string
   detail: string
 } {
+  const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent)
+  const isChrome = /chrome|crios|chromium/i.test(userAgent)
+  if (hasSpeechRecognition && isChrome) {
+    return {
+      supported: true,
+      label: 'Chrome speech recognition ready',
+      detail:
+        'Browser Listen can stream interim transcripts after mic approval.',
+    }
+  }
+  if (hasSpeechRecognition && isSafari) {
+    return {
+      supported: true,
+      label: 'Safari speech recognition available',
+      detail:
+        'Safari may stop recognition more aggressively; use typed chat if it drops.',
+    }
+  }
+  return {
+    supported: hasSpeechRecognition,
+    label: hasSpeechRecognition
+      ? 'Speech recognition ready'
+      : 'Speech recognition missing',
+    detail: hasSpeechRecognition
+      ? 'Browser Listen is available.'
+      : 'Use Chrome for Browser Listen, or use typed chat and LiveKit transport.',
+  }
+}
+
+function getBrowserVoiceSupport() {
   if (typeof window === 'undefined') {
     return {
       supported: false,
@@ -263,41 +553,24 @@ function getBrowserVoiceSupport(): {
       detail: 'Speech recognition is only available in the browser.',
     }
   }
-  const ua = navigator.userAgent
-  const supported = Boolean(getSpeechRecognition())
-  const isSafari = /^((?!chrome|android).)*safari/i.test(ua)
-  const isChrome = /chrome|crios|chromium/i.test(ua)
-  if (supported && isChrome) {
-    return {
-      supported,
-      label: 'Chrome speech recognition ready',
-      detail:
-        'Browser Listen can stream interim transcripts after mic approval.',
-    }
-  }
-  if (supported && isSafari) {
-    return {
-      supported,
-      label: 'Safari speech recognition available',
-      detail:
-        'Safari may stop recognition more aggressively; use typed chat if it drops.',
-    }
-  }
-  return {
-    supported,
-    label: supported
-      ? 'Speech recognition ready'
-      : 'Speech recognition missing',
-    detail: supported
-      ? 'Browser Listen is available.'
-      : 'Use Chrome for Browser Listen, or use typed chat and LiveKit transport.',
-  }
+  return getBrowserVoiceSupportForUserAgent({
+    userAgent: navigator.userAgent,
+    hasSpeechRecognition: Boolean(getSpeechRecognition()),
+  })
 }
 
 function LilyPage() {
   const [config, setConfig] = useState<LilyConfig | null>(null)
   const [messages, setMessages] = useState<Array<LilyMessage>>(STARTER_MESSAGES)
   const [status, setStatus] = useState('Initializing')
+  const [typedFallback, setTypedFallback] = useState('')
+  const [voiceTestStage, setVoiceTestStage] = useState('Not tested')
+  const [lastHeardAt, setLastHeardAt] = useState<string | null>(null)
+  const [lastSpokeAt, setLastSpokeAt] = useState<string | null>(null)
+  const [retentionMode, setRetentionMode] = useState<
+    'session' | 'workspace-memory'
+  >('session')
+  const [timeline, setTimeline] = useState<Array<LilyTimelineEvent>>([])
   const [voiceMode, setVoiceMode] = useState<
     'idle' | 'armed' | 'listening' | 'thinking' | 'speaking' | 'connected'
   >('idle')
@@ -327,6 +600,7 @@ function LilyPage() {
   const [isSending, setIsSending] = useState(false)
   const [lastFailedMessage, setLastFailedMessage] = useState('')
   const audioRootRef = useRef<HTMLDivElement | null>(null)
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null)
   const roomRef = useRef<LiveKitRoom | null>(null)
   const currentLiveKitRoomNameRef = useRef<string | null>(null)
   const reconnectingLiveKitRef = useRef(false)
@@ -347,6 +621,43 @@ function LilyPage() {
   const voiceWorker = config?.voiceWorker
   const visualLevel = Math.max(micLevel, speechLevel)
   const voiceActive = handsFreeEnabled || liveKitConnected
+  const awaitingReply =
+    isSending && messages[messages.length - 1]?.role === 'user'
+  const failureCta = getLilyFailureCta({
+    micPermission,
+    browserSupported: browserVoice.supported,
+    liveKitConnected,
+    workerStatus: voiceWorker?.status,
+    tokenStatus,
+  })
+  const voiceReadiness = getLilyVoiceReadiness({
+    configured: Boolean(config?.configured),
+    micPermission,
+    browserSupported: browserVoice.supported,
+    workerStatus: voiceWorker?.status,
+    tokenStatus,
+    liveKitConnected,
+  })
+  const setupChecklist = getLilySetupChecklist({
+    configured: Boolean(config?.configured),
+    micPermission,
+    browserSupported: browserVoice.supported,
+    workerStatus: voiceWorker?.status,
+    liveKitConnected,
+  })
+  const primaryBlocker =
+    setupChecklist.find((item) => item.status === 'blocked') ||
+    setupChecklist.find((item) => item.status === 'needs action') ||
+    setupChecklist.find((item) => item.status === 'degraded')
+
+  function addTimeline(event: Omit<LilyTimelineEvent, 'id' | 'createdAt'>) {
+    const next: LilyTimelineEvent = {
+      ...event,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      createdAt: new Date().toISOString(),
+    }
+    setTimeline((current) => [next, ...current].slice(0, 8))
+  }
 
   useEffect(() => {
     handsFreeRef.current = handsFreeEnabled
@@ -359,6 +670,13 @@ function LilyPage() {
   useEffect(() => {
     isSendingRef.current = isSending
   }, [isSending])
+
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({
+      block: 'end',
+      behavior: 'smooth',
+    })
+  }, [messages, isSending])
 
   useEffect(() => {
     if (!config) return
@@ -779,9 +1097,7 @@ function LilyPage() {
       setVoiceMode('idle')
       setStatus('LiveKit transport unavailable')
       setTokenStatus('LiveKit token unavailable')
-      setError(
-        err instanceof Error ? err.message : 'Unable to connect to LiveKit',
-      )
+      setError(normalizeLiveKitError(err instanceof Error ? err.message : ''))
       return false
     } finally {
       reconnectingLiveKitRef.current = false
@@ -858,7 +1174,7 @@ function LilyPage() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          messages: nextMessages,
+          messages: nextMessages.filter((message) => !message.localOnly),
           model: selectedModel,
           personality,
           useWorkspaceMemory,
@@ -875,6 +1191,22 @@ function LilyPage() {
       }
       const reply = payload.reply || 'I am here.'
       setMessages([...nextMessages, { role: 'assistant', content: reply }])
+      addTimeline({
+        kind: 'transcript',
+        label: 'Typed or voice prompt',
+        detail: content,
+      })
+      addTimeline({
+        kind: useWorkspaceMemory ? 'memory' : 'decision',
+        label:
+          retentionMode === 'workspace-memory'
+            ? 'Workspace memory write pending'
+            : 'Session transcript retained',
+        detail:
+          retentionMode === 'workspace-memory'
+            ? 'Persist transcript, decisions, accepted suggestions to Hermes/PAI memory surface.'
+            : 'Transcript retained only in this browser session.',
+      })
       setLastFailedMessage('')
       setStatus(
         options?.resumeHandsFree
@@ -884,6 +1216,7 @@ function LilyPage() {
             : 'Ready',
       )
       setVoiceMode('speaking')
+      setLastSpokeAt(new Date().toISOString())
       startSpeechPulse(reply)
       await speak(reply)
       stopSpeechPulse()
@@ -928,6 +1261,12 @@ function LilyPage() {
   function handleHandsFreeTranscript(transcript: string) {
     const clean = transcript.trim()
     if (!clean || isSendingRef.current) return
+    setLastHeardAt(new Date().toISOString())
+    addTimeline({
+      kind: 'transcript',
+      label: 'Last heard',
+      detail: clean,
+    })
     setLiveTranscript(clean)
     const wake = extractWakeCommand(clean)
     if (wake.heardWakeWord) {
@@ -1154,6 +1493,45 @@ function LilyPage() {
     )
   }
 
+  async function testVoiceLoop() {
+    setError('')
+    setVoiceTestStage('browser: checking microphone permission')
+    const micReady = await ensureMicrophonePermission()
+    if (!micReady) {
+      setVoiceTestStage('failed at browser mic permission')
+      return
+    }
+    setVoiceTestStage('worker: checking voice worker')
+    if (voiceWorker?.status && voiceWorker.status !== 'online') {
+      setVoiceTestStage(`failed at worker online: ${voiceWorker.status}`)
+      return
+    }
+    setVoiceTestStage('transport: refreshing LiveKit token')
+    if (config?.configured) {
+      const connected = await connectLiveKit({ reconnect: liveKitConnected })
+      if (!connected) {
+        setVoiceTestStage('failed at LiveKit transport/token refresh')
+        return
+      }
+    }
+    setVoiceTestStage('speaker: testing output')
+    await testSpeaker()
+    setVoiceTestStage('passed: browser, worker, LiveKit, and speaker checked')
+  }
+
+  async function sendTypedFallback() {
+    const value = typedFallback.trim()
+    if (!value) return
+    setTypedFallback('')
+    await sendMessage(value)
+  }
+
+  async function copySessionSummary() {
+    await navigator.clipboard
+      .writeText(buildLilySessionSummary(messages, timeline))
+      .catch(() => {})
+  }
+
   return (
     <main className="min-h-full overflow-hidden bg-[#070910] text-slate-100">
       <div className="relative min-h-[calc(100vh-1px)]">
@@ -1161,7 +1539,7 @@ function LilyPage() {
         <div className="absolute inset-0 lily-starfield" />
 
         <section className="relative flex min-h-[calc(100vh-1px)] items-center justify-center px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex min-h-[min(760px,calc(100vh-42px))] w-full max-w-3xl flex-col items-center justify-center p-4 text-center sm:p-8">
+          <div className="flex min-h-[min(700px,calc(100vh-32px))] w-full max-w-3xl flex-col items-center justify-center p-3 text-center sm:p-5">
             <div
               className={`lily-orb lily-orb-${voiceMode}`}
               style={
@@ -1210,25 +1588,50 @@ function LilyPage() {
                 ))}
               </span>
             </div>
-            <div className="mt-7 flex w-full flex-col items-center">
+            <div className="mt-4 flex w-full flex-col items-center">
               <h1 className="text-4xl font-semibold text-white sm:text-5xl">
                 LILY
               </h1>
+              <div
+                className={`mt-3 rounded-full border px-4 py-1 text-xs font-semibold ${
+                  voiceReadiness.state === 'ready'
+                    ? 'border-emerald-300/40 bg-emerald-300/10 text-emerald-100'
+                    : voiceReadiness.state === 'degraded'
+                      ? 'border-amber-300/40 bg-amber-300/10 text-amber-100'
+                      : 'border-rose-300/40 bg-rose-300/10 text-rose-100'
+                }`}
+              >
+                {voiceReadiness.label}
+              </div>
               <button
                 type="button"
+                data-testid="lily-mic-control"
+                aria-label={
+                  voiceActive
+                    ? 'Stop LILY voice session'
+                    : 'Approve microphone and start LILY'
+                }
                 onClick={() =>
                   voiceActive ? stopLilyVoice() : void startLilyVoice()
                 }
-                className={`mt-6 min-h-14 rounded-full px-7 text-sm font-semibold transition sm:min-w-56 ${
+                disabled={!voiceActive && !voiceReadiness.canStart}
+                className={`mt-4 min-h-12 rounded-full px-6 text-sm font-semibold transition sm:min-w-52 ${
                   voiceActive
                     ? 'border border-rose-300/40 bg-rose-300/10 text-rose-100 hover:bg-rose-300/20'
-                    : 'border border-emerald-200/60 bg-emerald-300 text-slate-950 shadow-[0_0_42px_rgba(110,231,183,0.28)] hover:bg-emerald-200'
+                    : voiceReadiness.canStart
+                      ? 'border border-emerald-200/60 bg-emerald-300 text-slate-950 shadow-[0_0_42px_rgba(110,231,183,0.28)] hover:bg-emerald-200'
+                      : 'cursor-not-allowed border border-white/10 bg-white/10 text-slate-400'
                 }`}
               >
-                {voiceActive ? 'Stop LILY' : 'Approve mic & Start LILY'}
+                {voiceActive ? 'Stop LILY' : 'Start LILY'}
               </button>
+              {!voiceActive && !voiceReadiness.canStart ? (
+                <div className="mt-2 text-xs text-amber-100">
+                  {voiceReadiness.blocker}
+                </div>
+              ) : null}
 
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-200">
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-200">
                 <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1">
                   {status}
                 </span>
@@ -1239,9 +1642,67 @@ function LilyPage() {
                   Agent {voiceWorker?.status || 'checking'}
                 </span>
                 <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1">
-                  {liveKitConnected ? 'LiveKit connected' : 'LiveKit ready'}
+                  Last spoke:{' '}
+                  {lastSpokeAt ? formatCheckedAt(lastSpokeAt) : 'none'}
+                </span>
+                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1">
+                  Last heard:{' '}
+                  {lastHeardAt ? formatCheckedAt(lastHeardAt) : 'none'}
                 </span>
               </div>
+
+              <section className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-left">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                      Voice setup
+                    </div>
+                    <div className="mt-1 text-sm text-slate-300">
+                      Current blocker: {primaryBlocker?.action || 'none'}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <a
+                      href={withBasePath('/settings?section=providers')}
+                      className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-slate-200"
+                    >
+                      Model settings
+                    </a>
+                    <a
+                      href={withBasePath('/settings?section=voice')}
+                      className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-slate-200"
+                    >
+                      Voice settings
+                    </a>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {setupChecklist.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`rounded-xl border px-3 py-2 ${
+                        item.status === 'ready'
+                          ? 'border-emerald-300/20 bg-emerald-300/10'
+                          : item.status === 'blocked'
+                            ? 'border-rose-300/30 bg-rose-400/10'
+                            : 'border-amber-300/30 bg-amber-300/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-medium text-slate-100">
+                          {item.label}
+                        </div>
+                        <span className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                          {item.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-slate-400">
+                        {item.action}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
 
               {liveTranscript ? (
                 <div className="mt-4 max-w-xl rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-50">
@@ -1252,11 +1713,107 @@ function LilyPage() {
               {error ? (
                 <div className="mt-4 max-w-xl rounded-2xl border border-rose-300/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
                   {error}
+                  <div className="mt-2 text-xs text-rose-100/80">
+                    {getMicrophonePermissionGuidance({
+                      micPermission,
+                      userAgent:
+                        typeof navigator === 'undefined'
+                          ? ''
+                          : navigator.userAgent,
+                    })}
+                  </div>
                 </div>
               ) : null}
 
+              <section
+                className="mt-4 flex w-full flex-1 flex-col rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-left shadow-2xl shadow-cyan-950/20"
+                aria-label="LILY conversation"
+              >
+                <div
+                  className="flex h-[24vh] min-h-40 flex-col gap-3 overflow-y-auto pr-1 sm:h-[28vh]"
+                  aria-live="polite"
+                >
+                  {messages.map((message, index) => (
+                    <div
+                      key={`${message.role}-${index}-${message.content.slice(
+                        0,
+                        24,
+                      )}`}
+                      className={`flex ${
+                        message.role === 'user'
+                          ? 'justify-end'
+                          : 'justify-start'
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${
+                          message.role === 'user'
+                            ? 'rounded-br-md bg-emerald-300 text-slate-950'
+                            : 'rounded-bl-md border border-white/10 bg-white/[0.08] text-slate-100'
+                        }`}
+                      >
+                        {message.content}
+                      </div>
+                    </div>
+                  ))}
+                  {awaitingReply ? (
+                    <div className="flex justify-start">
+                      <div className="rounded-2xl rounded-bl-md border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">
+                        LILY is thinking...
+                      </div>
+                    </div>
+                  ) : null}
+                  <div ref={transcriptEndRef} />
+                </div>
+
+                <form
+                  className="mt-3 flex gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void sendTypedFallback()
+                  }}
+                >
+                  <input
+                    value={typedFallback}
+                    onChange={(event) => setTypedFallback(event.target.value)}
+                    placeholder="Message LILY..."
+                    className="min-h-12 flex-1 rounded-full border border-white/10 bg-black/40 px-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-200/70"
+                    aria-label="Message LILY"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!typedFallback.trim() || isSending}
+                    className="min-h-12 rounded-full bg-emerald-300 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Send
+                  </button>
+                </form>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                  <span>
+                    {liveKitConnected
+                      ? 'Voice transport connected'
+                      : browserVoice.supported
+                        ? 'Browser voice ready'
+                        : 'Typed chat active'}
+                  </span>
+                  <span>
+                    {retentionMode === 'workspace-memory'
+                      ? 'Workspace memory on'
+                      : 'Session memory'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void copySessionSummary()}
+                    className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-slate-200"
+                  >
+                    Copy summary
+                  </button>
+                </div>
+              </section>
+
               <div
-                className="mt-5 flex h-10 items-end justify-center gap-1"
+                className="mt-3 flex h-8 items-end justify-center gap-1"
                 aria-label={`Microphone level ${Math.round(micLevel * 100)} percent`}
               >
                 {Array.from({ length: 14 }).map((_, index) => {
@@ -1283,6 +1840,30 @@ function LilyPage() {
         </section>
       </div>
 
+      <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 sm:hidden">
+        <button
+          type="button"
+          aria-label={
+            voiceActive
+              ? 'Stop LILY voice session'
+              : 'Approve microphone and start LILY'
+          }
+          onClick={() =>
+            voiceActive ? stopLilyVoice() : void startLilyVoice()
+          }
+          disabled={!voiceActive && !voiceReadiness.canStart}
+          className={`min-h-12 rounded-full px-6 text-sm font-semibold shadow-2xl ${
+            voiceActive
+              ? 'border border-rose-300/40 bg-rose-300/90 text-slate-950'
+              : voiceReadiness.canStart
+                ? 'bg-emerald-300 text-slate-950'
+                : 'cursor-not-allowed border border-white/10 bg-slate-800 text-slate-400'
+          }`}
+        >
+          {voiceActive ? 'Stop LILY' : 'Start LILY'}
+        </button>
+      </div>
+
       <style>{`
         .lily-starfield {
           background-image:
@@ -1296,7 +1877,7 @@ function LilyPage() {
 
         .lily-orb {
           position: relative;
-          width: min(62vw, 340px);
+          width: min(48vw, 270px);
           aspect-ratio: 1;
           border-radius: 999px;
           overflow: hidden;
@@ -1533,15 +2114,7 @@ function LilyPage() {
     </main>
   )
 }
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
 
 export const Route = createFileRoute('/lily')({
-  beforeLoad() {
-    throw redirect({
-      to: '/chat/$sessionKey',
-      params: { sessionKey: 'main' },
-      replace: true,
-    })
-  },
-  component: () => null,
+  component: LilyPage,
 })

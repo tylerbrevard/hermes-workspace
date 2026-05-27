@@ -1,92 +1,32 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 
-type Meeting = {
-  id: string
-  title: string
-  type?: string
-  date: string
-  duration?: number
-  reviewed?: boolean
-  content?: string
-  joinUrl?: string | null
-  hasTranscription?: boolean
-  transcriptionSource?: string | null
-  participants?: Array<{ displayName?: string; email?: string } | string>
-  actionItems?: Array<{
-    id: string
-    text: string
-    status?: string
-    assignee?: string
-    dueDate?: string
-    priority?: string
-  }>
-  issues?: Array<{
-    id: string
-    title: string
-    description?: string
-    status?: string
-    priority?: string
-    assignee?: string
-    stagnantDays?: number
-  }>
-  decisions?: Array<{
-    id: string
-    text: string
-    decisionMaker?: string
-    impact?: string
-    date?: string
-  }>
-}
-
-type MeetingsData = {
-  meetings: Meeting[]
-  todayMeetings: Meeting[]
-  selectedMeetingId?: string | null
-  selectedMeeting?: Meeting | null
-  brief?: {
-    meetingId: string | null
-    meetingTitle?: string
-    meetingDate?: string
-    previousMeetings: Array<{
-      id: string
-      title: string
-      date: string
-      duration?: number
-    }>
-    openActionItems: Array<{
-      id: string
-      text: string
-      assignee?: string
-      dueDate?: string
-      status?: string
-      priority?: string
-      createdDate?: string
-      meetingTitle?: string
-      meetingDate?: string
-    }>
-    lastMeetingSummary?: {
-      id: string
-      title: string
-      date: string
-      duration?: number
-      summary?: string | null
-    } | null
-    message?: string
-  } | null
-  heatmapDays?: Array<{
-    date: string
-    dayLabel: string
-    meetingCount: number
-    totalHours: number
-    intensity: 0 | 1 | 2 | 3 | 4
-  }>
-  total?: number
-  graphSource?: string
-  graphWarning?: string
-  dataWarning?: string
-  refreshedAt?: string
-  error?: string
-}
+import {
+  buildMeetingActionTodoItems,
+  buildMeetingBriefMarkdown,
+  buildMeetingExtractionSummary,
+  classifyTylerRole,
+  formatMeetingTitle,
+  getMeetingEmptyState,
+  getMeetingOwnerChips,
+  getMeetingSeverity,
+  getMeetingTrendInterpretation,
+  isMeetingPrepWindow,
+  isUnresolvedStatus,
+  meetingMatchesReviewFilter,
+  meetingMatchesSearch,
+  participantList,
+} from './lib/meeting-workflow'
+import type {
+  Meeting,
+  MeetingReviewFilter,
+  MeetingsData,
+} from './lib/meeting-workflow'
 
 function shellClassName() {
   return 'rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/92'
@@ -140,24 +80,8 @@ function stripTone(state: 'ok' | 'warn' | 'bad') {
 }
 
 function participantLabel(meeting: Meeting) {
-  const names = (meeting.participants || [])
-    .map((participant) =>
-      typeof participant === 'string'
-        ? participant
-        : participant.displayName || participant.email || '',
-    )
-    .filter(Boolean)
+  const names = participantList(meeting)
   return names.slice(0, 4).join(', ')
-}
-
-function participantList(meeting: Meeting) {
-  return (meeting.participants || [])
-    .map((participant) =>
-      typeof participant === 'string'
-        ? participant
-        : participant.displayName || participant.email || '',
-    )
-    .filter(Boolean)
 }
 
 type ActionDraft = {
@@ -188,15 +112,24 @@ export function MeetingsScreen() {
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [reviewFilter, setReviewFilter] = useState<'all' | 'needs-review' | 'reviewed'>('all')
+  const [reviewFilter, setReviewFilter] = useState<MeetingReviewFilter>('all')
+  const [redactBrief, setRedactBrief] = useState(true)
   const [selectedMeetingId, setSelectedMeetingId] = useState<string>('')
   const [newActionItemText, setNewActionItemText] = useState('')
-  const [editingActionItemId, setEditingActionItemId] = useState<string | null>(null)
+  const [editingActionItemId, setEditingActionItemId] = useState<string | null>(
+    null,
+  )
   const [editingIssueId, setEditingIssueId] = useState<string | null>(null)
-  const [editingDecisionId, setEditingDecisionId] = useState<string | null>(null)
-  const [actionDrafts, setActionDrafts] = useState<Record<string, ActionDraft>>({})
+  const [editingDecisionId, setEditingDecisionId] = useState<string | null>(
+    null,
+  )
+  const [actionDrafts, setActionDrafts] = useState<Record<string, ActionDraft>>(
+    {},
+  )
   const [issueDrafts, setIssueDrafts] = useState<Record<string, IssueDraft>>({})
-  const [decisionDrafts, setDecisionDrafts] = useState<Record<string, DecisionDraft>>({})
+  const [decisionDrafts, setDecisionDrafts] = useState<
+    Record<string, DecisionDraft>
+  >({})
   const deferredSearch = useDeferredValue(search)
 
   async function load(forceRefresh = false) {
@@ -219,7 +152,9 @@ export function MeetingsScreen() {
           brief: current?.brief || null,
           selectedMeeting: current?.selectedMeeting || null,
         }))
-        setSelectedMeetingId((current) => current || payload.selectedMeetingId || '')
+        setSelectedMeetingId(
+          (current) => current || payload.selectedMeetingId || '',
+        )
         setError(null)
       })
     } catch (err) {
@@ -260,7 +195,9 @@ export function MeetingsScreen() {
         setError(null)
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load meeting detail')
+      setError(
+        err instanceof Error ? err.message : 'Failed to load meeting detail',
+      )
     } finally {
       setDetailLoading(false)
     }
@@ -272,7 +209,10 @@ export function MeetingsScreen() {
   }, [selectedMeetingId])
 
   const unreviewedIds = useMemo(
-    () => (data?.meetings || []).filter((meeting) => !meeting.reviewed).map((meeting) => meeting.id),
+    () =>
+      (data?.meetings || [])
+        .filter((meeting) => !meeting.reviewed)
+        .map((meeting) => meeting.id),
     [data],
   )
 
@@ -291,14 +231,38 @@ export function MeetingsScreen() {
   const previousMeetings = meetingBrief?.previousMeetings || []
   const openActionItems = meetingBrief?.openActionItems || []
   const nextMeeting = data?.todayMeetings?.[0] || data?.meetings?.[0] || null
+  const selectedOpenActionItems = (selectedMeeting?.actionItems || []).filter(
+    (item) => isUnresolvedStatus(item.status),
+  )
+  const selectedOpenIssues = (selectedMeeting?.issues || []).filter((issue) =>
+    isUnresolvedStatus(issue.status),
+  )
+  const nextNeedsPrep = isMeetingPrepWindow(nextMeeting)
+  const selectedSeverity = selectedMeeting
+    ? getMeetingSeverity(selectedMeeting)
+    : 'attention'
+  const trendInterpretation = getMeetingTrendInterpretation(data?.heatmapDays)
+  const actionTodoItems = buildMeetingActionTodoItems(
+    selectedMeeting,
+    data?.brief?.openActionItems || [],
+  )
+  const unresolvedCommitmentCount =
+    openActionItems.length +
+    selectedOpenActionItems.length +
+    selectedOpenIssues.length
+  const extractionSummary = useMemo(
+    () => buildMeetingExtractionSummary(selectedMeeting),
+    [selectedMeeting],
+  )
   const visibleRecentMeetings = useMemo(
     () =>
       (data?.meetings || []).filter((meeting) => {
-        if (reviewFilter === 'needs-review') return !meeting.reviewed
-        if (reviewFilter === 'reviewed') return Boolean(meeting.reviewed)
-        return true
+        return (
+          meetingMatchesReviewFilter(meeting, reviewFilter) &&
+          meetingMatchesSearch(meeting, deferredSearch)
+        )
       }),
-    [data?.meetings, reviewFilter],
+    [data?.meetings, deferredSearch, reviewFilter],
   )
 
   async function post(body: Record<string, unknown>, reload = true) {
@@ -343,16 +307,15 @@ export function MeetingsScreen() {
   }
 
   async function sendOpenActionItemsToTodo() {
-    const items = (data?.brief?.openActionItems || []).map((item) => ({
-      text: item.text,
-      assignee: item.assignee,
-      dueDate: item.dueDate,
-      priority: item.priority,
-      meetingTitle: item.meetingTitle || meetingBrief?.meetingTitle,
-      sourceType: 'meeting-action-item',
-    }))
+    const items = buildMeetingActionTodoItems(
+      selectedMeeting,
+      data?.brief?.openActionItems || [],
+    )
     if (items.length === 0) return
-    if (!window.confirm(`Send ${items.length} meeting action item(s) to To Do?`)) return
+    if (
+      !window.confirm(`Send ${items.length} meeting action item(s) to To Do?`)
+    )
+      return
     await post({ kind: 'send-action-items-to-todo', items })
   }
 
@@ -366,7 +329,8 @@ export function MeetingsScreen() {
       sourceType: 'meeting-issue',
     }))
     if (items.length === 0) return
-    if (!window.confirm(`Send ${items.length} meeting issue(s) to To Do?`)) return
+    if (!window.confirm(`Send ${items.length} meeting issue(s) to To Do?`))
+      return
     await post({ kind: 'send-issues-to-todo', items })
   }
 
@@ -380,7 +344,8 @@ export function MeetingsScreen() {
       sourceType: 'meeting-decision',
     }))
     if (items.length === 0) return
-    if (!window.confirm(`Send ${items.length} meeting decision(s) to To Do?`)) return
+    if (!window.confirm(`Send ${items.length} meeting decision(s) to To Do?`))
+      return
     await post({ kind: 'send-decisions-to-todo', items })
   }
 
@@ -394,14 +359,32 @@ export function MeetingsScreen() {
   }
 
   async function autoExtractRecent() {
-    if (!window.confirm('Extract action items, issues, and decisions from the five most recent meetings?')) return
+    if (
+      !window.confirm(
+        'Extract action items, issues, and decisions from the five most recent meetings?',
+      )
+    )
+      return
     await post({
       kind: 'auto-extract-recent',
       limit: 5,
     })
   }
 
-  function beginEditActionItem(item: NonNullable<Meeting['actionItems']>[number]) {
+  async function exportMeetingBrief() {
+    const markdown = buildMeetingBriefMarkdown(selectedMeeting, {
+      redactParticipants: redactBrief,
+    })
+    try {
+      await navigator.clipboard.writeText(markdown)
+    } catch {
+      // Clipboard is best-effort; the generated brief is still available in UI.
+    }
+  }
+
+  function beginEditActionItem(
+    item: NonNullable<Meeting['actionItems']>[number],
+  ) {
     setEditingActionItemId(item.id)
     setActionDrafts((current) => ({
       ...current,
@@ -469,7 +452,9 @@ export function MeetingsScreen() {
     setEditingIssueId(null)
   }
 
-  function beginEditDecision(decision: NonNullable<Meeting['decisions']>[number]) {
+  function beginEditDecision(
+    decision: NonNullable<Meeting['decisions']>[number],
+  ) {
     setEditingDecisionId(decision.id)
     setDecisionDrafts((current) => ({
       ...current,
@@ -527,7 +512,8 @@ export function MeetingsScreen() {
               Meetings
             </h1>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              Native Workspace view for meeting health, today’s calendar, and review state.
+              Native Workspace view for meeting health, today’s calendar, and
+              review state.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -536,20 +522,29 @@ export function MeetingsScreen() {
               aria-label="Search meetings"
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}
-              placeholder="Search meetings"
+              placeholder="Search title, attendee, action"
               className="min-w-0 flex-1 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 sm:min-w-56 sm:flex-none"
             />
             <select
               aria-label="Filter meetings by review status"
               value={reviewFilter}
               onChange={(event) =>
-                setReviewFilter(event.currentTarget.value as typeof reviewFilter)
+                setReviewFilter(
+                  event.currentTarget.value as typeof reviewFilter,
+                )
               }
               className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
             >
               <option value="all">All review states</option>
+              <option value="today">Today</option>
+              <option value="this-week">This week</option>
               <option value="needs-review">Needs review</option>
               <option value="reviewed">Reviewed</option>
+              <option value="has-open-actions">Has open actions</option>
+              <option value="no-prep">No prep</option>
+              <option value="no-transcript">No transcript</option>
+              <option value="missing-notes">Missing notes</option>
+              <option value="needs-follow-up">Needs follow-up</option>
             </select>
             <button
               type="button"
@@ -574,7 +569,11 @@ export function MeetingsScreen() {
             <button
               type="button"
               onClick={() => {
-                if (window.confirm(`Mark ${unreviewedIds.length} unreviewed meeting(s) reviewed?`)) {
+                if (
+                  window.confirm(
+                    `Mark ${unreviewedIds.length} unreviewed meeting(s) reviewed?`,
+                  )
+                ) {
                   void post({ kind: 'bulk-review', meetingIds: unreviewedIds })
                 }
               }}
@@ -583,28 +582,91 @@ export function MeetingsScreen() {
             >
               Mark all reviewed
             </button>
+            <button
+              type="button"
+              onClick={() => void exportMeetingBrief()}
+              className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+            >
+              Copy brief
+            </button>
+            <label className="flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200">
+              <input
+                type="checkbox"
+                checked={redactBrief}
+                onChange={(event) => setRedactBrief(event.currentTarget.checked)}
+                className="h-4 w-4"
+              />
+              Redact people
+            </label>
           </div>
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-4">
-          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(error ? 'bad' : data?.graphWarning || data?.dataWarning ? 'warn' : 'ok')}`}>
-            Calendar {error ? 'offline' : data?.graphWarning || data?.dataWarning ? 'degraded' : 'connected'}
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(error ? 'bad' : data?.graphWarning || data?.dataWarning ? 'warn' : 'ok')}`}
+          >
+            Calendar{' '}
+            {error
+              ? 'offline'
+              : data?.graphWarning || data?.dataWarning
+                ? 'degraded'
+                : 'connected'}
           </span>
-          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(data?.graphSource ? 'ok' : 'warn')}`}>
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(data?.graphSource ? 'ok' : 'warn')}`}
+          >
             Source {data?.graphSource || 'unknown'}
           </span>
-          <span className={`rounded-xl border px-3 py-2 text-xs ${stripTone(nextMeeting ? 'ok' : 'warn')}`}>
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(nextMeeting ? 'ok' : 'warn')}`}
+          >
             Next {nextMeeting ? formatWhen(nextMeeting.date) : 'none scheduled'}
           </span>
           <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
             {formatFreshness(data?.refreshedAt)}
           </span>
         </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-primary-500 dark:text-neutral-400">
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            {extractionSummary.actionCount} extracted task
+            {extractionSummary.actionCount === 1 ? '' : 's'} ·{' '}
+            {extractionSummary.confidence} confidence
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Review state: {extractionSummary.reviewState}
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Tyler role:{' '}
+            {selectedMeeting ? classifyTylerRole(selectedMeeting) : 'unknown'}
+          </span>
+          <span
+            className={`rounded-md border px-2 py-1 ${stripTone(selectedSeverity === 'ok' ? 'ok' : selectedSeverity === 'blocked' ? 'bad' : 'warn')}`}
+          >
+            Selected meeting: {selectedSeverity}
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Route /meetings · selected {selectedMeetingId || 'none'} · detail{' '}
+            {detailLoading ? 'loading' : 'ready'} · action{' '}
+            {working ? 'running' : 'idle'}
+          </span>
+        </div>
       </div>
+
+      {loading ? (
+        <div className="grid gap-3 md:grid-cols-3">
+          {[0, 1, 2].map((item) => (
+            <div
+              key={item}
+              className="h-28 animate-pulse rounded-2xl border border-primary-200 bg-primary-100/70 dark:border-neutral-800 dark:bg-neutral-900"
+            />
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
           <div className="font-semibold">Meeting data is unavailable</div>
           <div className="mt-1">{error}</div>
+          <div className="mt-1">{getMeetingEmptyState(error)}</div>
           <button
             type="button"
             onClick={() => void load(true)}
@@ -619,6 +681,219 @@ export function MeetingsScreen() {
           {data.graphWarning || data.dataWarning}
         </div>
       ) : null}
+
+      <section className={`${shellClassName()} md:hidden`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+              Mobile agenda
+            </div>
+            <div className="mt-2 text-base font-semibold text-primary-900 dark:text-neutral-100">
+              {nextMeeting
+                ? formatMeetingTitle(nextMeeting.title)
+                : 'No next meeting'}
+            </div>
+            <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+              {nextMeeting
+                ? `${formatWhen(nextMeeting.date)} · ${nextMeeting.duration || 0} min`
+                : getMeetingEmptyState(null)}
+            </div>
+          </div>
+          {nextMeeting?.joinUrl ? (
+            <a
+              href={nextMeeting.joinUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              Join
+            </a>
+          ) : null}
+        </div>
+        <div className="mt-3 grid gap-2">
+          {nextNeedsPrep ? (
+            <button
+              type="button"
+              onClick={() => nextMeeting && pickMeeting(nextMeeting.id)}
+              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+            >
+              Prep now: starts within 24 hours
+            </button>
+          ) : null}
+          {[...openActionItems, ...selectedOpenActionItems]
+            .slice(0, 3)
+            .map((item) => (
+              <div
+                key={`mobile-${item.id}`}
+                className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"
+              >
+                <div className="line-clamp-2 text-sm font-medium text-primary-900 dark:text-neutral-100">
+                  {item.text}
+                </div>
+                <div className="mt-1 text-[11px] text-primary-500 dark:text-neutral-400">
+                  {item.assignee || 'Unassigned'}
+                </div>
+              </div>
+            ))}
+          {unresolvedCommitmentCount === 0 ? (
+            <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50/50 px-3 py-3 text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+              No open follow-ups at a glance.
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <section className={shellClassName()}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                Next meeting prep
+              </div>
+              <div className="mt-2 text-lg font-semibold text-primary-900 dark:text-neutral-100">
+                {nextMeeting?.title || 'No upcoming meeting selected'}
+              </div>
+              <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+                {nextMeeting
+                  ? `${formatWhen(nextMeeting.date)} · ${nextMeeting.duration || 0} min`
+                  : 'Refresh calendar or select a recent meeting to build prep context.'}
+              </div>
+              {meetingBrief?.lastMeetingSummary?.summary ? (
+                <p className="mt-3 line-clamp-2 text-sm leading-6 text-primary-700 dark:text-neutral-300">
+                  {meetingBrief.lastMeetingSummary.summary}
+                </p>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-primary-600 dark:text-neutral-400">
+                  {meetingBrief?.message ||
+                    'Prep context appears after a meeting is selected.'}
+                </p>
+              )}
+              {nextNeedsPrep ? (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                  Prep window is open. Review carry-forward items before this
+                  meeting starts.
+                </div>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {nextMeeting?.joinUrl ? (
+                <a
+                  href={nextMeeting.joinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
+                >
+                  Join
+                </a>
+              ) : null}
+              {nextMeeting ? (
+                <button
+                  type="button"
+                  onClick={() => pickMeeting(nextMeeting.id)}
+                  className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                >
+                  {nextNeedsPrep ? 'Prep now' : 'Open prep'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void load(true)}
+                disabled={working}
+                className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
+            <span
+              className={`rounded-xl border px-3 py-2 text-xs ${stripTone(nextMeeting?.reviewed ? 'ok' : nextMeeting ? 'warn' : 'bad')}`}
+            >
+              Review{' '}
+              {nextMeeting?.reviewed
+                ? 'complete'
+                : nextMeeting
+                  ? 'needed'
+                  : 'unavailable'}
+            </span>
+            <span
+              className={`rounded-xl border px-3 py-2 text-xs ${stripTone(openActionItems.length > 0 ? 'warn' : 'ok')}`}
+            >
+              {openActionItems.length} carry-forward item
+              {openActionItems.length === 1 ? '' : 's'}
+            </span>
+            <span
+              className={`rounded-xl border px-3 py-2 text-xs ${stripTone(previousMeetings.length > 0 ? 'ok' : 'warn')}`}
+            >
+              {previousMeetings.length} related prior meeting
+              {previousMeetings.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        </section>
+
+        <section className={shellClassName()}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                Unresolved commitments
+              </div>
+              <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
+                {unresolvedCommitmentCount}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void sendOpenActionItemsToTodo()}
+              disabled={working || actionTodoItems.length === 0}
+              className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+            >
+              Send to To Do
+            </button>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {[...openActionItems, ...selectedOpenActionItems]
+              .slice(0, 4)
+              .map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"
+                >
+                  <div className="line-clamp-2 text-sm font-medium text-primary-900 dark:text-neutral-100">
+                    {item.text}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
+                    <span>{item.assignee || 'Unassigned'}</span>
+                    {item.priority ? <span>{item.priority}</span> : null}
+                    {item.dueDate ? (
+                      <span>Due {formatWhen(item.dueDate)}</span>
+                    ) : null}
+                    {'meetingTitle' in item && item.meetingTitle ? (
+                      <span>{item.meetingTitle}</span>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            {selectedOpenIssues.slice(0, 2).map((issue) => (
+              <div
+                key={issue.id}
+                className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+              >
+                <div className="line-clamp-2 text-sm font-medium">
+                  {issue.title}
+                </div>
+                <div className="mt-1 text-[11px]">
+                  {issue.status || 'open'} · {issue.priority || 'medium'}
+                </div>
+              </div>
+            ))}
+            {unresolvedCommitmentCount === 0 ? (
+              <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50/50 px-3 py-4 text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
+                No unresolved carry-forward items for the selected meeting.
+              </div>
+            ) : null}
+          </div>
+        </section>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <section className={shellClassName()}>
@@ -663,7 +938,9 @@ export function MeetingsScreen() {
               Today and next
             </h2>
             <div className="text-xs text-primary-500 dark:text-neutral-400">
-              {loading ? 'Loading…' : `${data?.todayMeetings?.length || 0} meetings`}
+              {loading
+                ? 'Loading…'
+                : `${data?.todayMeetings?.length || 0} meetings`}
             </div>
           </div>
           <div className="mt-4 grid gap-3">
@@ -685,9 +962,11 @@ export function MeetingsScreen() {
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="text-base font-semibold text-primary-900 dark:text-neutral-100">
-                          {meeting.title}
+                          {formatMeetingTitle(meeting.title)}
                         </div>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${toneForType(meeting.type)}`}>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${toneForType(meeting.type)}`}
+                        >
                           {meeting.type || 'other'}
                         </span>
                       </div>
@@ -697,6 +976,16 @@ export function MeetingsScreen() {
                       <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
                         {participantLabel(meeting)}
                       </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {getMeetingOwnerChips(meeting).map((chip) => (
+                          <span
+                            key={chip}
+                            className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-0.5 text-[10px] text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
+                          >
+                            {chip}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -704,7 +993,10 @@ export function MeetingsScreen() {
             ))}
             {!loading && (data?.todayMeetings?.length || 0) === 0 ? (
               <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-                <div className="font-medium text-primary-700 dark:text-neutral-200">No meetings in the current window.</div>
+                <div className="font-medium text-primary-700 dark:text-neutral-200">
+                  No meetings in the current window.
+                </div>
+                <div className="mt-1">{getMeetingEmptyState(null)}</div>
                 <button
                   type="button"
                   onClick={() => void load(true)}
@@ -742,14 +1034,18 @@ export function MeetingsScreen() {
                     type="button"
                     onClick={() => pickMeeting(meeting.id)}
                     className="text-left lg:min-w-0"
-                    aria-current={selectedMeetingId === meeting.id ? 'true' : undefined}
+                    aria-current={
+                      selectedMeetingId === meeting.id ? 'true' : undefined
+                    }
                   >
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="text-base font-semibold text-primary-900 dark:text-neutral-100">
-                          {meeting.title}
+                          {formatMeetingTitle(meeting.title)}
                         </div>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${toneForType(meeting.type)}`}>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${toneForType(meeting.type)}`}
+                        >
                           {meeting.type || 'other'}
                         </span>
                       </div>
@@ -758,6 +1054,16 @@ export function MeetingsScreen() {
                       </div>
                       <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
                         {participantLabel(meeting)}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {getMeetingOwnerChips(meeting).map((chip) => (
+                          <span
+                            key={chip}
+                            className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-0.5 text-[10px] text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
+                          >
+                            {chip}
+                          </span>
+                        ))}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs">
                         <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
@@ -801,6 +1107,7 @@ export function MeetingsScreen() {
                 <div className="font-medium text-primary-700 dark:text-neutral-200">
                   No meetings match this review filter.
                 </div>
+                <div className="mt-1">{getMeetingEmptyState(null)}</div>
                 <button
                   type="button"
                   onClick={() => setReviewFilter('all')}
@@ -834,18 +1141,26 @@ export function MeetingsScreen() {
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
                     {day.dayLabel}
                   </div>
-                  <div className={`rounded-full px-2 py-1 text-[10px] font-semibold ${heatmapTone(day.intensity)}`}>
+                  <div
+                    className={`rounded-full px-2 py-1 text-[10px] font-semibold ${heatmapTone(day.intensity)}`}
+                  >
                     {day.totalHours}h
                   </div>
                 </div>
                 <div className="mt-2 text-sm font-semibold text-primary-900 dark:text-neutral-100">
-                  {new Date(day.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                  {new Date(day.date).toLocaleDateString([], {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
                 </div>
                 <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
                   {day.meetingCount} meeting(s)
                 </div>
               </div>
             ))}
+          </div>
+          <div className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+            {trendInterpretation}
           </div>
         </section>
 
@@ -857,7 +1172,11 @@ export function MeetingsScreen() {
             <div className="text-xs text-primary-500 dark:text-neutral-400">
               {detailLoading
                 ? 'Refreshing detail…'
-                : selectedMeeting?.title || meetingBrief?.meetingTitle || 'Select a meeting'}
+                : selectedMeeting
+                  ? formatMeetingTitle(selectedMeeting.title)
+                  : meetingBrief?.meetingTitle
+                    ? formatMeetingTitle(meetingBrief.meetingTitle)
+                    : 'Select a meeting'}
             </div>
           </div>
 
@@ -865,13 +1184,16 @@ export function MeetingsScreen() {
             <div className="mt-4 grid gap-4">
               <div className="rounded-2xl border border-primary-200 bg-primary-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                 <div className="text-base font-semibold text-primary-900 dark:text-neutral-100">
-                  {selectedMeeting.title}
+                  {formatMeetingTitle(selectedMeeting.title)}
                 </div>
                 <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-                  {formatWhen(selectedMeeting.date)} · {selectedMeeting.duration || 0} min
+                  {formatWhen(selectedMeeting.date)} ·{' '}
+                  {selectedMeeting.duration || 0} min
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <span className={`rounded-full border px-2 py-1 ${toneForType(selectedMeeting.type)}`}>
+                  <span
+                    className={`rounded-full border px-2 py-1 ${toneForType(selectedMeeting.type)}`}
+                  >
                     {selectedMeeting.type || 'other'}
                   </span>
                   {selectedMeeting.hasTranscription ? (
@@ -888,6 +1210,11 @@ export function MeetingsScreen() {
                       Needs review
                     </span>
                   )}
+                  <span
+                    className={`rounded-full border px-2 py-1 ${stripTone(selectedSeverity === 'ok' ? 'ok' : selectedSeverity === 'blocked' ? 'bad' : 'warn')}`}
+                  >
+                    {selectedSeverity}
+                  </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selectedMeeting.content &&
@@ -906,7 +1233,7 @@ export function MeetingsScreen() {
                   <button
                     type="button"
                     onClick={() => void sendOpenActionItemsToTodo()}
-                    disabled={working || openActionItems.length === 0}
+                    disabled={working || actionTodoItems.length === 0}
                     className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                   >
                     Send open items to To Do
@@ -937,7 +1264,9 @@ export function MeetingsScreen() {
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => navigator.clipboard.writeText(selectedMeeting.id)}
+                    onClick={() =>
+                      navigator.clipboard.writeText(selectedMeeting.id)
+                    }
                     className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                   >
                     Copy source id
@@ -978,9 +1307,12 @@ export function MeetingsScreen() {
                         onClick={() => pickMeeting(meeting.id)}
                         className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-left text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                       >
-                        <div className="font-medium">{meeting.title}</div>
+                        <div className="font-medium">
+                          {formatMeetingTitle(meeting.title)}
+                        </div>
                         <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
-                          {formatWhen(meeting.date)} · {meeting.duration || 0} min
+                          {formatWhen(meeting.date)} · {meeting.duration || 0}{' '}
+                          min
                         </div>
                       </button>
                     ))}
@@ -1000,14 +1332,24 @@ export function MeetingsScreen() {
                     <input
                       type="text"
                       value={newActionItemText}
-                      onChange={(event) => setNewActionItemText(event.currentTarget.value)}
-                      placeholder={selectedMeeting ? `Add action item for ${selectedMeeting.title}` : 'Add action item'}
+                      onChange={(event) =>
+                        setNewActionItemText(event.currentTarget.value)
+                      }
+                      placeholder={
+                        selectedMeeting
+                          ? `Add action item for ${formatMeetingTitle(selectedMeeting.title)}`
+                          : 'Add action item'
+                      }
                       className="w-full rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
                     />
                     <button
                       type="button"
                       onClick={() => void createActionItem()}
-                      disabled={working || !selectedMeetingId || !newActionItemText.trim()}
+                      disabled={
+                        working ||
+                        !selectedMeetingId ||
+                        !newActionItemText.trim()
+                      }
                       className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
                     >
                       Add
@@ -1028,7 +1370,12 @@ export function MeetingsScreen() {
                                 setActionDrafts((current) => ({
                                   ...current,
                                   [item.id]: {
-                                    ...(current[item.id] || { text: '', assignee: '', priority: 'medium', dueDate: '' }),
+                                    ...(current[item.id] || {
+                                      text: '',
+                                      assignee: '',
+                                      priority: 'medium',
+                                      dueDate: '',
+                                    }),
                                     text: event.currentTarget.value,
                                   },
                                 }))
@@ -1043,7 +1390,12 @@ export function MeetingsScreen() {
                                   setActionDrafts((current) => ({
                                     ...current,
                                     [item.id]: {
-                                      ...(current[item.id] || { text: '', assignee: '', priority: 'medium', dueDate: '' }),
+                                      ...(current[item.id] || {
+                                        text: '',
+                                        assignee: '',
+                                        priority: 'medium',
+                                        dueDate: '',
+                                      }),
                                       assignee: event.currentTarget.value,
                                     },
                                   }))
@@ -1052,12 +1404,19 @@ export function MeetingsScreen() {
                                 className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                               />
                               <select
-                                value={actionDrafts[item.id]?.priority || 'medium'}
+                                value={
+                                  actionDrafts[item.id]?.priority || 'medium'
+                                }
                                 onChange={(event) =>
                                   setActionDrafts((current) => ({
                                     ...current,
                                     [item.id]: {
-                                      ...(current[item.id] || { text: '', assignee: '', priority: 'medium', dueDate: '' }),
+                                      ...(current[item.id] || {
+                                        text: '',
+                                        assignee: '',
+                                        priority: 'medium',
+                                        dueDate: '',
+                                      }),
                                       priority: event.currentTarget.value,
                                     },
                                   }))
@@ -1076,7 +1435,12 @@ export function MeetingsScreen() {
                                   setActionDrafts((current) => ({
                                     ...current,
                                     [item.id]: {
-                                      ...(current[item.id] || { text: '', assignee: '', priority: 'medium', dueDate: '' }),
+                                      ...(current[item.id] || {
+                                        text: '',
+                                        assignee: '',
+                                        priority: 'medium',
+                                        dueDate: '',
+                                      }),
                                       dueDate: event.currentTarget.value,
                                     },
                                   }))
@@ -1092,14 +1456,25 @@ export function MeetingsScreen() {
                             </div>
                             <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
                               <span>{item.assignee || 'Unassigned'}</span>
-                              {item.priority ? <span>{item.priority}</span> : null}
-                              {item.dueDate ? <span>Due {formatWhen(item.dueDate)}</span> : null}
+                              {item.priority ? (
+                                <span>{item.priority}</span>
+                              ) : null}
+                              {item.dueDate ? (
+                                <span>Due {formatWhen(item.dueDate)}</span>
+                              ) : null}
                               {item.status ? <span>{item.status}</span> : null}
                             </div>
                           </>
                         )}
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {(['open', 'in-progress', 'blocked', 'completed'] as const).map((status) => (
+                          {(
+                            [
+                              'open',
+                              'in-progress',
+                              'blocked',
+                              'completed',
+                            ] as const
+                          ).map((status) => (
                             <button
                               key={status}
                               type="button"
@@ -1142,14 +1517,14 @@ export function MeetingsScreen() {
                               </button>
                             </>
                           ) : (
-                          <button
-                            type="button"
-                            onClick={() => beginEditActionItem(item)}
-                            disabled={working}
-                            className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-                          >
-                            Edit
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => beginEditActionItem(item)}
+                              disabled={working}
+                              className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                            >
+                              Edit
+                            </button>
                           )}
                           <button
                             type="button"
@@ -1185,7 +1560,9 @@ export function MeetingsScreen() {
                     <button
                       type="button"
                       onClick={() => void sendIssuesToTodo()}
-                      disabled={working || (selectedMeeting.issues || []).length === 0}
+                      disabled={
+                        working || (selectedMeeting.issues || []).length === 0
+                      }
                       className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                     >
                       Send to To Do
@@ -1206,7 +1583,13 @@ export function MeetingsScreen() {
                                 setIssueDrafts((current) => ({
                                   ...current,
                                   [issue.id]: {
-                                    ...(current[issue.id] || { title: '', description: '', status: 'new', priority: 'medium', assignee: '' }),
+                                    ...(current[issue.id] || {
+                                      title: '',
+                                      description: '',
+                                      status: 'new',
+                                      priority: 'medium',
+                                      assignee: '',
+                                    }),
                                     title: event.currentTarget.value,
                                   },
                                 }))
@@ -1219,7 +1602,13 @@ export function MeetingsScreen() {
                                 setIssueDrafts((current) => ({
                                   ...current,
                                   [issue.id]: {
-                                    ...(current[issue.id] || { title: '', description: '', status: 'new', priority: 'medium', assignee: '' }),
+                                    ...(current[issue.id] || {
+                                      title: '',
+                                      description: '',
+                                      status: 'new',
+                                      priority: 'medium',
+                                      assignee: '',
+                                    }),
                                     description: event.currentTarget.value,
                                   },
                                 }))
@@ -1234,7 +1623,13 @@ export function MeetingsScreen() {
                                   setIssueDrafts((current) => ({
                                     ...current,
                                     [issue.id]: {
-                                      ...(current[issue.id] || { title: '', description: '', status: 'new', priority: 'medium', assignee: '' }),
+                                      ...(current[issue.id] || {
+                                        title: '',
+                                        description: '',
+                                        status: 'new',
+                                        priority: 'medium',
+                                        assignee: '',
+                                      }),
                                       status: event.currentTarget.value,
                                     },
                                   }))
@@ -1242,17 +1637,27 @@ export function MeetingsScreen() {
                                 className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                               >
                                 <option value="new">new</option>
-                                <option value="investigating">investigating</option>
+                                <option value="investigating">
+                                  investigating
+                                </option>
                                 <option value="blocked">blocked</option>
                                 <option value="resolved">resolved</option>
                               </select>
                               <select
-                                value={issueDrafts[issue.id]?.priority || 'medium'}
+                                value={
+                                  issueDrafts[issue.id]?.priority || 'medium'
+                                }
                                 onChange={(event) =>
                                   setIssueDrafts((current) => ({
                                     ...current,
                                     [issue.id]: {
-                                      ...(current[issue.id] || { title: '', description: '', status: 'new', priority: 'medium', assignee: '' }),
+                                      ...(current[issue.id] || {
+                                        title: '',
+                                        description: '',
+                                        status: 'new',
+                                        priority: 'medium',
+                                        assignee: '',
+                                      }),
                                       priority: event.currentTarget.value,
                                     },
                                   }))
@@ -1271,7 +1676,13 @@ export function MeetingsScreen() {
                                   setIssueDrafts((current) => ({
                                     ...current,
                                     [issue.id]: {
-                                      ...(current[issue.id] || { title: '', description: '', status: 'new', priority: 'medium', assignee: '' }),
+                                      ...(current[issue.id] || {
+                                        title: '',
+                                        description: '',
+                                        status: 'new',
+                                        priority: 'medium',
+                                        assignee: '',
+                                      }),
                                       assignee: event.currentTarget.value,
                                     },
                                   }))
@@ -1292,15 +1703,30 @@ export function MeetingsScreen() {
                               </div>
                             ) : null}
                             <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
-                              {issue.status ? <span>{issue.status}</span> : null}
-                              {issue.priority ? <span>{issue.priority}</span> : null}
-                              {issue.assignee ? <span>{issue.assignee}</span> : null}
-                              {typeof issue.stagnantDays === 'number' ? <span>{issue.stagnantDays}d stagnant</span> : null}
+                              {issue.status ? (
+                                <span>{issue.status}</span>
+                              ) : null}
+                              {issue.priority ? (
+                                <span>{issue.priority}</span>
+                              ) : null}
+                              {issue.assignee ? (
+                                <span>{issue.assignee}</span>
+                              ) : null}
+                              {typeof issue.stagnantDays === 'number' ? (
+                                <span>{issue.stagnantDays}d stagnant</span>
+                              ) : null}
                             </div>
                           </>
                         )}
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {(['new', 'investigating', 'blocked', 'resolved'] as const).map((status) => (
+                          {(
+                            [
+                              'new',
+                              'investigating',
+                              'blocked',
+                              'resolved',
+                            ] as const
+                          ).map((status) => (
                             <button
                               key={status}
                               type="button"
@@ -1343,14 +1769,14 @@ export function MeetingsScreen() {
                               </button>
                             </>
                           ) : (
-                          <button
-                            type="button"
-                            onClick={() => beginEditIssue(issue)}
-                            disabled={working}
-                            className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-                          >
-                            Edit
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => beginEditIssue(issue)}
+                              disabled={working}
+                              className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                            >
+                              Edit
+                            </button>
                           )}
                           <button
                             type="button"
@@ -1384,7 +1810,10 @@ export function MeetingsScreen() {
                     <button
                       type="button"
                       onClick={() => void sendDecisionsToTodo()}
-                      disabled={working || (selectedMeeting.decisions || []).length === 0}
+                      disabled={
+                        working ||
+                        (selectedMeeting.decisions || []).length === 0
+                      }
                       className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                     >
                       Send to To Do
@@ -1404,7 +1833,11 @@ export function MeetingsScreen() {
                                 setDecisionDrafts((current) => ({
                                   ...current,
                                   [decision.id]: {
-                                    ...(current[decision.id] || { text: '', decisionMaker: '', impact: 'medium' }),
+                                    ...(current[decision.id] || {
+                                      text: '',
+                                      decisionMaker: '',
+                                      impact: 'medium',
+                                    }),
                                     text: event.currentTarget.value,
                                   },
                                 }))
@@ -1415,12 +1848,19 @@ export function MeetingsScreen() {
                             <div className="grid gap-2 sm:grid-cols-2">
                               <input
                                 type="text"
-                                value={decisionDrafts[decision.id]?.decisionMaker || ''}
+                                value={
+                                  decisionDrafts[decision.id]?.decisionMaker ||
+                                  ''
+                                }
                                 onChange={(event) =>
                                   setDecisionDrafts((current) => ({
                                     ...current,
                                     [decision.id]: {
-                                      ...(current[decision.id] || { text: '', decisionMaker: '', impact: 'medium' }),
+                                      ...(current[decision.id] || {
+                                        text: '',
+                                        decisionMaker: '',
+                                        impact: 'medium',
+                                      }),
                                       decisionMaker: event.currentTarget.value,
                                     },
                                   }))
@@ -1429,12 +1869,19 @@ export function MeetingsScreen() {
                                 className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                               />
                               <select
-                                value={decisionDrafts[decision.id]?.impact || 'medium'}
+                                value={
+                                  decisionDrafts[decision.id]?.impact ||
+                                  'medium'
+                                }
                                 onChange={(event) =>
                                   setDecisionDrafts((current) => ({
                                     ...current,
                                     [decision.id]: {
-                                      ...(current[decision.id] || { text: '', decisionMaker: '', impact: 'medium' }),
+                                      ...(current[decision.id] || {
+                                        text: '',
+                                        decisionMaker: '',
+                                        impact: 'medium',
+                                      }),
                                       impact: event.currentTarget.value,
                                     },
                                   }))
@@ -1453,36 +1900,44 @@ export function MeetingsScreen() {
                               {decision.text}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
-                              {decision.decisionMaker ? <span>{decision.decisionMaker}</span> : null}
-                              {decision.impact ? <span>{decision.impact}</span> : null}
-                              {decision.date ? <span>{formatWhen(decision.date)}</span> : null}
+                              {decision.decisionMaker ? (
+                                <span>{decision.decisionMaker}</span>
+                              ) : null}
+                              {decision.impact ? (
+                                <span>{decision.impact}</span>
+                              ) : null}
+                              {decision.date ? (
+                                <span>{formatWhen(decision.date)}</span>
+                              ) : null}
                             </div>
                           </>
                         )}
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {(['low', 'medium', 'high'] as const).map((impact) => (
-                            <button
-                              key={impact}
-                              type="button"
-                              onClick={() =>
-                                post({
-                                  kind: 'update-decision',
-                                  decision: {
-                                    id: decision.id,
-                                    impact,
-                                  },
-                                })
-                              }
-                              disabled={working}
-                              className={`rounded-lg px-2 py-1 text-xs ${
-                                decision.impact === impact
-                                  ? 'bg-primary-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-                                  : 'border border-primary-200 bg-primary-50 text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200'
-                              }`}
-                            >
-                              {impact}
-                            </button>
-                          ))}
+                          {(['low', 'medium', 'high'] as const).map(
+                            (impact) => (
+                              <button
+                                key={impact}
+                                type="button"
+                                onClick={() =>
+                                  post({
+                                    kind: 'update-decision',
+                                    decision: {
+                                      id: decision.id,
+                                      impact,
+                                    },
+                                  })
+                                }
+                                disabled={working}
+                                className={`rounded-lg px-2 py-1 text-xs ${
+                                  decision.impact === impact
+                                    ? 'bg-primary-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
+                                    : 'border border-primary-200 bg-primary-50 text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200'
+                                }`}
+                              >
+                                {impact}
+                              </button>
+                            ),
+                          )}
                           {editingDecisionId === decision.id ? (
                             <>
                               <button
@@ -1543,7 +1998,8 @@ export function MeetingsScreen() {
                     Carry-forward context
                   </div>
                   <div className="mt-3 text-sm text-primary-600 dark:text-neutral-400">
-                    Related history and carry-forward items for overlapping participants.
+                    Related history and carry-forward items for overlapping
+                    participants.
                   </div>
                   <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
                     <div className="grid gap-2">
@@ -1554,9 +2010,12 @@ export function MeetingsScreen() {
                           onClick={() => pickMeeting(meeting.id)}
                           className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-left text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                         >
-                          <div className="font-medium">{meeting.title}</div>
+                          <div className="font-medium">
+                            {formatMeetingTitle(meeting.title)}
+                          </div>
                           <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
-                            {formatWhen(meeting.date)} · {meeting.duration || 0} min
+                            {formatWhen(meeting.date)} · {meeting.duration || 0}{' '}
+                            min
                           </div>
                         </button>
                       ))}
@@ -1572,8 +2031,12 @@ export function MeetingsScreen() {
                           </div>
                           <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
                             <span>{item.assignee || 'Unassigned'}</span>
-                            {item.priority ? <span>{item.priority}</span> : null}
-                            {item.dueDate ? <span>Due {formatWhen(item.dueDate)}</span> : null}
+                            {item.priority ? (
+                              <span>{item.priority}</span>
+                            ) : null}
+                            {item.dueDate ? (
+                              <span>Due {formatWhen(item.dueDate)}</span>
+                            ) : null}
                           </div>
                         </div>
                       ))}

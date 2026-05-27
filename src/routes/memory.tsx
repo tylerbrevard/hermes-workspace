@@ -1,6 +1,7 @@
 import { Suspense, lazy, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import BackendUnavailableState from '@/components/backend-unavailable-state'
+import { RouteLoadingState } from '@/components/route-error-fallback'
 import { Tabs, TabsList, TabsPanel, TabsTab } from '@/components/ui/tabs'
 import { useFeatureAvailable } from '@/hooks/use-feature-available'
 import { usePageTitle } from '@/hooks/use-page-title'
@@ -76,11 +77,3 @@ export const Route = createFileRoute('/memory')({
     )
   },
 })
-
-function RouteLoadingState({ label }: { label: string }) {
-  return (
-    <div className="flex h-full min-h-[240px] items-center justify-center px-4 text-sm text-primary-500 dark:text-neutral-400">
-      {label}
-    </div>
-  )
-}

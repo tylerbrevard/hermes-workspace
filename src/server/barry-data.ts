@@ -25,7 +25,7 @@ type BarryMeeting = {
   date: string
   status: BarryMeetingStatus
   agenda: Array<{ text: string; discussed: boolean }>
-  winsDiscussed: string[]
+  winsDiscussed: Array<string>
   actionItems: Array<{ text: string; owner: string; done: boolean }>
   notes: string
 }
@@ -40,11 +40,11 @@ type BarryWin = {
   impactNote?: string
   shareWithBarry?: boolean
   status?: string
-  teamMembers?: string[]
+  teamMembers?: Array<string>
 }
 
 type WinsCache = {
-  wins: BarryWin[]
+  wins: Array<BarryWin>
   lastFetched: number
 }
 
@@ -76,7 +76,7 @@ function ensureBarrySchema() {
   `)
 }
 
-function parseJsonArray<T>(value: unknown): T[] {
+function parseJsonArray<T>(value: unknown): Array<T> {
   if (typeof value !== 'string' || value.length === 0) return []
   try {
     const parsed = JSON.parse(value)
@@ -102,7 +102,7 @@ function rowToMeeting(row: Record<string, unknown>): BarryMeeting {
   }
 }
 
-export function listBarryMeetings(): BarryMeeting[] {
+export function listBarryMeetings(): Array<BarryMeeting> {
   ensureBarrySchema()
   const output = execSql(
     "SELECT json_group_array(json_object('id', id, 'date', date, 'status', status, 'agenda_json', agenda_json, 'wins_json', wins_json, 'actions_json', actions_json, 'notes', notes)) FROM (SELECT * FROM barry_meetings ORDER BY date DESC);",
@@ -244,8 +244,8 @@ function readWinsCache(): WinsCache | null {
   return cache && Array.isArray(cache.wins) ? cache : null
 }
 
-function mergeTeamMembers(wins: BarryWin[]): BarryWin[] {
-  const index = readJsonFile<Record<string, string[]>>(WINS_TEAM_MEMBERS_FILE, {})
+function mergeTeamMembers(wins: Array<BarryWin>): Array<BarryWin> {
+  const index = readJsonFile<Record<string, Array<string>>>(WINS_TEAM_MEMBERS_FILE, {})
   return wins.map((win) =>
     Array.isArray(index[win.id]) && index[win.id].length > 0
       ? { ...win, teamMembers: index[win.id] }
@@ -253,9 +253,9 @@ function mergeTeamMembers(wins: BarryWin[]): BarryWin[] {
   )
 }
 
-async function fetchWinsFromNotion(): Promise<BarryWin[]> {
+async function fetchWinsFromNotion(): Promise<Array<BarryWin>> {
   const key = readFileSync(NOTION_KEY_FILE, 'utf8').trim()
-  const allWins: BarryWin[] = []
+  const allWins: Array<BarryWin> = []
   let startCursor: string | undefined
 
   do {
@@ -294,7 +294,7 @@ async function fetchWinsFromNotion(): Promise<BarryWin[]> {
   return allWins
 }
 
-export async function listBarryWins(): Promise<BarryWin[]> {
+export async function listBarryWins(): Promise<Array<BarryWin>> {
   const cache = readWinsCache()
   let wins = cache?.wins || []
 

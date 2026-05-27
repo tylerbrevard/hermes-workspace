@@ -1185,11 +1185,11 @@ function ChatMessageListComponent({
           args: tcAny.args,
           preview:
             typeof tcAny.preview === 'string'
-              ? (tcAny.preview as string)
+              ? (tcAny.preview)
               : undefined,
           result:
             typeof tcAny.result === 'string'
-              ? (tcAny.result as string)
+              ? (tcAny.result)
               : undefined,
         }
       })

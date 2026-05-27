@@ -5,25 +5,27 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Html, Sparkles } from '@react-three/drei'
 import {
-  EffectComposer,
   Bloom,
-  Vignette,
+  EffectComposer,
   ToneMapping,
+  Vignette,
 } from '@react-three/postprocessing'
 import { ToneMappingMode } from 'postprocessing'
-import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import type { PlaygroundWorldId } from '../lib/playground-rpg'
-import { ScatteredScenery } from './playground-environment'
 import {
-  usePlaygroundMultiplayer,
-  type RemotePlayer as MpRemotePlayer,
-  type IncomingChat,
+
+
+  usePlaygroundMultiplayer
 } from '../hooks/use-playground-multiplayer'
-import { loadAvatarConfig, type AvatarConfig } from '../lib/avatar-config'
+import {  loadAvatarConfig } from '../lib/avatar-config'
+import { ScatteredScenery } from './playground-environment'
 import { PlaygroundNpcGlb } from './playground-npc-glb'
 import { SpeechBubble } from './speech-bubble'
 import { useHermesWorldSettings } from './hermesworld-settings'
+import type {AvatarConfig} from '../lib/avatar-config';
+import type {IncomingChat, RemotePlayer as MpRemotePlayer} from '../hooks/use-playground-multiplayer';
+import type { PlaygroundWorldId } from '../lib/playground-rpg'
 
 /**
  * Module-level GLB presence probe. Returns:
@@ -428,7 +430,7 @@ function ClassicalPillars({ world }: { world: WorldDef }) {
   return (
     <>
       {pillars.map((pos, i) => (
-        <group key={i} position={pos as [number, number, number]}>
+        <group key={i} position={pos}>
           <mesh castShadow receiveShadow position={[0, 1.5, 0]}>
             <cylinderGeometry args={[0.4, 0.5, 3, 12]} />
             <meshStandardMaterial color={world.pillarColor} roughness={0.6} />
@@ -511,7 +513,7 @@ function TechPillars({ world }: { world: WorldDef }) {
   return (
     <>
       {cubes.map((pos, i) => (
-        <group key={i} position={pos as [number, number, number]}>
+        <group key={i} position={pos}>
           <mesh castShadow position={[0, 0.9, 0]}>
             <boxGeometry args={[1.6, 1.8, 1.6]} />
             <meshStandardMaterial
@@ -2030,7 +2032,7 @@ function NpcAccessories({
 
 /* ── NPC billboard with proximity sensing ── */
 // Per-NPC ambient lines (cycles when nobody clicks them).
-const NPC_AMBIENT_LINES: Record<string, string[]> = {
+const NPC_AMBIENT_LINES: Record<string, Array<string>> = {
   athena: [
     'Welcome, builder. The road begins here.',
     'Hermes carries your prompts — wisely.',

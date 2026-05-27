@@ -1,13 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../server/auth-middleware'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
+import { json } from '@tanstack/react-start'
+import { createFileRoute } from '@tanstack/react-router'
 import * as yaml from 'yaml'
+import { isAuthenticated } from '../../server/auth-middleware'
 import { BEARER_TOKEN, CLAUDE_API, ensureGatewayProbed } from '../../server/gateway-capabilities'
 import { getClaudeRoot, getProfileClaudeHome, getWorkspaceClaudeHome } from '../../server/claude-paths'
-import { formatSwarmWorkerLabel, rosterByWorkerId, type SwarmRosterWorker } from '../../server/swarm-roster'
+import {  formatSwarmWorkerLabel, rosterByWorkerId } from '../../server/swarm-roster'
+import type {SwarmRosterWorker} from '../../server/swarm-roster';
 
 type CrewDefinition = {
   id: string
@@ -55,7 +56,7 @@ function buildCrewDefinitionFromRoster(profile: string, worker: SwarmRosterWorke
   }
 }
 
-function buildCrewDefinitions(): CrewDefinition[] {
+function buildCrewDefinitions(): Array<CrewDefinition> {
   const profilesDir = join(getClaudeRoot(), 'profiles')
   const dynamicProfiles = existsSync(profilesDir)
     ? readdirSync(profilesDir, { withFileTypes: true })

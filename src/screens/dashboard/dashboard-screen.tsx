@@ -2,6 +2,7 @@ import {
   BubbleChatAddIcon,
   CheckmarkCircle02Icon,
   ConsoleIcon,
+  Copy01Icon,
   Edit02Icon,
   Moon02Icon,
   PuzzleIcon,
@@ -27,6 +28,7 @@ import { AnalyticsChartCard } from './components/analytics-chart-card'
 import { AttentionMarquee } from './components/attention-marquee'
 import { CacheEfficiencyCard } from './components/cache-efficiency-card'
 import { CostLedgerCard } from './components/cost-ledger-card'
+import { DashboardCommandStrip } from './components/dashboard-command-strip'
 import { EditModePanel } from './components/edit-mode-panel'
 import { HeroMetrics } from './components/hero-metrics'
 import { LogsTailCard } from './components/logs-tail-card'
@@ -39,14 +41,28 @@ import { TokenMixHourCard } from './components/token-mix-hour-card'
 import { TopModelsCard } from './components/top-models-card'
 import { VelocityCard } from './components/velocity-card'
 import { WidgetShell } from './components/widget-shell'
+import {
+  DASHBOARD_WORKFLOW_PRESETS,
+  buildDashboardDiagnostics,
+  buildDashboardNextAction,
+  buildDashboardStatusBrief,
+  calculateDashboardHealthScore,
+} from './lib/command-center'
 import { normalizeDashboardSessionsPayload } from './lib/sessions-query'
 import { useDashboardLayout } from './lib/use-dashboard-layout'
+import { buildWeeklyWorkspaceUtilizationReport } from './lib/weekly-utilization-report'
 import type { SessionRowData } from './components/sessions-intelligence-card'
 import type { AnalyticsPeriod } from './components/analytics-chart-card'
 import type { ReactNode } from 'react'
 import type { ClaudeSession } from '@/server/claude-api'
 import type { DashboardOverview } from '@/server/dashboard-aggregator'
+import type { PhoneCockpitSnapshot } from '@/server/phone-cockpit'
+import { apiPath } from '@/lib/base-path'
 import { getUnavailableReason } from '@/lib/feature-gates'
+import {
+  formatWorkspaceFreshness,
+  isWorkspaceSourceStale,
+} from '@/lib/source-freshness'
 import { cn } from '@/lib/utils'
 import { applyTheme, useSettingsStore } from '@/hooks/use-settings'
 import { openHamburgerMenu } from '@/components/mobile-hamburger-menu'
@@ -70,27 +86,6 @@ function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
-}
-
-function formatFreshness(value?: string | number | null): string {
-  if (!value) return 'never'
-  const ms = typeof value === 'number' ? value : Date.parse(value)
-  if (!Number.isFinite(ms)) return 'unknown'
-  const diff = Date.now() - ms
-  if (diff < 60_000) return 'just now'
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
-  return `${Math.floor(diff / 86_400_000)}d ago`
-}
-
-function isStale(
-  value?: string | number | null,
-  thresholdMs = 120_000,
-): boolean {
-  if (!value) return true
-  const ms = typeof value === 'number' ? value : Date.parse(value)
-  if (!Number.isFinite(ms)) return true
-  return Date.now() - ms > thresholdMs
 }
 
 function themeColor(name: string, fallback: string): string {
@@ -186,6 +181,9 @@ function GlassCard({
       <div className={cn('flex-1', noPadding ? '' : 'px-5 pb-4 pt-3')}>
         {children}
       </div>
+      <div className="border-t border-[var(--theme-border)] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+        Source workspace · freshness live · owner Hermes · last success recent
+      </div>
     </div>
   )
 }
@@ -236,6 +234,20 @@ type ActionRequiredItem = {
   detail: string
   action: string
   onClick: () => void
+}
+
+type LilyDashboardConfig = {
+  ok?: boolean
+  configured?: boolean
+  agentName?: string
+  serverUrl?: string
+  voiceWorker?: {
+    status?: 'online' | 'offline' | 'unknown' | 'not_configured'
+    checkedAt?: string
+    detail?: string
+    source?: string | null
+  }
+  error?: string
 }
 
 function ActionRequiredRail({ items }: { items: Array<ActionRequiredItem> }) {
@@ -295,6 +307,17 @@ function ActionRequiredRail({ items }: { items: Array<ActionRequiredItem> }) {
                   <span className="truncate text-xs font-semibold text-ink">
                     {item.label}
                   </span>
+                  <span
+                    className="ml-auto rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em]"
+                    style={{
+                      borderColor: `${tone}66`,
+                      color: tone,
+                      background:
+                        'color-mix(in srgb, currentColor 10%, transparent)',
+                    }}
+                  >
+                    {item.severity}
+                  </span>
                 </div>
                 <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted">
                   {item.detail}
@@ -311,6 +334,853 @@ function ActionRequiredRail({ items }: { items: Array<ActionRequiredItem> }) {
         })}
       </div>
     </GlassCard>
+  )
+}
+
+function LilyReadinessCard({
+  config,
+  loading,
+  error,
+  onOpen,
+  onRefresh,
+}: {
+  config: LilyDashboardConfig | null
+  loading: boolean
+  error: boolean
+  onOpen: () => void
+  onRefresh: () => void
+}) {
+  const worker = config?.voiceWorker
+  const workerStatus = worker?.status ?? 'unknown'
+  const liveKitReady = Boolean(config?.configured)
+  const workerReady = workerStatus === 'online'
+  const tone = error
+    ? 'var(--theme-danger)'
+    : liveKitReady && workerReady
+      ? 'var(--theme-success)'
+      : 'var(--theme-warning)'
+  const statusText = error
+    ? 'Config unavailable'
+    : loading && !config
+      ? 'Checking voice stack'
+      : liveKitReady && workerReady
+        ? 'Ready for hands-free mode'
+        : liveKitReady
+          ? 'LiveKit ready, worker needs attention'
+          : 'LiveKit keys needed'
+
+  return (
+    <GlassCard title="LILY Voice" accentColor={tone}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-ink">{statusText}</div>
+          <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted">
+            {worker?.detail ||
+              (liveKitReady
+                ? `${config?.agentName || 'lily'} transport configured.`
+                : 'Add LiveKit credentials before full media-room voice works.')}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.12em]">
+            <span className="rounded-full border border-[var(--theme-border)] px-2 py-1 text-muted">
+              LiveKit {liveKitReady ? 'ready' : 'missing'}
+            </span>
+            <span className="rounded-full border border-[var(--theme-border)] px-2 py-1 text-muted">
+              Worker {workerStatus.replace('_', ' ')}
+            </span>
+            {worker?.checkedAt ? (
+              <span className="rounded-full border border-[var(--theme-border)] px-2 py-1 text-muted">
+                {formatWorkspaceFreshness(worker.checkedAt)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <SecondaryAction
+            label="Open Lily"
+            icon={BubbleChatAddIcon}
+            onClick={onOpen}
+          />
+          <SecondaryAction
+            label="Refresh"
+            icon={ConsoleIcon}
+            onClick={onRefresh}
+            disabled={loading}
+          />
+        </div>
+      </div>
+    </GlassCard>
+  )
+}
+
+function SourceFreshnessBadge({
+  source,
+}: {
+  source?: PhoneCockpitSnapshot['sources'][keyof PhoneCockpitSnapshot['sources']]
+}) {
+  const fresh =
+    Boolean(source?.ok) &&
+    !isWorkspaceSourceStale(source?.checkedAt, 10 * 60_000)
+  return (
+    <span
+      className={cn(
+        'rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]',
+        fresh
+          ? 'border-emerald-300/30 bg-emerald-300/10 text-emerald-500'
+          : 'border-amber-300/40 bg-amber-300/10 text-amber-500',
+      )}
+      title={source?.error || source?.label || 'Source freshness'}
+    >
+      {source?.ok ? formatWorkspaceFreshness(source.checkedAt) : 'degraded'}
+    </span>
+  )
+}
+
+function DailySignalTile({
+  label,
+  value,
+  detail,
+  source,
+}: {
+  label: string
+  value: string
+  detail: string
+  source?: PhoneCockpitSnapshot['sources'][keyof PhoneCockpitSnapshot['sources']]
+}) {
+  return (
+    <div className="flex min-h-[112px] flex-col justify-between rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            {label}
+          </div>
+          <div className="mt-1 truncate text-xl font-bold tabular-nums text-ink">
+            {value}
+          </div>
+        </div>
+        <SourceFreshnessBadge source={source} />
+      </div>
+      <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted">{detail}</p>
+    </div>
+  )
+}
+
+function DailySignalsCard({
+  snapshot,
+  loading,
+  error,
+  onOpenPhone,
+  onOpenMeetings,
+  onRefresh,
+}: {
+  snapshot: PhoneCockpitSnapshot | null
+  loading: boolean
+  error: boolean
+  onOpenPhone: () => void
+  onOpenMeetings: () => void
+  onRefresh: () => void
+}) {
+  const degradedSources = Object.values(snapshot?.sources ?? {}).filter(
+    (source) => !source.ok,
+  )
+  const inboxValue =
+    snapshot?.inbox.unread === null || snapshot?.inbox.unread === undefined
+      ? '—'
+      : String(snapshot.inbox.unread)
+  const meetingStats = snapshot?.schedule.stats
+  const openMeetingActions =
+    snapshot?.meetingPrep.openActionItems.length ??
+    meetingStats?.openActionItems ??
+    0
+  const desk = snapshot?.devices.office
+  const deskLabel = desk?.status
+    ? desk.status === 'online'
+      ? 'Desk online'
+      : `Desk ${desk.status}`
+    : 'Desk unknown'
+  const presence =
+    snapshot?.presence.activity || snapshot?.presence.availability
+  const sourceHealth = snapshot
+    ? degradedSources.length === 0
+      ? 'All sources reporting'
+      : `${degradedSources.length} source${degradedSources.length === 1 ? '' : 's'} degraded`
+    : loading
+      ? 'Loading daily sources'
+      : 'Daily sources unavailable'
+
+  return (
+    <GlassCard
+      title="Daily Signals"
+      titleRight={
+        <span
+          className={cn(
+            'rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]',
+            error || degradedSources.length > 0
+              ? 'border-amber-300/40 bg-amber-300/10 text-amber-500'
+              : 'border-emerald-300/30 bg-emerald-300/10 text-emerald-500',
+          )}
+        >
+          {sourceHealth}
+        </span>
+      }
+      accentColor={
+        error || degradedSources.length > 0
+          ? 'var(--theme-warning)'
+          : 'var(--theme-success)'
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <DailySignalTile
+          label="Inbox Zero"
+          value={inboxValue}
+          detail={
+            snapshot?.inbox.warning ||
+            `${snapshot?.inbox.focused.length ?? 0} focused messages need review.`
+          }
+          source={snapshot?.sources.mail}
+        />
+        <DailySignalTile
+          label="Meeting Actions"
+          value={String(openMeetingActions)}
+          detail={
+            snapshot?.meetingPrep.warning ||
+            `${meetingStats?.reviewedMeetings ?? 0}/${meetingStats?.totalMeetings ?? 0} meetings reviewed today.`
+          }
+          source={snapshot?.sources.meetingPrep ?? snapshot?.sources.calendar}
+        />
+        <DailySignalTile
+          label="Teams & Desk"
+          value={presence || 'Unknown'}
+          detail={`${deskLabel}${desk?.displayMode ? ` · ${desk.displayMode}` : ''}${desk?.quietHours ? ' · quiet hours' : ''}`}
+          source={snapshot?.sources.presence ?? snapshot?.sources.devices}
+        />
+        <DailySignalTile
+          label="Data Health"
+          value={
+            degradedSources.length === 0 ? 'OK' : `${degradedSources.length}`
+          }
+          detail={
+            degradedSources[0]?.error ||
+            `Checked ${Object.keys(snapshot?.sources ?? {}).length} cockpit sources.`
+          }
+          source={snapshot?.sources.devices}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <SecondaryAction
+          label="Open Phone"
+          icon={BubbleChatAddIcon}
+          onClick={onOpenPhone}
+        />
+        <SecondaryAction
+          label="Meetings"
+          icon={ConsoleIcon}
+          onClick={onOpenMeetings}
+        />
+        <SecondaryAction
+          label="Refresh"
+          icon={ConsoleIcon}
+          onClick={onRefresh}
+          disabled={loading}
+        />
+      </div>
+    </GlassCard>
+  )
+}
+
+function WeeklyUtilizationReportCard({
+  report,
+}: {
+  report: ReturnType<typeof buildWeeklyWorkspaceUtilizationReport>
+}) {
+  const [copied, setCopied] = useState(false)
+
+  async function copyReport() {
+    await navigator.clipboard.writeText(report.markdown)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1600)
+  }
+
+  return (
+    <GlassCard
+      title="Weekly Utilization"
+      titleRight={
+        <span className="rounded-full border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+          {report.weekLabel}
+        </span>
+      }
+      accentColor="var(--theme-accent)"
+    >
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        {report.metrics.map((metric) => (
+          <div
+            key={metric.label}
+            className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2"
+          >
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              {metric.label}
+            </div>
+            <div className="mt-1 truncate text-lg font-bold tabular-nums text-ink">
+              {metric.value}
+            </div>
+            {metric.detail ? (
+              <div className="mt-1 truncate text-[11px] text-muted">
+                {metric.detail}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.55fr)]">
+        <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            Heaviest sessions
+          </div>
+          <div className="mt-2 space-y-1.5">
+            {report.topSessions.length > 0 ? (
+              report.topSessions.slice(0, 3).map((session) => (
+                <div
+                  key={session.key}
+                  className="flex items-center justify-between gap-3 text-xs"
+                >
+                  <span className="min-w-0 truncate text-ink">
+                    {session.title}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-muted">
+                    {formatNumber(session.tokenCount)} tokens
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-muted">
+                No sessions reported in the last seven days.
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            Recommended next action
+          </div>
+          <div className="mt-2 text-sm font-medium text-ink">
+            {report.recommendedActions[0]?.label}
+          </div>
+          <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted">
+            {report.recommendedActions[0]?.detail}
+          </div>
+          <button
+            type="button"
+            onClick={() => void copyReport()}
+            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[var(--theme-border)] px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-[var(--theme-card)]"
+          >
+            <HugeiconsIcon icon={Copy01Icon} size={14} strokeWidth={1.7} />
+            {copied ? 'Copied report' : 'Copy report'}
+          </button>
+        </div>
+      </div>
+    </GlassCard>
+  )
+}
+
+function DashboardOperationsBand({
+  actionItems,
+  dashboardStale,
+  sessionsStale,
+  overviewUpdatedAt,
+  sessionsFreshness,
+  onOpenTasks,
+  onOpenTerminal,
+  onOpenOpsIntelligence,
+}: {
+  actionItems: Array<ActionRequiredItem>
+  dashboardStale: boolean
+  sessionsStale: boolean
+  overviewUpdatedAt: string | null
+  sessionsFreshness: string | number | null
+  onOpenTasks: () => void
+  onOpenTerminal: () => void
+  onOpenOpsIntelligence: () => void
+}) {
+  const [workflowPreset, setWorkflowPreset] =
+    useState<(typeof DASHBOARD_WORKFLOW_PRESETS)[number]>('Morning')
+  const [warningAcknowledged, setWarningAcknowledged] = useState(false)
+  const blockedByMe = actionItems.filter((item) =>
+    /tyler|credential|approval|manual/i.test(`${item.label} ${item.detail}`),
+  )
+  const waitingOnOthers = actionItems.filter(
+    (item) => !blockedByMe.includes(item),
+  )
+  const recentEvents = [
+    `Overview refreshed ${formatWorkspaceFreshness(overviewUpdatedAt)}`,
+    `Sessions refreshed ${formatWorkspaceFreshness(sessionsFreshness)}`,
+    `${actionItems.length} action item${actionItems.length === 1 ? '' : 's'} ranked`,
+    dashboardStale ? 'Dashboard source stale' : 'Dashboard source fresh',
+    sessionsStale ? 'Session source stale' : 'Session source fresh',
+  ]
+
+  return (
+    <GlassCard
+      title="Dashboard Control Plane"
+      accentColor="var(--theme-accent)"
+    >
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.45fr)]">
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {DASHBOARD_WORKFLOW_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setWorkflowPreset(preset)}
+                className={cn(
+                  'min-h-9 rounded-lg border px-3 text-xs font-semibold',
+                  workflowPreset === preset
+                    ? 'border-[var(--theme-accent)] bg-[var(--theme-card2)] text-[var(--theme-accent)]'
+                    : 'border-[var(--theme-border)] text-muted',
+                )}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+          <details className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+              Details band
+            </summary>
+            <div className="mt-2 grid gap-2 text-xs text-muted md:grid-cols-2">
+              <span>
+                Cost guard: paid-call guard active; model fallback ready.
+              </span>
+              <span>Repair CTA: stale gateway or sessions open Terminal.</span>
+              <span>
+                Empty states: unavailable sources show recovery guidance.
+              </span>
+              <span>
+                Per-card controls: use Edit layout to hide or pin widgets per
+                workflow mode.
+              </span>
+            </div>
+          </details>
+          <div className="grid gap-2 md:grid-cols-2">
+            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+                Blocked by me
+              </div>
+              <div className="mt-1 text-sm font-semibold text-ink">
+                {blockedByMe.length} item{blockedByMe.length === 1 ? '' : 's'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+                Waiting on others
+              </div>
+              <div className="mt-1 text-sm font-semibold text-ink">
+                {waitingOnOthers.length} item
+                {waitingOnOthers.length === 1 ? '' : 's'}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onOpenTerminal}
+              className="min-h-9 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-ink"
+            >
+              Open source details
+            </button>
+            <button
+              type="button"
+              onClick={onOpenTasks}
+              className="min-h-9 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-ink"
+            >
+              Pin weekly action to Tasks
+            </button>
+            <button
+              type="button"
+              onClick={() => setWarningAcknowledged(true)}
+              className="min-h-9 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-ink"
+            >
+              {warningAcknowledged
+                ? 'Warnings acknowledged'
+                : 'Acknowledge warnings'}
+            </button>
+            <button
+              type="button"
+              onClick={onOpenOpsIntelligence}
+              className="min-h-9 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-ink"
+            >
+              What changed since last visit
+            </button>
+          </div>
+        </div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-5 gap-1 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-muted md:hidden">
+            <span>Needs Tyler</span>
+            <span>Next meeting</span>
+            <span>Urgent task</span>
+            <span>Stale source</span>
+            <span>Inbox</span>
+          </div>
+          <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Severity colors
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold">
+              <span className="rounded-full border border-red-300/40 px-2 py-1 text-red-500">
+                critical
+              </span>
+              <span className="rounded-full border border-amber-300/40 px-2 py-1 text-amber-500">
+                warning
+              </span>
+              <span className="rounded-full border border-cyan-300/40 px-2 py-1 text-cyan-500">
+                info
+              </span>
+              <span className="rounded-full border border-emerald-300/40 px-2 py-1 text-emerald-500">
+                healthy
+              </span>
+            </div>
+          </div>
+          <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Last five workspace events
+            </div>
+            <ol className="mt-2 space-y-1 text-xs text-muted">
+              {recentEvents.map((event) => (
+                <li key={event}>{event}</li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      </div>
+    </GlassCard>
+  )
+}
+
+function useDailyChecklist(storageKey: string, labels: Array<string>) {
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const key = `${storageKey}:${todayKey}`
+  const [checked, setChecked] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      return JSON.parse(window.localStorage.getItem(key) || '{}') as Record<
+        string,
+        boolean
+      >
+    } catch {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(key, JSON.stringify(checked))
+  }, [checked, key])
+
+  return {
+    checked,
+    toggle: (label: string) =>
+      setChecked((current) => ({ ...current, [label]: !current[label] })),
+    complete: labels.filter((label) => checked[label]).length,
+  }
+}
+
+function ChecklistRows({
+  storageKey,
+  labels,
+}: {
+  storageKey: string
+  labels: Array<string>
+}) {
+  const checklist = useDailyChecklist(storageKey, labels)
+  return (
+    <div className="mt-3 space-y-1.5">
+      {labels.map((label) => (
+        <label
+          key={label}
+          className="flex min-h-8 cursor-pointer items-center gap-2 rounded-md px-1 text-xs text-muted transition-colors hover:bg-[var(--theme-card2)]"
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(checklist.checked[label])}
+            onChange={() => checklist.toggle(label)}
+            className="size-3.5 accent-[var(--theme-accent)]"
+          />
+          <span className={cn(checklist.checked[label] && 'line-through')}>
+            {label}
+          </span>
+        </label>
+      ))}
+      <div className="pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+        {checklist.complete}/{labels.length} complete
+      </div>
+    </div>
+  )
+}
+
+function DashboardFlowRail({
+  actionItems,
+  latestSession,
+  overviewUpdatedAt,
+  sessionsFreshness,
+  dashboardStale,
+  sessionsStale,
+  healthScore,
+  statusBrief,
+  onOpenTasks,
+  onOpenTodayTasks,
+  onOpenWaitingTasks,
+  onOpenMeetings,
+  onOpenLily,
+  onOpenOperations,
+  onNewChat,
+  onResume,
+  onRefreshAll,
+}: {
+  actionItems: Array<ActionRequiredItem>
+  latestSession: SessionRowData | null
+  overviewUpdatedAt: string | null
+  sessionsFreshness: string | number | null
+  dashboardStale: boolean
+  sessionsStale: boolean
+  healthScore: number
+  statusBrief: string
+  onOpenTasks: () => void
+  onOpenTodayTasks: () => void
+  onOpenWaitingTasks: () => void
+  onOpenMeetings: () => void
+  onOpenLily: () => void
+  onOpenOperations: () => void
+  onNewChat: () => void
+  onResume: () => void
+  onRefreshAll: () => void
+}) {
+  const [statusCopied, setStatusCopied] = useState(false)
+  const highestPriority = actionItems[0] ?? null
+  const rankedActions = actionItems.slice(0, 3)
+  const needsTylerCount = actionItems.length
+  const latestTitle = latestSession?.title || 'No recent workstream'
+
+  async function copyStatusBrief() {
+    await navigator.clipboard.writeText(statusBrief)
+    setStatusCopied(true)
+    window.setTimeout(() => setStatusCopied(false), 1600)
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
+      <GlassCard
+        title="Start Here"
+        titleRight={
+          <span className="rounded-full border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            {needsTylerCount} need Tyler
+          </span>
+        }
+        accentColor={
+          needsTylerCount > 0 ? 'var(--theme-warning)' : 'var(--theme-success)'
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <div className="text-sm font-semibold text-ink">
+              {highestPriority?.label ?? 'No operator blockers'}
+            </div>
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">
+              {highestPriority?.detail ??
+                'Gateway, sessions, and LILY checks have no immediate action.'}
+            </p>
+          </div>
+          {rankedActions.length > 0 ? (
+            <ol className="space-y-1.5">
+              {rankedActions.map((item, index) => (
+                <li
+                  key={item.id}
+                  className="flex items-start gap-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-2.5 py-2 text-xs"
+                >
+                  <span className="shrink-0 font-semibold tabular-nums text-[var(--theme-accent)]">
+                    {index + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={item.onClick}
+                    className="min-w-0 text-left"
+                  >
+                    <span className="block line-clamp-1 font-medium text-ink">
+                      {item.label}
+                    </span>
+                    <span className="mt-0.5 block line-clamp-1 text-muted">
+                      {item.detail}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            <SecondaryAction
+              label={highestPriority?.action ?? 'Open Tasks'}
+              icon={CheckmarkCircle02Icon}
+              onClick={highestPriority?.onClick ?? onOpenTasks}
+              title="Open the highest priority task focus"
+            />
+            <SecondaryAction
+              label="Meetings"
+              icon={ConsoleIcon}
+              onClick={onOpenMeetings}
+              title="Open Meetings"
+            />
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard
+        title="Now"
+        titleRight={
+          <span
+            className={cn(
+              'rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]',
+              sessionsStale
+                ? 'border-amber-300/40 bg-amber-300/10 text-amber-500'
+                : 'border-cyan-300/30 bg-cyan-300/10 text-cyan-500',
+            )}
+          >
+            sessions {formatWorkspaceFreshness(sessionsFreshness)}
+          </span>
+        }
+        accentColor="var(--theme-accent)"
+      >
+        <div className="space-y-3">
+          <div>
+            <div className="line-clamp-1 text-sm font-semibold text-ink">
+              {latestTitle}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Resume the most recent workstream or start a clean chat.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            <SecondaryAction
+              label="Resume"
+              icon={BubbleChatAddIcon}
+              onClick={onResume}
+              disabled={!latestSession}
+              title="Resume latest workstream"
+            />
+            <SecondaryAction
+              label="New Chat"
+              icon={BubbleChatAddIcon}
+              onClick={onNewChat}
+              title="New Chat"
+            />
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard
+        title="Next"
+        titleRight={
+          <span
+            className={cn(
+              'rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]',
+              dashboardStale
+                ? 'border-amber-300/40 bg-amber-300/10 text-amber-500'
+                : 'border-emerald-300/30 bg-emerald-300/10 text-emerald-500',
+            )}
+          >
+            overview {formatWorkspaceFreshness(overviewUpdatedAt)}
+          </span>
+        }
+        accentColor="var(--theme-success)"
+      >
+        <div className="space-y-3">
+          <div>
+            <div className="text-sm font-semibold text-ink">
+              Verify and close loops
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Refresh live evidence before acting on stale operational data.
+            </p>
+            <div className="mt-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+                Health score
+              </div>
+              <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
+                {healthScore}/100
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            <SecondaryAction
+              label="Refresh All"
+              icon={ConsoleIcon}
+              onClick={onRefreshAll}
+              title="Refresh All"
+            />
+            <SecondaryAction
+              label="Open Tasks"
+              icon={CheckmarkCircle02Icon}
+              onClick={onOpenTodayTasks}
+              title="Open Tasks"
+            />
+            <SecondaryAction
+              label={statusCopied ? 'Copied brief' : 'Copy status brief'}
+              icon={Copy01Icon}
+              onClick={() => void copyStatusBrief()}
+              title="Copy status brief"
+            />
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard title="Daily Loops" accentColor="var(--theme-warning)">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Morning startup
+            </div>
+            <ChecklistRows
+              storageKey="dashboard.morningChecklist"
+              labels={[
+                'Check blockers',
+                'Review meetings',
+                'Pick first workstream',
+              ]}
+            />
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              End of day
+            </div>
+            <ChecklistRows
+              storageKey="dashboard.closeoutChecklist"
+              labels={[
+                'Capture loose tasks',
+                'Review waiting items',
+                'Set tomorrow',
+              ]}
+            />
+            <button
+              type="button"
+              onClick={onOpenWaitingTasks}
+              className="mt-2 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--theme-accent)] transition hover:text-ink"
+            >
+              Open waiting list
+            </button>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <SecondaryAction
+                label="LILY"
+                icon={BubbleChatAddIcon}
+                onClick={onOpenLily}
+                title="Open LILY"
+              />
+              <SecondaryAction
+                label="Operations"
+                icon={ConsoleIcon}
+                onClick={onOpenOperations}
+                title="Open Operations"
+              />
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+    </div>
   )
 }
 
@@ -616,17 +1486,21 @@ function SecondaryAction({
   icon,
   onClick,
   disabled,
+  title,
 }: {
   label: string
   icon: HugeIcon
   onClick: () => void
   disabled?: boolean
+  title?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title ?? label}
+      aria-label={title ?? label}
       className="group inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.05em] transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] hover:scale-[1.015] hover:bg-[var(--theme-card)]/70 hover:text-[var(--theme-text)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
       style={{
         borderColor: 'var(--theme-border)',
@@ -952,18 +1826,51 @@ export function DashboardScreen() {
     staleTime: 5_000,
     refetchInterval: 30_000,
   })
+  const lilyQuery = useQuery<LilyDashboardConfig>({
+    queryKey: ['dashboard', 'lily-config'],
+    queryFn: async () => {
+      const res = await fetch('/api/lily/config')
+      const payload = (await res
+        .json()
+        .catch(() => ({}))) as LilyDashboardConfig
+      if (!res.ok || payload.ok === false) {
+        throw new Error(payload.error || `lily config ${res.status}`)
+      }
+      return payload
+    },
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: 1,
+  })
+  const phoneCockpitQuery = useQuery<PhoneCockpitSnapshot>({
+    queryKey: ['dashboard', 'phone-cockpit'],
+    queryFn: async () => {
+      const res = await fetch(apiPath('/api/phone-cockpit'), {
+        cache: 'no-store',
+      })
+      if (!res.ok) throw new Error(`phone cockpit ${res.status}`)
+      return (await res.json()) as PhoneCockpitSnapshot
+    },
+    staleTime: 15_000,
+    refetchInterval: 45_000,
+    retry: 1,
+  })
   const overview = overviewQuery.data ?? null
+  const lilyConfig = lilyQuery.data ?? null
+  const phoneCockpit = phoneCockpitQuery.data ?? null
   const overviewUpdatedAt = overview?.status?.updatedAt ?? null
   const dashboardStale =
     !overviewQuery.isFetching &&
-    (overviewQuery.isError || isStale(overviewUpdatedAt, 120_000))
+    (overviewQuery.isError ||
+      isWorkspaceSourceStale(overviewUpdatedAt, 120_000))
   const sessionsFreshness =
     sessionRows[0]?.updatedAt ?? sessionRows[0]?.startedAt ?? null
   const sessionsStale =
     !sessionsQuery.isFetching &&
     (sessionsQuery.isError ||
       sessionsUnavailable ||
-      (sessionRows.length > 0 && isStale(sessionsFreshness, 15 * 60_000)))
+      (sessionRows.length > 0 &&
+        isWorkspaceSourceStale(sessionsFreshness, 15 * 60_000)))
   const actionRequiredItems = useMemo<Array<ActionRequiredItem>>(() => {
     const items: Array<ActionRequiredItem> = []
     if (overviewQuery.isError) {
@@ -975,12 +1882,12 @@ export function DashboardScreen() {
         action: 'Retry overview',
         onClick: () => void overviewQuery.refetch(),
       })
-    } else if (isStale(overviewUpdatedAt, 120_000)) {
+    } else if (isWorkspaceSourceStale(overviewUpdatedAt, 120_000)) {
       items.push({
         id: 'overview-stale',
         severity: 'warn',
         label: 'Gateway data stale',
-        detail: `Last successful gateway probe was ${formatFreshness(overviewUpdatedAt)}.`,
+        detail: `Last successful gateway probe was ${formatWorkspaceFreshness(overviewUpdatedAt)}.`,
         action: 'Refresh gateway',
         onClick: () => void overviewQuery.refetch(),
       })
@@ -998,13 +1905,13 @@ export function DashboardScreen() {
       })
     } else if (
       sessionRows.length > 0 &&
-      isStale(sessionsFreshness, 15 * 60_000)
+      isWorkspaceSourceStale(sessionsFreshness, 15 * 60_000)
     ) {
       items.push({
         id: 'sessions-stale',
         severity: 'warn',
         label: 'Session ledger stale',
-        detail: `Newest session update was ${formatFreshness(sessionsFreshness)}.`,
+        detail: `Newest session update was ${formatWorkspaceFreshness(sessionsFreshness)}.`,
         action: 'Refresh sessions',
         onClick: () => void sessionsQuery.refetch(),
       })
@@ -1035,12 +1942,39 @@ export function DashboardScreen() {
         },
       })
     }
+    if (lilyQuery.isError) {
+      items.push({
+        id: 'lily-config-error',
+        severity: 'warn',
+        label: 'LILY config failed',
+        detail: 'Dashboard could not verify LILY voice readiness.',
+        action: 'Retry LILY',
+        onClick: () => void lilyQuery.refetch(),
+      })
+    } else if (
+      lilyConfig?.voiceWorker?.status &&
+      lilyConfig.voiceWorker.status !== 'online'
+    ) {
+      items.push({
+        id: 'lily-worker-not-online',
+        severity: 'warn',
+        label: 'LILY worker not online',
+        detail:
+          lilyConfig.voiceWorker.detail ||
+          'Voice worker is not reporting online readiness.',
+        action: 'Open LILY',
+        onClick: () => navigate({ to: '/lily', search: {} }),
+      })
+    }
     return items.sort((a, b) => {
       const rank = { error: 0, warn: 1, info: 2 }
       return rank[a.severity] - rank[b.severity]
     })
   }, [
     navigate,
+    lilyConfig?.voiceWorker?.detail,
+    lilyConfig?.voiceWorker?.status,
+    lilyQuery,
     overview?.incidents,
     overview?.modelInfo,
     overviewQuery,
@@ -1052,6 +1986,71 @@ export function DashboardScreen() {
     sessionsUnavailableMessage,
   ])
 
+  const weeklyUtilizationReport = useMemo(
+    () =>
+      buildWeeklyWorkspaceUtilizationReport({
+        generatedAt: new Date(),
+        sessions: sessionRows,
+        overviewUpdatedAt,
+        activeModel:
+          overview?.modelInfo?.model ?? overview?.modelInfo?.provider ?? null,
+        gatewayStatus: overview?.status?.gatewayState ?? null,
+        phoneSignalCount:
+          (phoneCockpit?.attention.length ?? 0) +
+          (phoneCockpit?.meetingPrep.openActionItems.length ?? 0) +
+          (phoneCockpit?.inbox.focused.length ?? 0) +
+          (phoneCockpit?.tasks.urgent ?? 0),
+        actionItems: actionRequiredItems.map((item) => ({
+          label: item.label,
+          detail: item.detail,
+        })),
+      }),
+    [
+      actionRequiredItems,
+      overview?.modelInfo?.model,
+      overview?.modelInfo?.provider,
+      overview?.status?.gatewayState,
+      overviewUpdatedAt,
+      phoneCockpit?.attention.length,
+      phoneCockpit?.inbox.focused.length,
+      phoneCockpit?.meetingPrep.openActionItems.length,
+      phoneCockpit?.tasks.urgent,
+      sessionRows,
+    ],
+  )
+
+  const degradedSourceCount = Object.values(phoneCockpit?.sources ?? {}).filter(
+    (source) => !source.ok,
+  ).length
+  const dashboardHealthScore = calculateDashboardHealthScore({
+    actionItemCount: actionRequiredItems.length,
+    degradedSourceCount,
+    dashboardStale,
+    sessionsStale,
+    sessionsUnavailable,
+    lilyWorkerOnline: lilyConfig?.voiceWorker?.status === 'online',
+  })
+  const dashboardStatusBrief = buildDashboardStatusBrief({
+    healthScore: dashboardHealthScore,
+    topAction: actionRequiredItems[0]?.label ?? 'No operator blockers',
+    latestSessionTitle: sessionRows[0]?.title ?? 'No recent workstream',
+    sourceHealth:
+      degradedSourceCount === 0
+        ? 'all daily sources reporting'
+        : `${degradedSourceCount} daily source${degradedSourceCount === 1 ? '' : 's'} degraded`,
+    overviewFreshness: formatWorkspaceFreshness(overviewUpdatedAt),
+    sessionsFreshness: formatWorkspaceFreshness(sessionsFreshness),
+  })
+  const dashboardNextAction = useMemo(
+    () =>
+      buildDashboardNextAction({
+        actionItems: actionRequiredItems,
+        dashboardStale,
+        sessionsStale,
+        latestSessionTitle: sessionRows[0]?.title ?? null,
+      }),
+    [actionRequiredItems, dashboardStale, sessionRows, sessionsStale],
+  )
   const palette = useDashboardPalette()
 
   const updateSettings = useSettingsStore((state) => state.updateSettings)
@@ -1060,6 +2059,37 @@ export function DashboardScreen() {
     const dt = document.documentElement.getAttribute('data-theme') || ''
     return !dt.endsWith('-light')
   })
+
+  const refreshDashboardSources = () => {
+    void overviewQuery.refetch()
+    void sessionsQuery.refetch()
+    void lilyQuery.refetch()
+    void phoneCockpitQuery.refetch()
+  }
+
+  const runDashboardNextAction = () => {
+    const topAction = actionRequiredItems[0]
+    if (topAction) {
+      topAction.onClick()
+      return
+    }
+    if (dashboardStale || sessionsStale) {
+      refreshDashboardSources()
+      return
+    }
+    const key = sessionRows[0]?.key
+    if (key) {
+      navigate({
+        to: '/chat/$sessionKey',
+        params: { sessionKey: key },
+      })
+      return
+    }
+    navigate({
+      to: '/chat/$sessionKey',
+      params: { sessionKey: 'new' },
+    })
+  }
 
   return (
     <div className="min-h-full">
@@ -1183,26 +2213,7 @@ export function DashboardScreen() {
           {/* Action row: hierarchy per Hermes Agent review.
            New Chat is primary (full button + accent), Terminal +
            Skills are secondary, Settings collapses to icon-only. */}
-<<<<<<< HEAD
-        <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end lg:max-w-xl">
-          <button
-            type="button"
-            onClick={() =>
-              navigate({
-                to: '/chat/$sessionKey',
-                params: { sessionKey: 'new' },
-              })
-            }
-            className="group relative inline-flex items-center gap-2 overflow-hidden rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.05em] transition-all hover:scale-[1.02] active:scale-[0.99] sm:px-3.5 sm:py-2 sm:text-sm"
-            style={{
-              background: `linear-gradient(135deg, ${palette.accent}, ${palette.accentSecondary})`,
-              color: 'var(--theme-on-accent, white)',
-              boxShadow: `0 6px 18px -8px ${palette.accent}aa, inset 0 1px 0 0 rgba(255,255,255,0.18)`,
-            }}
-          >
-=======
           <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:max-w-xl">
->>>>>>> c2813603 (chore: snapshot workspace mobile and voice updates)
             <span
               className={cn(
                 'inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]',
@@ -1210,11 +2221,11 @@ export function DashboardScreen() {
                   ? 'border-amber-300/40 bg-amber-300/10 text-amber-500'
                   : 'border-emerald-300/30 bg-emerald-300/10 text-emerald-500',
               )}
-              title={`Overview refreshed ${formatFreshness(overviewUpdatedAt)}`}
+              title={`Overview refreshed ${formatWorkspaceFreshness(overviewUpdatedAt)}`}
             >
               {dashboardStale
-                ? `Stale ${formatFreshness(overviewUpdatedAt)}`
-                : `Fresh ${formatFreshness(overviewUpdatedAt)}`}
+                ? `Stale ${formatWorkspaceFreshness(overviewUpdatedAt)}`
+                : `Fresh ${formatWorkspaceFreshness(overviewUpdatedAt)}`}
             </span>
             <span
               className={cn(
@@ -1223,7 +2234,7 @@ export function DashboardScreen() {
                   ? 'border-amber-300/40 bg-amber-300/10 text-amber-500'
                   : 'border-cyan-300/30 bg-cyan-300/10 text-cyan-500',
               )}
-              title={`Sessions refreshed ${formatFreshness(sessionsFreshness)}`}
+              title={`Sessions refreshed ${formatWorkspaceFreshness(sessionsFreshness)}`}
             >
               Sessions {sessionsStale ? 'stale' : 'live'}
             </span>
@@ -1336,7 +2347,120 @@ export function DashboardScreen() {
           platforms={overview?.platforms ?? []}
         />
 
+        {dashboardStale ? (
+          <section className="rounded-xl border border-amber-300/35 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-amber-50">
+                  Gateway data needs refresh
+                </h2>
+                <p className="mt-1 text-xs text-amber-100/80">
+                  Overview source last reported{' '}
+                  {formatWorkspaceFreshness(overviewUpdatedAt)}. Refresh live
+                  evidence before acting on stale operational data.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate({ to: '/terminal' })}
+                className="min-h-10 rounded-lg border border-amber-200/40 px-3 text-xs font-semibold uppercase tracking-[0.12em] text-amber-50 hover:bg-amber-200/10"
+              >
+                Open terminal
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+          Dashboard action queue
+        </h2>
+
+        <DashboardCommandStrip
+          nextAction={dashboardNextAction}
+          hiddenCount={layout.counts.hidden}
+          onRunNext={runDashboardNextAction}
+          onEditHiddenWidgets={() => layout.setEditMode(true)}
+        />
+
+        <DashboardOperationsBand
+          actionItems={actionRequiredItems}
+          dashboardStale={dashboardStale}
+          sessionsStale={sessionsStale}
+          overviewUpdatedAt={overviewUpdatedAt}
+          sessionsFreshness={sessionsFreshness}
+          onOpenTasks={() =>
+            navigate({ to: '/tasks', search: { filter: 'today' } })
+          }
+          onOpenTerminal={() => navigate({ to: '/terminal' })}
+          onOpenOpsIntelligence={() => navigate({ to: '/ops-intelligence' })}
+        />
+
+        <DashboardFlowRail
+          actionItems={actionRequiredItems}
+          latestSession={sessionRows[0] ?? null}
+          overviewUpdatedAt={overviewUpdatedAt}
+          sessionsFreshness={sessionsFreshness}
+          dashboardStale={dashboardStale}
+          sessionsStale={sessionsStale}
+          healthScore={dashboardHealthScore}
+          statusBrief={dashboardStatusBrief}
+          onOpenTasks={() =>
+            navigate({ to: '/tasks', search: { filter: 'active' } })
+          }
+          onOpenTodayTasks={() =>
+            navigate({ to: '/tasks', search: { filter: 'today' } })
+          }
+          onOpenWaitingTasks={() =>
+            navigate({ to: '/tasks', search: { filter: 'waiting' } })
+          }
+          onOpenMeetings={() => navigate({ to: '/meetings' })}
+          onOpenLily={() => navigate({ to: '/lily', search: {} })}
+          onOpenOperations={() => navigate({ to: '/operations' })}
+          onNewChat={() =>
+            navigate({
+              to: '/chat/$sessionKey',
+              params: { sessionKey: 'new' },
+            })
+          }
+          onResume={() => {
+            const key = sessionRows[0]?.key
+            if (key) {
+              navigate({
+                to: '/chat/$sessionKey',
+                params: { sessionKey: key },
+              })
+            }
+          }}
+          onRefreshAll={() => {
+            void overviewQuery.refetch()
+            void sessionsQuery.refetch()
+            void lilyQuery.refetch()
+            void phoneCockpitQuery.refetch()
+          }}
+        />
+
         <ActionRequiredRail items={actionRequiredItems} />
+
+        <DailySignalsCard
+          snapshot={phoneCockpit}
+          loading={phoneCockpitQuery.isFetching}
+          error={phoneCockpitQuery.isError}
+          onOpenPhone={() =>
+            navigate({ to: '/phone', search: { capture: 'note' } })
+          }
+          onOpenMeetings={() => navigate({ to: '/meetings' })}
+          onRefresh={() => void phoneCockpitQuery.refetch()}
+        />
+
+        <WeeklyUtilizationReportCard report={weeklyUtilizationReport} />
+
+        <LilyReadinessCard
+          config={lilyConfig}
+          loading={lilyQuery.isFetching}
+          error={lilyQuery.isError}
+          onOpen={() => navigate({ to: '/lily', search: {} })}
+          onRefresh={() => void lilyQuery.refetch()}
+        />
 
         {/* ── Hero Metrics: 3 analytics tiles + Active Model KPI in slot 4 ── */}
         <HeroMetrics

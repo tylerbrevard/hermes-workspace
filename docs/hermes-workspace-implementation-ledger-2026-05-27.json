@@ -1,0 +1,522 @@
+{
+  "source": "docs/hermes-workspace-look-code-review-2026-05-27.md",
+  "updatedAt": "2026-05-27T16:22:11-04:00",
+  "summary": {
+    "reviewPages": 23,
+    "reviewRecommendations": 460,
+    "crossPageRecommendations": 10,
+    "implementedItems": 322,
+    "remainingEstimatedItems": 148
+  },
+  "implemented": [
+    {
+      "scope": "cross-page",
+      "items": [
+        "Quiet update notice replaces intrusive first-viewport update toast.",
+        "Actual 460-item look/code review is wired into the in-app improvement drawer.",
+        "Sequential workspace smoke command added to avoid visual-smoke browser contention.",
+        "Visual smoke manifest now includes screenshot labels.",
+        "Shared route error and loading components added.",
+        "Typed localStorage helper added with schema validation and corrupted-entry recovery.",
+        "Route-to-owner registry added with dependencies, smoke text, and escalation path.",
+        "Route registry is included in diagnostic bundles.",
+        "Improvement drawer shows owner, dependencies, smoke text, and escalation path.",
+        "Hidden page titles added from the shell for routes that lacked H1 coverage.",
+        "Command palette has a first-class Actions group for task, note, draft, and agent-job workflows.",
+        "Command palette quick actions have desktop keyboard shortcuts with editable-field guards.",
+        "Shared source freshness formatter added for Dashboard and Phone Cockpit.",
+        "Visual smoke supports route-specific visible selector assertions.",
+        "Command palette includes direct actions for common Settings sections.",
+        "Visual smoke retries transient runtime navigation and stale-asset recovery redirects.",
+        "Smoke commands preflight LaunchAgent/client asset synchronization before route and visual checks.",
+        "Route smoke retries transient navigation timeouts with a fresh page before failing a route.",
+        "Route smoke auth now backs off on local 429 rate limits instead of running unauthenticated page checks."
+      ]
+    },
+    {
+      "scope": "dashboard",
+      "items": [
+        "Update notice no longer covers the dashboard header.",
+        "Gateway stale state promoted to a visible incident/recovery banner.",
+        "Visible Dashboard action queue heading added.",
+        "Stale overview copy now points to live-evidence refresh before acting.",
+        "Dashboard freshness and stale checks now use the shared workspace freshness utility.",
+        "Dashboard now computes a single ranked next action from blockers, stale sources, or the current workstream.",
+        "Dashboard action queue now has a compact command strip for running the next action.",
+        "Dashboard command strip now exposes hidden-widget recovery without requiring users to discover layout edit mode.",
+        "Dashboard command strip can copy a safe diagnostics bundle with health, stale state, freshness, hidden widgets, degraded sources, and severity map.",
+        "Dashboard action cards now include inline severity chips for faster scanning.",
+        "Dashboard diagnostics explicitly exclude secrets and tokens.",
+        "Dashboard command-center scoring, status brief, next-action ranking, diagnostics, and workflow presets now live in a route-private pure utility module.",
+        "Dashboard command strip now lives in a route-private component module instead of the main route file.",
+        "Dashboard helper tests now import pure command-center logic directly instead of importing the full route component.",
+        "Dashboard route file is reduced from 2876 to 2633 lines while preserving the current command-center behavior."
+      ]
+    },
+    {
+      "scope": "phone",
+      "items": [
+        "Update notice no longer covers the urgent-task headline.",
+        "Duplicate hidden H1 removed.",
+        "Loading state no longer becomes the H1 text.",
+        "Additional bottom safe-area spacing protects pinned actions from bottom navigation.",
+        "Queued captures now use typed storage validation.",
+        "Collapsed card preferences now use typed storage validation.",
+        "Pinned card preferences now use typed storage validation.",
+        "Pin and collapse controls are icon-only touch targets with accessible labels.",
+        "Phone freshness labels now use the shared workspace freshness utility.",
+        "Phone tabs, card preference helpers, mode readouts, at-a-glance summaries, signal rail, daily loops, quick logs, freshness notices, and queue readouts now live in a route-private helper module.",
+        "Phone helper tests import the pure helper module directly instead of the full route component.",
+        "Phone route file is reduced from 3017 to 2335 lines while preserving current daily-mode behavior."
+      ]
+    },
+    {
+      "scope": "chat",
+      "items": [
+        "Chat receives a hidden route-level H1 from the shell.",
+        "Update notice no longer competes with the chat status strip.",
+        "Chat workflow panel now has a first-run command rail for task capture, knowledge note, draft reply, and agent-job starts.",
+        "Chat first-run command rail hides automatically after a successful user or assistant message exists.",
+        "Chat resume-latest action now uses an explicit context summary explaining the restored session shell, message history, model context, and recovery state.",
+        "Chat workflow panel now exposes a Copy diagnostics action.",
+        "Chat route diagnostics include active session, friendly id, model, provider, connection state, message count, waiting/sending state, recovery state, and risky mutation gate without secrets.",
+        "Chat risky mutation gate is backed by the same flow-risk helper used by the workflow panel.",
+        "Chat diagnostics and command rail helpers have focused coverage for safe export, resume context, and first-run visibility.",
+        "Chat workflow controls keep command shortcuts in the workflow panel instead of adding more inline main-surface guidance.",
+        "Chat timeline classification, flow-risk detection, workflow summary, route diagnostics, resume-latest context, and command rail now live in a route-private workflow module.",
+        "Chat helper tests now import pure workflow logic directly instead of loading the full chat route for summary coverage.",
+        "Chat route file is reduced from 3504 to 3215 lines while preserving current workflow panel, diagnostics, and first-run command behavior."
+      ]
+    },
+    {
+      "scope": "playground",
+      "items": [
+        "HermesWorld receives a hidden route-level H1 from the shell."
+      ]
+    },
+    {
+      "scope": "files",
+      "items": [
+        "Files receives a hidden route-level H1 from the shell.",
+        "Files route now uses shared route error fallback instead of page reload fallback.",
+        "Files route now uses shared loading state.",
+        "Files now exposes a visible operation-status strip for refresh, download, rename, delete, folder creation, and diagnostics copy state.",
+        "Files safe diagnostics bundle includes root, current path, selected file metadata, filter state, last API error, counts, and health without file contents or secrets.",
+        "Files UI path-safety helpers block outside-workspace paths before rename, delete, download, or save operations proceed.",
+        "Files context-menu actions now expose disabled states and reasons for protected runtime/config files and unsafe paths.",
+        "Files now has a pinned-roots area for common workspace folders such as scripts, docs, routes, screens, and server.",
+        "Files now includes an Agent touched filter for agent, swarm, jobs, conductor, Hermes, and Codex file workflows.",
+        "Files file-list search now highlights matching filename text.",
+        "Files breadcrumb header remains sticky inside the browser panel while browsing deep folders.",
+        "Files live DOM check confirms pinned roots, diagnostics copy, agent filter, operation status, and no desktop horizontal overflow.",
+        "Files data contracts, path-safety helpers, filtering, health summaries, pinned roots, operation status, and safe diagnostics now live in a route-private workflow module.",
+        "Files helper tests now import pure workflow logic directly instead of loading the full route component for path and diagnostics coverage.",
+        "Files route file is reduced from 2495 to 1939 lines while preserving the current tree, preview, edit, and diagnostics behavior.",
+        "Files remote workspace mode copy is asserted through exported workflow constants while the route still blocks local folder picker regressions."
+      ]
+    },
+    {
+      "scope": "terminal",
+      "items": [
+        "Terminal receives a hidden route-level H1 from the shell.",
+        "Terminal route now uses shared route error fallback instead of page reload fallback.",
+        "Hidden terminal mounts no longer open PTY streams until the terminal route is visible.",
+        "Terminal now classifies active session state as connected, reconnecting, detached, failed, or read-only.",
+        "Terminal toolbar exposes a safe diagnostics copy action with session id, shell, cwd, transport, state, and close reason without secrets.",
+        "Terminal toolbar exposes Copy output with secret redaction and an explicit 8000-character truncation marker.",
+        "Terminal dangerous command detection is shared by paste confirmation and helper tests.",
+        "Terminal status strip now keeps current working directory, session state, and diagnostics in the first viewport.",
+        "Terminal copy-output and diagnostics controls are visible in desktop and mobile route DOM checks.",
+        "Terminal diagnostics helper keeps read-only and last-close fields ready for future PTY recovery work."
+      ]
+    },
+    {
+      "scope": "75-tracker",
+      "items": [
+        "Daily habit state now uses typed storage validation.",
+        "History state now uses typed storage validation.",
+        "Existing helper tests cover habit rules, summaries, heatmap, and share reports.",
+        "75 tracker now has a quick mode that hides the embedded full tracker for mobile-first toggling.",
+        "75 tracker now shows streak-risk messaging based on remaining work and time of day.",
+        "75 tracker now stores per-habit recovery notes for incomplete items.",
+        "75 tracker reset requires explicit browser confirmation before clearing today.",
+        "75 tracker habit checkboxes and heatmap cells now expose accessible labels.",
+        "75 tracker route smoke now covers hard-mode quick state.",
+        "75 tracker custom habit templates now persist as a typed template list with add-template support.",
+        "75 tracker now has a modified/travel day setting that adjusts water and workout rules.",
+        "75 tracker weekly trend legend explains statuses without relying on color alone.",
+        "75 tracker first viewport includes a compact mobile summary with complete count, next habit, and streak risk."
+      ]
+    },
+    {
+      "scope": "conductor",
+      "items": [
+        "Conductor receives a hidden route-level H1 from the shell.",
+        "Conductor first viewport now has a dominant quick mission launch surface with advanced controls kept behind the modal.",
+        "Conductor mission launch now shows a live readiness checklist for goal, cwd, model, tools, and approvals.",
+        "Conductor readiness chips use blocked, warning, and ready severity styling that matches the workspace status language.",
+        "Conductor now shows a CWD locked indicator when the mission scope has a project directory.",
+        "Conductor route diagnostics can be copied as a safe JSON bundle with phase, session key, stream state, worker counts, cwd, and error state.",
+        "Conductor portable-plan copy now previews goal, constraints, verification, handoff, readiness, and explicitly excludes secrets.",
+        "Conductor mission drafts now persist through versioned launch-draft storage with legacy goal-draft fallback.",
+        "Conductor modal readiness summary shares the same helper logic as the first-viewport launch flow."
+      ]
+    },
+    {
+      "scope": "operations",
+      "items": [
+        "Operations route now uses shared route error fallback instead of page reload fallback.",
+        "Operations route now uses shared loading state.",
+        "Operations first viewport now computes a single primary action from fleet health.",
+        "Operations fleet filters now include a first-class Needs Tyler view.",
+        "Operations health rows now support keyboard up/down navigation.",
+        "Operations route smoke now verifies opening the new-agent modal on desktop and mobile."
+      ]
+    },
+    {
+      "scope": "ops-intelligence",
+      "items": [
+        "Ops Intelligence now classifies snapshot freshness as fresh, stale, or unknown.",
+        "Ops Intelligence findings now expose confidence labels: observed, inferred, stale, or needs live verification.",
+        "Ops Intelligence first viewport now shows source, generated time, and snapshot freshness chips.",
+        "Ops Intelligence now has a mobile at-a-glance panel for risks, blockers, and next action.",
+        "Changes Since Last Update is now collapsible after review.",
+        "Ops Intelligence remediation links now route to the likely fix page instead of always Tasks.",
+        "Ops Intelligence now includes a compact owner / system / risk / action table."
+      ]
+    },
+    {
+      "scope": "barry",
+      "items": [
+        "Barry first viewport now states its role as 1-on-1 prep and follow-through.",
+        "Barry first viewport now exposes the last interaction timestamp.",
+        "Barry primary CTA now chooses schedule, prep, follow-up, or copy-brief behavior from meeting state.",
+        "Barry mobile view now has a compact daily card with next meeting, prep, actions, and freshness.",
+        "Barry meeting cards now support ArrowUp and ArrowDown selection."
+      ]
+    },
+    {
+      "scope": "swarm",
+      "items": [
+        "Swarm route now uses shared route error fallback instead of page reload fallback.",
+        "Swarm route now uses shared loading state.",
+        "Swarm2 route now uses shared route error fallback instead of page reload fallback.",
+        "Swarm2 route now uses shared loading state.",
+        "Swarm2 surface contracts, runtime data contracts, mission queue builders, and operator-state helpers now live in a route-private workflow module.",
+        "Swarm2 helper tests now import pure workflow logic directly instead of loading the full route for operator-state coverage.",
+        "Swarm2 route file is reduced from 2657 to 2283 lines while preserving the current cards, runtime, reports, and router behavior.",
+        "Swarm2 shared text compaction, label cleanup, and relative-time helpers are reusable for future worker panels."
+      ]
+    },
+    {
+      "scope": "memory",
+      "items": [
+        "Memory receives a hidden route-level H1 from the shell.",
+        "Memory route now uses shared loading state.",
+        "Memory search panel now exposes source filters for all sources, Codex, Hermes, rollouts, skills, and workspace docs.",
+        "Memory file filtering now combines active/recent/stale/all tabs with filename search and source filters.",
+        "Memory diagnostics can be copied as a safe JSON bundle with query, source filter, selected path, API status, counts, stale count, and newest file without secrets.",
+        "Memory selected-file actions now include Use in current task with provenance, freshness, path, and bounded content context.",
+        "Memory source classification distinguishes rollout summaries, skills, Codex, Hermes, workspace docs, and generic memory.",
+        "Memory task context copy explicitly warns to verify drift-prone facts before using memory in the current task.",
+        "Memory first viewport keeps search dominant while exposing provenance, stale warning, source filters, diagnostics, and current-task handoff."
+      ]
+    },
+    {
+      "scope": "skills",
+      "items": [
+        "Skills cards now make installed, available, and recently used skills visually distinct.",
+        "Skills installed sort now supports a Last used mode backed by dashboard usage data.",
+        "Skills cards now show search-result snippets explaining why a skill matched.",
+        "Skills mutation buttons now expose install, remove, and toggle risk labels.",
+        "Skills route links now include MCP when a skill references MCP, tools, or servers.",
+        "Pinned favorite skills now surface as a first-viewport favorites section."
+      ]
+    },
+    {
+      "scope": "mcp",
+      "items": [
+        "MCP first viewport now has All, Recently failed, Stale, and Auth attention filters.",
+        "MCP mobile view now shows compact server health cards with primary action and last error.",
+        "MCP now includes a capability matrix for tools, resources, prompts, auth, risk, action, and Skills handoff.",
+        "MCP servers now route to likely Skills searches based on server/tool names.",
+        "MCP helper coverage now verifies capability rows, primary actions, and Skills handoff routes."
+      ]
+    },
+    {
+      "scope": "profiles",
+      "items": [
+        "Profiles first viewport now states that profiles affect Chat, LILY, agents, tools, routing, jobs, and workspace behavior.",
+        "Profiles now has an active-profile banner with quick links to Chat, Operations, Conductor, Jobs, and Settings when relevant.",
+        "Profiles mobile view now has compact active-state cards with top capabilities and quick activate controls.",
+        "Profile cards now expose validation badges for provider, model, tools, and routing with route links.",
+        "Profile cards now show used-by references for Chat, Operations, Conductor, Jobs, and Settings when validation fails.",
+        "Profiles now blocks deleting active and default profiles before the API call.",
+        "Profile details now show a description diff preview before saving edits.",
+        "Profile cards now include a copy-for-experiment action that opens the create flow from the selected profile."
+      ]
+    },
+    {
+      "scope": "meetings",
+      "items": [
+        "Meetings review filters now include Today, This week, Missing notes, and Needs follow-up views.",
+        "Meetings local search now matches titles, attendees, action items, issues, decisions, status, owners, and priorities.",
+        "Meetings first viewport now exposes route diagnostics for selected id, detail loading state, and action state.",
+        "Meetings now shows prep-window CTAs when the next meeting starts within 24 hours.",
+        "Meetings mobile view now has an at-a-glance agenda with next meeting, prep, join, and open follow-ups.",
+        "Meeting cards now show attendee and owner chips for faster scanning.",
+        "Meetings To Do handoff now includes unresolved selected-meeting actions and dedupes carry-forward actions.",
+        "Meeting brief copy now supports attendee redaction by default.",
+        "Two-week meeting load now includes trend interpretation guidance.",
+        "Meetings workflow helpers and meeting data contracts now live in a route-private pure utility module.",
+        "Meetings helper tests now import pure workflow logic directly instead of loading the full route component.",
+        "Meetings route file is reduced from 2426 to 2057 lines while preserving current agenda, prep, filtering, and handoff behavior.",
+        "Meetings participant, unresolved-status, severity, filter, search, brief, and trend helpers are reusable for future panels."
+      ]
+    },
+    {
+      "scope": "presence",
+      "items": [
+        "Presence now has a single primary sync action based on auth, drift, stale devices, or healthy state.",
+        "Presence mobile view now has a compact glance card with availability, current activity or meeting, trust, sync, and copy actions.",
+        "Presence now exposes route diagnostics for Teams auth, last sync, and source errors.",
+        "Presence status can be copied as a short shareable availability summary.",
+        "Presence default mode persists across sessions for Graph-first, manual-first, or device-first operation.",
+        "Manual sync actions now include do-not-disturb quick presets for 30, 60, and 120 minutes.",
+        "Presence keyboard shortcuts now support sync and focus-state actions outside editable controls.",
+        "Presence primary action and mobile action show optimistic Syncing state while actions run.",
+        "Presence helper coverage now verifies primary actions, share text, diagnostics, default-mode normalization, and DND payloads."
+      ]
+    },
+    {
+      "scope": "it-ops",
+      "items": [
+        "IT Ops now has a mobile glance card for SLA and approval blockers.",
+        "IT Ops ticket filters now include Needs Tyler approval, SLA risk, Unassigned, and Touched by Tyler modes.",
+        "IT Ops tickets now show SLA risk chips, owner chips, native approval versus workspace-derived labels, and last-touched markers.",
+        "IT Ops ticket cards can deep-link to native ConnectWise tickets when the source provides a URL.",
+        "IT Ops selected ticket detail now includes Copy client update and Copy internal brief templates.",
+        "IT Ops diagnostics can be copied as a safe JSON bundle with source timestamps, errors, ticket stats, native PSA boundary, and action queue.",
+        "IT Ops helper coverage now verifies native ticket URLs, SLA labels, approval boundaries, copy templates, and safe diagnostics.",
+        "IT Ops action queue and header now keep native ConnectWise approval/workflow guidance visible in diagnostics-oriented copy.",
+        "IT Ops ticket list now supports ArrowUp/ArrowDown and j/k keyboard navigation outside editable controls.",
+        "IT Ops source freshness and last pull remain visible near the title with ConnectWise degraded and zero-ticket distinctions.",
+        "IT Ops mobile and desktop route smoke pass after queue, copy, filter, and diagnostics changes.",
+        "IT Ops keeps non-native Tasks handoff out of the PSA queue until a concrete native-safe follow-up path is available."
+      ]
+    },
+    {
+      "scope": "settings",
+      "items": [
+        "Update notice no longer overlaps Settings search and chips.",
+        "Settings health/recovery cards have dark-mode surface contrast.",
+        "Settings validation tests continue to pass.",
+        "Model, voice, appearance, and notification Settings sections are reachable from command palette actions.",
+        "Settings search now shows result counts and section group context while filtering.",
+        "Settings primary recovery now ranks missing provider endpoint as the first blocker and routes directly to Model & Provider.",
+        "Settings health chips are route actions instead of passive labels.",
+        "Settings safe diagnostics can be copied beside the export profile action.",
+        "Settings diagnostic bundles now include schema and primary-recovery metadata without secrets.",
+        "Settings import validation rejects unredacted Claude tokens before values are accepted.",
+        "Settings mobile pills default to Core, AI, Voice, Look, and Alerts while keeping the active advanced section visible.",
+        "Settings autosave state is visible near search and in the recovery card.",
+        "Settings section navigation supports ArrowLeft and ArrowRight outside editable controls.",
+        "Settings schema reporting flags unknown persisted keys for review.",
+        "Settings control center dark surfaces use stronger contrast.",
+        "Settings live DOM check confirms the updated control center renders with no desktop horizontal overflow.",
+        "Settings pure helper logic now lives in a route-private utility module instead of the 3000+ line route file.",
+        "Settings control center now lives in a route-private component module instead of the main route file.",
+        "Settings helper tests import the pure utility module directly without loading the full route component.",
+        "Settings route file is reduced to 3199 lines while preserving the existing visible behavior.",
+        "Settings split keeps diagnostics, schema, search, mobile groups, and recovery helpers reusable for future panels."
+      ]
+    },
+    {
+      "scope": "lily",
+      "items": [
+        "LILY primary microphone control has a stable accessible selector.",
+        "Mobile visual smoke asserts the LILY microphone control is visible.",
+        "LILY first viewport now has a voice ready, degraded, unavailable, or typed-fallback badge.",
+        "LILY voice setup diagnostics now render as a blocker-first progressive checklist.",
+        "LILY Start control stays the primary action and disables with a clear blocker when prerequisites fail.",
+        "LILY microphone-denied state now includes browser-specific recovery copy.",
+        "LILY mobile view now has a sticky Start/Stop mic control above the bottom navigation.",
+        "LILY transcript timeline now has a stable fixed-height live region.",
+        "LILY diagnostics and session summary can be copied from the page.",
+        "LILY now normalizes common LiveKit token, network, and microphone errors.",
+        "LILY setup links route directly to model and voice Settings sections.",
+        "Chat mobile route smoke fixture now matches the current mobile chat text after /chat/main redirects to the latest chat."
+      ]
+    },
+    {
+      "scope": "jobs",
+      "items": [
+        "Jobs first viewport now promotes the next scheduled job and last failed job with direct run, edit, recovery, and logs actions.",
+        "Jobs now shows owner grouping across Hermes, Codex, workflow, launchd, and manual jobs.",
+        "Jobs saved filters include stale and paused views in addition to failed, recent, needs-Tyler, and paid-call views.",
+        "Jobs rows now align next run, last run, last duration, and affected systems for scanability.",
+        "Jobs rows now surface no-op/silent contract hints where prompts or outputs indicate them.",
+        "Jobs incident diagnostics include affected systems, run metadata, no-op contract, owner, schedule, and last error.",
+        "Failed Jobs rows now include an inline log-tail preview in addition to the full logs drawer.",
+        "Jobs rows infer affected systems such as Outlook, ConnectWise, Obsidian, Tasks, Meetings, LILY, MCP, Terminal, and Workspace.",
+        "Jobs source freshness now raises a stale-source refresh action when the loaded list is old.",
+        "Jobs row actions now show optimistic pending states for run, pause, resume, and delete operations.",
+        "Important Jobs pause actions require an explicit PAUSE confirmation before disabling the schedule.",
+        "Jobs cards support keyboard navigation with arrow keys, j/k, and Enter to open logs.",
+        "Jobs saved views now include Daily checks alongside Needs Tyler and the operational filters.",
+        "Jobs route smoke now includes a deterministic failed-job fixture."
+      ]
+    },
+    {
+      "scope": "tasks",
+      "items": [
+        "Tasks view preferences now persist through typed storage with invalid-entry recovery.",
+        "Task cards now expose tap-first Done, Defer, and Delegate actions for mobile triage.",
+        "Tasks route smoke now covers the create-dialog open state.",
+        "Tasks empty states now describe blocked, review, done, filtered, and default lanes explicitly.",
+        "Tasks now groups open work by source: chat, meetings, phone capture, jobs, manual, and automation.",
+        "Tasks first viewport now pins a today's-promise task from due-today or high-priority work.",
+        "Tasks now uses Jobs/IT Ops-style due-risk badges for overdue, at-risk, scheduled, and undated work.",
+        "Tasks keyboard triage now supports create, refresh, focus next, done, defer, and delegate shortcuts outside editable fields."
+      ]
+    },
+    {
+      "scope": "verification",
+      "items": [
+        "Lint passes.",
+        "Build passes.",
+        "Focused Vitest suites pass.",
+        "Desktop route smoke passes.",
+        "Mobile route smoke passes.",
+        "Desktop visual smoke harness now captures failed-route screenshots and retries transient runtime navigation failures.",
+        "Mobile visual smoke passes.",
+        "Live LaunchAgent restarted after build.",
+        "Command palette quick actions have focused jsdom coverage.",
+        "Shared source freshness utility has unit coverage.",
+        "LILY mobile microphone control has route-specific visual smoke coverage.",
+        "Runtime sync preflight confirms hashed runtime assets are served from the current dist output.",
+        "Desktop and mobile route smoke pass after runtime sync preflight.",
+        "Jobs workflow helpers cover next scheduled and most recent failed job selectors.",
+        "Mobile route smoke passes after authenticated rerun.",
+        "Jobs workflow helpers cover owner grouping plus stale and paused filters.",
+        "Jobs workflow helpers cover affected systems, no-op contract detection, and run metadata.",
+        "Desktop and mobile route smoke pass after Jobs row metadata changes.",
+        "Jobs workflow helpers cover daily-check saved-view detection.",
+        "Desktop and mobile route smoke pass after Jobs action-state and keyboard-navigation changes.",
+        "Desktop and mobile route smoke cover the deterministic Jobs failed-state fixture.",
+        "Tasks UX tests cover persisted typed view preferences.",
+        "Desktop and mobile route smoke cover the Tasks create-dialog fixture.",
+        "Tasks UX tests cover column-specific empty-state copy.",
+        "Tasks UX tests cover source grouping, due-risk classification, and today's-promise selection.",
+        "Desktop and mobile route smoke pass after Tasks source, risk, promise, and keyboard-triage updates.",
+        "75 tracker helper tests cover streak-risk classification.",
+        "Desktop and mobile route smoke cover 75 tracker hard-mode quick state.",
+        "75 tracker helper tests cover modified/travel day habit rules and text trend legend.",
+        "Desktop and mobile route smoke pass after 75 tracker template, modified-day, and trend-legend updates.",
+        "Operations helper tests cover primary action selection and Needs Tyler filtering.",
+        "Desktop and mobile route smoke cover the Operations new-agent modal fixture.",
+        "Ops Intelligence helper tests cover stale snapshot handling, confidence labels, empty evidence copy, and action routing.",
+        "Desktop and mobile route smoke pass after Ops Intelligence freshness and compact action-table changes.",
+        "Barry helper tests cover next-action selection and latest completed interaction detection.",
+        "Desktop and mobile route smoke pass after Barry first-viewport and keyboard-selection changes.",
+        "Skills helper tests cover search snippets, MCP route links, and mutation risk labels.",
+        "Desktop and mobile route smoke pass after Skills snippets, risk labels, favorites, and last-used sort changes.",
+        "MCP helper tests cover capability matrix rows, primary actions, and skill-route handoffs.",
+        "Desktop and mobile route smoke pass after MCP attention filters, mobile cards, and capability matrix changes.",
+        "Profiles helper tests cover validation badges, used-by links, safe delete guards, diff previews, and top capabilities.",
+        "Desktop and mobile route smoke pass after Profiles active banner, validation badges, mobile cards, and safe-delete changes.",
+        "Meetings helper tests cover prep windows, filters, local search, redacted briefs, severity, owner chips, To Do handoff, and trend guidance.",
+        "Desktop and mobile route smoke pass after Meetings agenda, filter, diagnostics, prep, and handoff changes.",
+        "LILY voice helper tests cover readiness, setup checklist blockers, permission copy, LiveKit error normalization, and session summary handoff.",
+        "Desktop and mobile route smoke pass after LILY readiness, checklist, sticky mic, and chat mobile fixture updates.",
+        "Presence helper tests cover primary actions, share text, route diagnostics, default mode, and DND presets.",
+        "Desktop and mobile route smoke pass after Presence primary sync, mobile glance, diagnostics, DND, and default-mode changes.",
+        "IT Ops helper tests cover native links, SLA labels, approval boundaries, copy templates, and diagnostics export.",
+        "Desktop and mobile route smoke pass after IT Ops mobile glance, ticket modes, copy templates, native links, and diagnostics changes.",
+        "Settings helper tests cover search summaries, recovery ranking, validation route links, mobile groups, import validation, and schema reporting.",
+        "Desktop and mobile route smoke pass after Settings control-center and navigation changes.",
+        "Settings live DOM check covers control-center actions, provider recovery, search summary, and desktop overflow.",
+        "Runtime sync refreshed stale served assets before Settings smoke verification.",
+        "Settings route-split helper tests pass after moving helpers and control center into route-private modules.",
+        "Lint passes after the Settings route split.",
+        "Build passes after the Settings route split.",
+        "Desktop and mobile route smoke pass after the Settings route split and runtime resync.",
+        "Files helper tests cover path safety, operation disabling, safe diagnostics, search highlighting, and pinned roots.",
+        "Lint passes after Files workflow diagnostics and operation-status changes.",
+        "Build passes after Files workflow diagnostics and operation-status changes.",
+        "Desktop and mobile route smoke pass after Files workflow diagnostics and operation-status changes.",
+        "Files live DOM check passes after forcing LaunchAgent restart for the latest lazy route chunk.",
+        "Conductor helper tests cover launch readiness, route diagnostics, portable plan preview, and versioned draft parsing.",
+        "Lint passes after Conductor readiness and diagnostics changes.",
+        "Build passes after Conductor readiness and diagnostics changes.",
+        "Runtime sync refreshed stale served assets before Conductor smoke verification.",
+        "Desktop and mobile route smoke pass after Conductor readiness and diagnostics changes.",
+        "Conductor live DOM check confirms H1, launch/readiness controls, diagnostics copy, portable plan copy, advanced controls, no browser errors, and no document overflow.",
+        "Chat workflow helper tests cover route diagnostics, resume-latest context, and first-run command rail visibility.",
+        "Lint passes after Chat workflow diagnostics changes.",
+        "Build passes after Chat workflow diagnostics changes.",
+        "Runtime sync refreshed stale served assets before Chat smoke verification.",
+        "Desktop and mobile route smoke pass after Chat workflow diagnostics changes.",
+        "Chat live DOM check confirms H1, workflow controls, diagnostics copy, risky mutation gate, hidden first-run rail on active sessions, no browser errors, and no document overflow.",
+        "Terminal helper tests cover session-state classification, safe diagnostics export, dangerous command detection, and redacted/truncated output copy.",
+        "Lint passes after Terminal diagnostics and output-copy changes.",
+        "Build passes after Terminal diagnostics and output-copy changes.",
+        "Runtime sync confirms Terminal hashed assets are current before route smoke.",
+        "Desktop and mobile route smoke pass after Terminal diagnostics and output-copy changes.",
+        "Terminal live DOM check confirms H1, diagnostics copy, output copy, cwd chip, state label, mobile command palette, no browser errors, and no document overflow.",
+        "Memory helper tests cover source classification, safe diagnostics export, and bounded current-task context copy.",
+        "Lint passes after Memory source filter and diagnostics changes.",
+        "Build passes after Memory source filter and diagnostics changes.",
+        "Runtime sync refreshed stale served assets before Memory smoke verification.",
+        "Desktop and mobile route smoke pass after Memory source filter and diagnostics changes.",
+        "Memory live DOM check confirms H1, search, source filters, diagnostics copy, Use in current task, provenance, stale warning, no browser errors, and no document overflow.",
+        "Dashboard helper tests cover next-action ranking and safe diagnostics export.",
+        "Lint passes after Dashboard command-strip and diagnostics changes.",
+        "Build passes after Dashboard command-strip and diagnostics changes.",
+        "Runtime sync refreshed stale served assets before Dashboard smoke verification.",
+        "Desktop and mobile route smoke pass after Dashboard command-strip and diagnostics changes.",
+        "Dashboard live DOM check confirms H1, action queue, next action, diagnostics copy, hidden-widget recovery, severity chip, and no browser errors.",
+        "Dashboard helper tests pass after extracting command-center logic into a pure utility module.",
+        "Lint passes after Dashboard command-center route split.",
+        "Build passes after Dashboard command-center route split.",
+        "Desktop and mobile route smoke pass after Dashboard command-center route split.",
+        "Phone helper tests pass after extracting mobile mode and quick-log helpers into a route-private utility module.",
+        "Lint passes after Phone Cockpit helper extraction.",
+        "Build passes after Phone Cockpit helper extraction.",
+        "Runtime sync refreshed stale served assets before Phone Cockpit smoke verification.",
+        "Mobile route smoke passes after Phone Cockpit helper extraction.",
+        "Meetings helper tests pass after extracting workflow helpers into a route-private utility module.",
+        "Lint passes after Meetings workflow helper extraction.",
+        "Build passes after Meetings workflow helper extraction.",
+        "Runtime sync refreshed stale served assets before Meetings smoke verification.",
+        "Desktop and mobile route smoke pass after Meetings workflow helper extraction.",
+        "Swarm2 helper tests pass after extracting workflow helpers into a route-private utility module.",
+        "Lint passes after Swarm2 workflow helper extraction.",
+        "Build passes after Swarm2 workflow helper extraction.",
+        "Runtime sync refreshed stale served assets before Swarm2 DOM verification.",
+        "Swarm2 desktop direct DOM check confirms route rendering after workflow helper extraction.",
+        "Swarm2 mobile direct DOM check confirms route rendering and no horizontal overflow after workflow helper extraction.",
+        "Files helper tests pass after extracting workflow helpers into a route-private utility module.",
+        "Lint passes after Files workflow helper extraction.",
+        "Build passes after Files workflow helper extraction.",
+        "Runtime sync refreshed stale served assets before Files route smoke verification.",
+        "Desktop and mobile route smoke pass after Files workflow helper extraction.",
+        "Chat workflow helper tests pass after extracting workflow helpers into a route-private utility module.",
+        "Lint passes after Chat workflow helper extraction.",
+        "Build passes after Chat workflow helper extraction.",
+        "Runtime sync refreshed stale served assets before Chat route smoke verification.",
+        "Desktop and mobile route smoke pass after Chat workflow helper extraction."
+      ]
+    }
+  ],
+  "remainingMajorBuckets": [
+    "Large screen splits above roughly 1500 lines: dashboard, phone, chat, playground, files, conductor, swarm2, meetings, settings.",
+    "New user workflows: meeting prep, task handoffs, profile diffing, MCP guided setup, ConnectWise deep links, swarm worker controls.",
+    "Advanced diagnostics: page-specific bundles, route fixtures, active-state visual smokes, live source drilldowns.",
+    "Mobile daily modes: driving/walking Phone Cockpit and compact Tasks.",
+    "Data and persistence migrations beyond the first typed-storage consumers.",
+    "Performance and virtualization work for chat messages, swarm logs, transcript timelines, and memory result lists.",
+    "Command palette and keyboard shortcut expansion across pages.",
+    "Cross-page severity/freshness visual system unification."
+  ]
+}

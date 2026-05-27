@@ -51,6 +51,30 @@ function serverLaunchText(server: McpServer): string {
   return [server.command, ...server.args].filter(Boolean).join(' ')
 }
 
+function securityText(server: McpServer): string {
+  const labels: Array<string> = []
+  if (server.transportType === 'http') labels.push('remote tools')
+  if (
+    server.command ||
+    server.args.some((arg) => /file|fs|path|dir/i.test(arg))
+  ) {
+    labels.push('file access')
+  }
+  if (server.authType !== 'none' || server.hasBearerToken)
+    labels.push('credentials')
+  return labels.join(' · ') || 'local low-risk'
+}
+
+function ownerText(server: McpServer): string {
+  const name = server.name.toLowerCase()
+  if (name.includes('github')) return 'GitHub workflows'
+  if (name.includes('outlook') || name.includes('email')) return 'mailbox jobs'
+  if (name.includes('browser') || name.includes('chrome'))
+    return 'browser QA jobs'
+  if (name.includes('memory') || name.includes('agentdb')) return 'memory jobs'
+  return 'Hermes/Codex jobs'
+}
+
 function Badge({
   children,
   className = '',
@@ -158,9 +182,22 @@ export function McpServerCard({ server, onEdit }: Props) {
 
       {server.lastError ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200">
-          {server.lastError}
+          Log snippet: {server.lastError}
         </p>
       ) : null}
+
+      <div className="flex flex-wrap gap-1.5 text-[11px] text-primary-500">
+        <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+          Security: {securityText(server)}
+        </span>
+        <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+          Owner: {ownerText(server)}
+        </span>
+        <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
+          Tool catalog cache:{' '}
+          {staleTest ? 'stale cache indicator' : 'fresh enough'}
+        </span>
+      </div>
 
       <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
         <Button

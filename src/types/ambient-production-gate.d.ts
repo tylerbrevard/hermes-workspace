@@ -38,21 +38,21 @@ declare module 'three' {
 }
 
 type DurableObjectNamespace = {
-  idFromName(name: string): any
-  get(id: unknown): any
+  idFromName: (name: string) => any
+  get: (id: unknown) => any
 }
 
 type DurableObjectState = {
   storage: {
-    get<T = unknown>(key: string): Promise<T | undefined>
-    put<T = unknown>(key: string, value: T): Promise<void>
-    delete(key: string): Promise<boolean>
-    getAlarm(): Promise<number | null>
-    setAlarm(scheduledTime: number | Date): Promise<void>
+    get: <T = unknown>(key: string) => Promise<T | undefined>
+    put: <T = unknown>(key: string, value: T) => Promise<void>
+    delete: (key: string) => Promise<boolean>
+    getAlarm: () => Promise<number | null>
+    setAlarm: (scheduledTime: number | Date) => Promise<void>
   }
-  getWebSockets(): Array<WebSocket>
-  acceptWebSocket(socket: WebSocket): void
-  blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T>
+  getWebSockets: () => Array<WebSocket>
+  acceptWebSocket: (socket: WebSocket) => void
+  blockConcurrencyWhile: <T>(callback: () => Promise<T>) => Promise<T>
 }
 
 declare const WebSocketPair: {
@@ -60,9 +60,9 @@ declare const WebSocketPair: {
 }
 
 interface WebSocket {
-  serializeAttachment(value: unknown): void
-  deserializeAttachment(): any
-  accept(): void
+  serializeAttachment: (value: unknown) => void
+  deserializeAttachment: () => any
+  accept: () => void
 }
 
 interface ResponseInit {

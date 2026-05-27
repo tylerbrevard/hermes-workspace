@@ -9,30 +9,34 @@ const HERMES_WORKSPACE =
 const IT_OPS_DB_PATH =
   process.env.HERMES_IT_OPS_DB || path.join(HERMES_WORKSPACE, '.it-ops.db')
 const DIRECT_REPORTS = [
-  'Carlos Castillo',
-  'Gerald Headd',
-  'Christopher Jones',
-  'Jose Villarreal',
-  'Drew Wolfe',
+  'Adam Acevedo',
   'Alan Ahr',
   'Asadbek Koshniyazov',
-  'Adam Acevedo',
+  'Carlos Castillo',
+  'Christopher Jones',
+  'Drew Wolfe',
+  'Edson Lopez Gutierrez',
+  'Zach Burkhardt',
 ]
 
 const IT_TEAM_MEMBERS = [
-  { name: 'Carlos Castillo', role: 'Team Lead' },
-  { name: 'Gerald Headd', role: 'Tier 1' },
-  { name: 'Christopher Jones', role: 'Tier 2' },
-  { name: 'Jose Villarreal', role: 'Tier 2' },
-  { name: 'Drew Wolfe', role: 'Tier 2' },
+  { name: 'Adam Acevedo', role: 'Tier 1' },
   { name: 'Alan Ahr', role: 'Tier 1' },
   { name: 'Asadbek Koshniyazov', role: 'Tier 1' },
-  { name: 'Adam Acevedo', role: 'Tier 1' },
+  { name: 'Carlos Castillo', role: 'Team Lead' },
+  { name: 'Christopher Jones', role: 'Tier 2' },
+  { name: 'Drew Wolfe', role: 'Tier 2' },
+  { name: 'Edson Lopez Gutierrez', role: 'Tier 2' },
+  { name: 'Zach Burkhardt', role: 'Tier 2' },
 ]
 
 const ESCALATION_THRESHOLDS = {
   STALE_TICKET_HOURS: 24,
 }
+
+const OPEN_TICKET_FIELDS =
+  'id,summary,priority,assignedTo,board,status,requiredDate,dateEntered,owner,company'
+const OPEN_TICKET_QUERY = `/service/tickets?conditions=closedFlag=false&pageSize=200&fields=${OPEN_TICKET_FIELDS}`
 
 const RECURRING_THEMES = [
   { label: 'Darktrace', keywords: ['darktrace'] },
@@ -55,9 +59,9 @@ type MeetingRow = {
   date: string
   participants?: Array<string | { displayName?: string; email?: string }>
   content?: string | null
-  actionItems?: ActionItemView[]
-  issues?: IssueView[]
-  decisions?: DecisionView[]
+  actionItems?: Array<ActionItemView>
+  issues?: Array<IssueView>
+  decisions?: Array<DecisionView>
 }
 
 type ActionItemView = {
@@ -95,12 +99,12 @@ function sqlEscape(value: string) {
   return value.replace(/'/g, "''")
 }
 
-function queryDb<T>(dbPath: string, sql: string): T[] {
+function queryDb<T>(dbPath: string, sql: string): Array<T> {
   const output = execFileSync('sqlite3', ['-json', dbPath, sql], {
     encoding: 'utf8',
   }).trim()
   if (!output) return []
-  return JSON.parse(output) as T[]
+  return JSON.parse(output) as Array<T>
 }
 
 function execDb(dbPath: string, sql: string) {
@@ -151,7 +155,7 @@ function readConnectWiseConfig(): ConnectWiseConfig | null {
     process.env.OPENCLAW_CONNECTWISE_CONFIG,
     path.join(HOME, '.config', 'hermes', 'tokens', 'connectwise_config.json'),
     path.join(HOME, '.config', 'openclaw', 'tokens', 'connectwise_config.json'),
-  ].filter(Boolean) as string[]
+  ].filter(Boolean) as Array<string>
 
   for (const configPath of candidates) {
     if (!existsSync(configPath)) continue
@@ -195,7 +199,7 @@ async function cwFetch(config: ConnectWiseConfig, requestPath: string) {
   return response.json()
 }
 
-async function safeCWFetch(config: ConnectWiseConfig, requestPath: string, errors: string[]) {
+async function safeCWFetch(config: ConnectWiseConfig, requestPath: string, errors: Array<string>) {
   try {
     return await cwFetch(config, requestPath)
   } catch (error) {
@@ -243,7 +247,7 @@ function getItOpsOverview() {
   const meetings = listMeetings({
     search: 'IT Ops Standup',
     limit: 500,
-  }).meetings as MeetingRow[]
+  }).meetings as Array<MeetingRow>
 
   const hydratedStandups = [...meetings]
     .sort((left, right) => left.date.localeCompare(right.date))
@@ -253,7 +257,7 @@ function getItOpsOverview() {
         parseParticipants(meeting.participants).length > 0,
     )
   const total = hydratedStandups.length
-  const attendanceMap: Record<string, { present: string[]; absent: string[] }> = {}
+  const attendanceMap: Record<string, { present: Array<string>; absent: Array<string> }> = {}
   const personStats: Record<string, { present: number; absent: number }> = {}
   for (const name of DIRECT_REPORTS) personStats[name] = { present: 0, absent: 0 }
 
@@ -351,7 +355,7 @@ function calcSLACompliance(totalTickets: number, slaBreaches: number) {
 }
 
 async function getItOpsAnalytics() {
-  const errors: string[] = []
+  const errors: Array<string> = []
   const now = new Date()
   let ticketStats = { open: 0, closedToday: 0, avgResolutionHours: 0, slaCompliancePct: 100 }
   let teamPerformance = IT_TEAM_MEMBERS.map((member) => ({
@@ -383,7 +387,7 @@ async function getItOpsAnalytics() {
     const today = todayStr()
     const thirtyDaysAgo = daysAgoStr(30)
     const [openTicketsRaw, closedTodayRaw, last30DaysRaw] = await Promise.all([
-      safeCWFetch(config, '/service/tickets?conditions=status/name!="Closed"&pageSize=200&fields=id,priority,assignedTo,board,status,requiredDate,dateEntered,owner,company', errors),
+      safeCWFetch(config, OPEN_TICKET_QUERY, errors),
       safeCWFetch(config, `/service/tickets?conditions=closedDate>=[${today}T00:00:00Z]&pageSize=200&fields=id,closedDate,dateEntered,assignedTo,owner`, errors),
       safeCWFetch(config, `/service/tickets?conditions=dateEntered>=[${thirtyDaysAgo}T00:00:00Z]&pageSize=500&fields=id,dateEntered,closedDate,board,assignedTo,requiredDate,status,owner`, errors),
     ])

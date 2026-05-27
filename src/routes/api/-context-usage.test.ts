@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  dashboardFetch,
+  ensureGatewayProbed,
+  getCapabilities,
+} from '../../server/gateway-capabilities'
+import { listSessions } from '../../server/claude-api'
+import { getLocalMessages, getLocalSession } from '../../server/local-session-store'
+import {
+  estimateContextTokensFromCacheRead,
+  estimateContextTokensFromMessages,
+  readContextUsage,
+} from '../../server/context-usage'
+
 vi.mock('../../server/gateway-capabilities', () => ({
   BEARER_TOKEN: '',
   CLAUDE_API: 'http://127.0.0.1:8642',
@@ -16,19 +29,6 @@ vi.mock('../../server/local-session-store', () => ({
   getLocalMessages: vi.fn(() => []),
   getLocalSession: vi.fn(() => null),
 }))
-
-import {
-  dashboardFetch,
-  ensureGatewayProbed,
-  getCapabilities,
-} from '../../server/gateway-capabilities'
-import { listSessions } from '../../server/claude-api'
-import { getLocalMessages, getLocalSession } from '../../server/local-session-store'
-import {
-  estimateContextTokensFromCacheRead,
-  estimateContextTokensFromMessages,
-  readContextUsage,
-} from '../../server/context-usage'
 
 afterEach(() => {
   vi.unstubAllGlobals()

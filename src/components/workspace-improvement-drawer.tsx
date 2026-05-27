@@ -12,6 +12,7 @@ import {
   countWorkspaceRecommendations,
   findWorkspaceImprovementPage,
 } from '@/lib/workspace-improvements'
+import { findWorkspaceRouteRegistryEntry } from '@/lib/workspace-route-registry'
 import {
   IMPROVEMENT_CATEGORIES,
   WORKSPACE_IMPROVEMENT_OPEN_EVENT,
@@ -92,6 +93,9 @@ function ImprovementActionButton({
 
 export function WorkspaceImprovementDrawer({ pathname }: { pathname: string }) {
   const page = findWorkspaceImprovementPage(pathname)
+  const routeRegistry = page
+    ? findWorkspaceRouteRegistryEntry(page.route)
+    : null
   const panelRef = useRef<HTMLElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -233,26 +237,6 @@ export function WorkspaceImprovementDrawer({ pathname }: { pathname: string }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          previousFocusRef.current =
-            document.activeElement instanceof HTMLElement
-              ? document.activeElement
-              : null
-          setOpen(true)
-        }}
-        className={cn(
-          'fixed right-3 z-[75] hidden rounded-full border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur md:block',
-          'bottom-[calc(var(--tabbar-h,80px)+0.75rem)] md:bottom-4',
-          'border-primary-200 bg-surface/95 text-primary-800 hover:bg-primary-100',
-          'dark:border-neutral-700 dark:bg-neutral-950/90 dark:text-neutral-100 dark:hover:bg-neutral-900',
-        )}
-        aria-label={`Open ${page.label} improvements`}
-      >
-        Improve {pageStats.done}/{pageStats.total}
-      </button>
-
       {open ? (
         <div
           className="fixed inset-0 z-[100]"
@@ -288,6 +272,13 @@ export function WorkspaceImprovementDrawer({ pathname }: { pathname: string }) {
                     {workspaceStats.done}/{totalCount} workspace recommendations
                     complete. {visibleItems.length} visible in this view.
                   </p>
+                  {routeRegistry ? (
+                    <p className="mt-1 text-[11px] text-primary-500 dark:text-neutral-500">
+                      Owner: {routeRegistry.owner} · Smoke:{' '}
+                      {routeRegistry.smokeText} · Dependencies:{' '}
+                      {routeRegistry.runtimeDependencies.join(', ')}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0 sm:items-center">
                   <button
@@ -439,6 +430,18 @@ export function WorkspaceImprovementDrawer({ pathname }: { pathname: string }) {
                 placeholder="Search all page recommendations"
                 className="mt-3 h-9 w-full rounded-lg border border-primary-200 bg-transparent px-3 text-sm outline-none focus:border-primary-400 dark:border-neutral-800 dark:text-neutral-100"
               />
+              {routeRegistry ? (
+                <details className="mt-2 rounded-lg border border-primary-200 px-3 py-2 text-xs text-primary-600 dark:border-neutral-800 dark:text-neutral-400">
+                  <summary className="cursor-pointer font-medium text-primary-800 dark:text-neutral-200">
+                    Route escalation
+                  </summary>
+                  <p className="mt-2">{routeRegistry.escalationPath}</p>
+                  <p className="mt-1">
+                    Mobile smoke:{' '}
+                    {routeRegistry.mobileSmokeText ?? routeRegistry.smokeText}
+                  </p>
+                </details>
+              ) : null}
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">

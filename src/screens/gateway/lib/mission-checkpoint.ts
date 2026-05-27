@@ -23,38 +23,53 @@ const CURRENT_KEY = 'clawsuite:mission-checkpoint'
 const HISTORY_KEY = 'clawsuite:mission-history'
 const MAX_HISTORY = 20
 
+function getMissionStorage(): Storage | null {
+  if (typeof window === 'undefined') return null
+  return window.localStorage
+}
+
 export function saveMissionCheckpoint(cp: MissionCheckpoint): void {
+  const storage = getMissionStorage()
+  if (!storage) return
   try {
-    localStorage.setItem(CURRENT_KEY, JSON.stringify({ ...cp, updatedAt: Date.now() }))
+    storage.setItem(CURRENT_KEY, JSON.stringify({ ...cp, updatedAt: Date.now() }))
   } catch { /* ignore quota errors */ }
 }
 
 export function loadMissionCheckpoint(): MissionCheckpoint | null {
+  const storage = getMissionStorage()
+  if (!storage) return null
   try {
-    const raw = localStorage.getItem(CURRENT_KEY)
+    const raw = storage.getItem(CURRENT_KEY)
     if (!raw) return null
     return JSON.parse(raw) as MissionCheckpoint
   } catch { return null }
 }
 
 export function clearMissionCheckpoint(): void {
-  localStorage.removeItem(CURRENT_KEY)
+  const storage = getMissionStorage()
+  if (!storage) return
+  storage.removeItem(CURRENT_KEY)
 }
 
 export function archiveMissionToHistory(cp: MissionCheckpoint): void {
+  const storage = getMissionStorage()
+  if (!storage) return
   try {
-    const raw = localStorage.getItem(HISTORY_KEY)
-    const history: MissionCheckpoint[] = raw ? (JSON.parse(raw) as MissionCheckpoint[]) : []
+    const raw = storage.getItem(HISTORY_KEY)
+    const history: Array<MissionCheckpoint> = raw ? (JSON.parse(raw) as Array<MissionCheckpoint>) : []
     history.unshift({ ...cp, completedAt: Date.now() })
     if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY)
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
+    storage.setItem(HISTORY_KEY, JSON.stringify(history))
   } catch { /* ignore */ }
 }
 
-export function loadMissionHistory(): MissionCheckpoint[] {
+export function loadMissionHistory(): Array<MissionCheckpoint> {
+  const storage = getMissionStorage()
+  if (!storage) return []
   try {
-    const raw = localStorage.getItem(HISTORY_KEY)
+    const raw = storage.getItem(HISTORY_KEY)
     if (!raw) return []
-    return JSON.parse(raw) as MissionCheckpoint[]
+    return JSON.parse(raw) as Array<MissionCheckpoint>
   } catch { return [] }
 }

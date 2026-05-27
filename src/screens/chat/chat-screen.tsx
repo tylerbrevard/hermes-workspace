@@ -1,8 +1,5 @@
 // Module-level local model override — set by composer when user picks a local model
 // Avoids prop threading. Reset when switching back to cloud models.
-export let _localModelOverride = ''
-export function setLocalModelOverride(model: string) { _localModelOverride = model }
-
 import {
   useCallback,
   useEffect,
@@ -21,12 +18,17 @@ import {
   textFromMessage,
 } from './utils'
 import {
+  buildChatCommandRail,
+  buildChatRouteDiagnostics,
+  buildChatWorkflowSummary,
+  buildResumeLatestContext,
+} from './chat-workflow'
+import {
   advanceStickyStreamingText,
-  createResponseWaitSnapshot,
   createOptimisticMessage,
+  createResponseWaitSnapshot,
   isTerminalActiveRunStatus,
   shouldClearWaitingForAssistantMessage,
-  type ResponseWaitSnapshot,
 } from './chat-screen-utils'
 import {
   appendHistoryMessage,
@@ -43,21 +45,19 @@ import { ChatEmptyState } from './components/chat-empty-state'
 import { ChatComposer } from './components/chat-composer'
 import { ConnectionStatusMessage } from './components/connection-status-message'
 import {
+  clearPendingSendForSession,
   consumePendingSend,
   hasPendingGeneration,
   hasPendingSend,
   isRecentSession,
   resetPendingSend,
   setPendingGeneration,
-  clearPendingSendForSession,
 } from './pending-send'
 import { useChatMeasurements } from './hooks/use-chat-measurements'
 import { useChatHistory } from './hooks/use-chat-history'
 import { useRealtimeChatHistory } from './hooks/use-realtime-chat-history'
 import { useSmoothStreamingText } from './hooks/use-smooth-streaming-text'
 import { useStreamingMessage } from './hooks/use-streaming-message'
-import { playChatComplete } from '@/lib/sounds'
-import { useChatSettingsStore } from '@/hooks/use-chat-settings'
 import { useActiveRunCheck } from './hooks/use-active-run-check'
 import { useChatMobile } from './hooks/use-chat-mobile'
 import { useChatSessions } from './hooks/use-chat-sessions'
@@ -70,15 +70,24 @@ import {
   CHAT_PENDING_COMMAND_STORAGE_KEY,
   CHAT_RUN_COMMAND_EVENT,
 } from './chat-events'
+import type { ResponseWaitSnapshot } from './chat-screen-utils'
 import type {
   ChatComposerAttachment,
   ChatComposerHandle,
   ChatComposerHelpers,
   ThinkingLevel,
 } from './components/chat-composer'
+import type {
+  ChatCommandRailItem,
+  ChatWorkflowSummary,
+  ResumeLatestContext,
+} from './chat-workflow'
 import type { ApprovalRequest } from '@/screens/gateway/lib/approvals-store'
 import type { ChatAttachment, ChatMessage, SessionMeta } from './types'
 import type { ChatRunCommandDetail } from './chat-events'
+import type { AgentActivity } from '@/stores/chat-activity-store'
+import { useChatSettingsStore } from '@/hooks/use-chat-settings'
+import { playChatComplete } from '@/lib/sounds'
 import {
   addApproval,
   loadApprovals,
@@ -89,7 +98,11 @@ import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toast'
 import { hapticTap } from '@/lib/haptics'
 import { FileExplorerSidebar } from '@/components/file-explorer'
-import { SEARCH_MODAL_EVENTS } from '@/hooks/use-search-modal'
+import {
+  SEARCH_MODAL_EVENTS,
+  emitSearchModalEvent,
+  useSearchModal,
+} from '@/hooks/use-search-modal'
 import { SIDEBAR_TOGGLE_EVENT } from '@/hooks/use-global-shortcuts'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { TerminalPanel } from '@/components/terminal-panel'
@@ -101,12 +114,17 @@ import { MobileSessionsPanel } from '@/components/mobile-sessions-panel'
 import { ContextAlertModal } from '@/components/usage-meter/context-alert-modal'
 import { ErrorToastContainer, showErrorToast } from '@/components/error-toast'
 // ContextMeter removed — ContextBar (PR #32) replaces it
-import { useChatStore, persistRecoveryMessage } from '@/stores/chat-store'
+import { persistRecoveryMessage, useChatStore } from '@/stores/chat-store'
 import { useResearchCard } from '@/hooks/use-research-card'
 // MOBILE_TAB_BAR_OFFSET removed — tab bar always hidden in chat
 import { useTapDebug } from '@/hooks/use-tap-debug'
 import { useChatMode } from '@/hooks/use-chat-mode'
-import { useChatActivityStore, type AgentActivity } from '@/stores/chat-activity-store'
+import { useChatActivityStore } from '@/stores/chat-activity-store'
+
+export let _localModelOverride = ''
+export function setLocalModelOverride(model: string) {
+  _localModelOverride = model
+}
 
 type ChatScreenProps = {
   activeFriendlyId: string
@@ -456,6 +474,232 @@ function stripQueuedWrapperFromUserMessage(message: ChatMessage): ChatMessage {
   }
 }
 
+type ChatWorkflowPanelProps = {
+  summary: ChatWorkflowSummary
+  commandRail: Array<ChatCommandRailItem>
+  resumeLatestContext: ResumeLatestContext
+  onNewSession: () => void
+  onResumeLatest: () => void
+  onChooseProfile: () => void
+  onOpenCommandPalette: () => void
+  onInsertPrompt: (prompt: string) => void
+  onSendToLily: () => void
+  onExportConversation: () => void
+}
+
+function ChatWorkflowPanel({
+  summary,
+  commandRail,
+  resumeLatestContext,
+  onNewSession,
+  onResumeLatest,
+  onChooseProfile,
+  onOpenCommandPalette,
+  onInsertPrompt,
+  onSendToLily,
+  onExportConversation,
+}: ChatWorkflowPanelProps) {
+  const taskPrompt =
+    'Extract tasks from this chat. Return owner, due date if known, source message, and next action.'
+  const notePrompt =
+    'Turn this chat into a concise note with decisions, risks, and links to artifacts.'
+  const draftPrompt =
+    'Draft the next outbound message or follow-up based on this chat. Keep it ready to send.'
+  const agentJobPrompt =
+    'Create an agent job plan from this chat with objective, constraints, verification, and stop conditions.'
+  const lilyPrompt =
+    'Prepare this chat for LILY handoff: summarize state, decisions, blockers, and the next spoken prompt.'
+  const followUpPrompt =
+    'Find anything waiting on others in this chat and schedule the next follow-up with date, channel, and wording.'
+
+  return (
+    <section
+      className="mx-3 mb-2 rounded-md border px-3 py-2 text-xs md:mx-4"
+      style={{
+        background: 'var(--theme-card)',
+        borderColor: 'var(--theme-border)',
+        color: 'var(--theme-muted)',
+      }}
+      aria-label="Chat workflow controls"
+    >
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span
+            className="rounded px-2 py-1 font-semibold"
+            style={{
+              background: 'var(--theme-card2)',
+              color: 'var(--theme-text)',
+            }}
+          >
+            Label: {summary.label}
+          </span>
+          <span>
+            Model: {summary.provider} / {summary.model}
+          </span>
+          <span>{summary.fallback}</span>
+          <span>{summary.costGuard}</span>
+          <span>{summary.sessionFreshness}</span>
+          <span>{summary.lastSave}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={onNewSession}
+          >
+            New session
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={onResumeLatest}
+            title={resumeLatestContext.detail}
+          >
+            {resumeLatestContext.available ? 'Resume latest' : 'Start new'}
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={onChooseProfile}
+          >
+            Choose profile
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={onOpenCommandPalette}
+          >
+            Command palette
+          </button>
+        </div>
+      </div>
+
+      {commandRail.length > 0 ? (
+        <div className="mt-2 rounded border px-2 py-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p
+                className="font-semibold"
+                style={{ color: 'var(--theme-text)' }}
+              >
+                Start here
+              </p>
+              <p className="mt-0.5">
+                Hidden after the first successful message; use it to start with
+                capture, note, reply, or agent-job intent.
+              </p>
+            </div>
+            <span>{resumeLatestContext.detail}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {commandRail.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="rounded border px-2 py-1"
+                onClick={() => onInsertPrompt(item.prompt)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={() => onInsertPrompt(taskPrompt)}
+          >
+            Task
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={() => onInsertPrompt(notePrompt)}
+          >
+            Note
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={() => onInsertPrompt(draftPrompt)}
+          >
+            Draft
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={() => onInsertPrompt(agentJobPrompt)}
+          >
+            Agent job
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={() => onInsertPrompt(lilyPrompt)}
+          >
+            Send to LILY
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={onSendToLily}
+          >
+            LILY page
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={() => onInsertPrompt(followUpPrompt)}
+          >
+            Follow-up scheduler
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1"
+            onClick={onExportConversation}
+          >
+            Export Markdown
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          <span className="rounded border px-2 py-1">
+            User {summary.timeline.userMessages}
+          </span>
+          <span className="rounded border px-2 py-1">
+            Tools {summary.timeline.toolCalls}
+          </span>
+          <span className="rounded border px-2 py-1">
+            Decisions {summary.timeline.decisions}
+          </span>
+          <span className="rounded border px-2 py-1">
+            Artifacts {summary.timeline.artifacts}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span>{summary.loadingCopy}</span>
+        <span>{summary.errorRecovery}</span>
+        <span>Blocked by me: {summary.risks.blockedByMe ? 'yes' : 'no'}</span>
+        <span>
+          Waiting on others: {summary.risks.waitingOnOthers ? 'yes' : 'no'}
+        </span>
+        <span>
+          Risky mutation gate:{' '}
+          {summary.risks.riskyMutation ? 'review first' : 'clear'}
+        </span>
+        <span>Task candidates: {summary.risks.taskCandidates}</span>
+        <span>Shortcuts: /new /clear /save, Cmd+.</span>
+        <span>Compact mobile composer mode ready</span>
+      </div>
+    </section>
+  )
+}
+
 export function ChatScreen({
   activeFriendlyId,
   isNewChat = false,
@@ -467,6 +711,8 @@ export function ChatScreen({
   const navigate = useNavigate()
   const chatFocusMode = useWorkspaceStore((s) => s.chatFocusMode)
   const setChatFocusMode = useWorkspaceStore((s) => s.setChatFocusMode)
+  const openSearchModal = useSearchModal((s) => s.openModal)
+  const setSearchScope = useSearchModal((s) => s.setScope)
   const queryClient = useQueryClient()
   const [sending, setSending] = useState(false)
   const [_creatingSession, setCreatingSession] = useState(false)
@@ -540,7 +786,12 @@ export function ChatScreen({
     if (typeof window === 'undefined') return 'low'
     const key = `claude-thinking-${activeFriendlyId || 'new'}`
     const stored = window.sessionStorage.getItem(key)
-    if (stored === 'off' || stored === 'low' || stored === 'medium' || stored === 'high')
+    if (
+      stored === 'off' ||
+      stored === 'low' ||
+      stored === 'medium' ||
+      stored === 'high'
+    )
       return stored
     return 'low'
   })
@@ -634,7 +885,8 @@ export function ChatScreen({
   // If so, re-set waitingForResponse in the store so the UI shows the spinner.
   useActiveRunCheck({
     sessionKey: resolvedSessionKey ?? '',
-    enabled: !isNewChat && Boolean(resolvedSessionKey) && historyQuery.isSuccess,
+    enabled:
+      !isNewChat && Boolean(resolvedSessionKey) && historyQuery.isSuccess,
     onCheckComplete: useCallback(() => {
       setActiveRunCheckDone(true)
     }, []),
@@ -660,9 +912,9 @@ export function ChatScreen({
       : isNewChat
         ? 'new'
         : resolvedSessionKey ||
-        sessionKeyForHistory ||
-        activeCanonicalKey ||
-        'main',
+          sessionKeyForHistory ||
+          activeCanonicalKey ||
+          'main',
     friendlyId: portableChatFriendlyId,
     historyMessages,
     portableMode: isPortableMode,
@@ -694,7 +946,9 @@ export function ChatScreen({
       if (
         approvalId &&
         currentApprovals.some((entry) => {
-          return entry.status === 'pending' && entry.gatewayApprovalId === approvalId
+          return (
+            entry.status === 'pending' && entry.gatewayApprovalId === approvalId
+          )
         })
       ) {
         setPendingApprovals(
@@ -994,7 +1248,8 @@ export function ChatScreen({
     ],
     queryFn: async () => {
       try {
-        const statusSessionKey = resolvedSessionKey || activeFriendlyId || 'main'
+        const statusSessionKey =
+          resolvedSessionKey || activeFriendlyId || 'main'
         const query = statusSessionKey
           ? `?sessionKey=${encodeURIComponent(statusSessionKey)}`
           : ''
@@ -1133,36 +1388,39 @@ export function ChatScreen({
       },
       [queryClient],
     ),
-    onComplete: useCallback((message: ChatMessage) => {
-      const activeSend = activeSendRef.current
-      if (activeSend?.clientId) {
-        updateHistoryMessageByClientIdEverywhere(
-          queryClient,
-          activeSend.clientId,
-          (message) => ({
-            ...message,
-            status: 'done',
-          }),
-        )
-      }
-      if (activeSend?.sessionKey) {
-        persistRecoveryMessage(activeSend.sessionKey, message)
-        clearPendingSendForSession(
-          activeSend.sessionKey,
-          activeSend.friendlyId,
-        )
-      }
-      activeSendRef.current = null
-      refreshHistoryRef.current()
-      setSending(false)
-      // Clear waitingForResponse so ThinkingBubble hides and message renders
-      streamFinish()
-      // Play notification sound if the user opted in (Settings → Chat).
-      // Read directly from the store to avoid re-creating this callback on every settings change.
-      if (useChatSettingsStore.getState().settings.soundOnChatComplete) {
-        playChatComplete()
-      }
-    }, [queryClient, streamFinish]),
+    onComplete: useCallback(
+      (message: ChatMessage) => {
+        const activeSend = activeSendRef.current
+        if (activeSend?.clientId) {
+          updateHistoryMessageByClientIdEverywhere(
+            queryClient,
+            activeSend.clientId,
+            (message) => ({
+              ...message,
+              status: 'done',
+            }),
+          )
+        }
+        if (activeSend?.sessionKey) {
+          persistRecoveryMessage(activeSend.sessionKey, message)
+          clearPendingSendForSession(
+            activeSend.sessionKey,
+            activeSend.friendlyId,
+          )
+        }
+        activeSendRef.current = null
+        refreshHistoryRef.current()
+        setSending(false)
+        // Clear waitingForResponse so ThinkingBubble hides and message renders
+        streamFinish()
+        // Play notification sound if the user opted in (Settings → Chat).
+        // Read directly from the store to avoid re-creating this callback on every settings change.
+        if (useChatSettingsStore.getState().settings.soundOnChatComplete) {
+          playChatComplete()
+        }
+      },
+      [queryClient, streamFinish],
+    ),
     onError: useCallback(
       (messageText: string) => {
         const activeSend = activeSendRef.current
@@ -1266,10 +1524,12 @@ export function ChatScreen({
     activeRealtimeStreamingText,
     activeIsRealtimeStreaming,
   )
-  const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>({
-    runId: null,
-    text: '',
-  })
+  const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>(
+    {
+      runId: null,
+      text: '',
+    },
+  )
   stickyStreamingTextRef.current = advanceStickyStreamingText({
     isStreaming: activeIsRealtimeStreaming,
     runId: streamingRunId ?? null,
@@ -1534,9 +1794,9 @@ export function ChatScreen({
   }, [suggestion, resolvedSessionKey, dismiss])
 
   // Sync chat activity to global store for sidebar orchestrator avatar
-  const setLocalActivity = useChatActivityStore(
-    (s) => s.setLocalActivity,
-  ) as (next: AgentActivity) => void
+  const setLocalActivity = useChatActivityStore((s) => s.setLocalActivity) as (
+    next: AgentActivity,
+  ) => void
   useEffect(() => {
     if (liveToolActivity.length > 0) {
       setLocalActivity('tool-use')
@@ -2127,13 +2387,6 @@ export function ChatScreen({
   )
 
   useEffect(() => {
-    if (false) {
-      // Server connection checks removed — Hermes Agent uses direct API
-      hasSeenDisconnectRef.current = true
-      retriedQueuedMessageKeysRef.current.clear()
-      return
-    }
-
     if (connectionState === 'connected' && hasSeenDisconnectRef.current) {
       hasSeenDisconnectRef.current = false
       flushRetryableMessages()
@@ -2575,6 +2828,80 @@ export function ChatScreen({
     isStreaming: derivedStreamingInfo.isStreaming,
     resetKey: `${resolvedSessionKey || activeCanonicalKey || 'main'}:${researchResetKey}`,
   })
+  const workflowSummary = useMemo(
+    () =>
+      buildChatWorkflowSummary({
+        messages: finalDisplayMessages,
+        label: activeTitle?.toLowerCase().includes('ops')
+          ? 'Agent Ops'
+          : activeTitle?.toLowerCase().includes('knowledge')
+            ? 'Knowledge'
+            : activeTitle?.toLowerCase().includes('system')
+              ? 'Systems'
+              : 'Daily',
+        modelLabel: currentModel,
+        updatedAt: activeSession?.updatedAt || historyQuery.dataUpdatedAt,
+        saving: sending,
+        waiting: waitingForResponse,
+        error,
+        connectionState,
+      }),
+    [
+      activeSession?.updatedAt,
+      activeTitle,
+      connectionState,
+      currentModel,
+      error,
+      finalDisplayMessages,
+      historyQuery.dataUpdatedAt,
+      sending,
+      waitingForResponse,
+    ],
+  )
+  const hasSuccessfulMessage = finalDisplayMessages.some(
+    (message) =>
+      (message.role === 'assistant' || message.role === 'user') &&
+      getMessageStatusValue(message) !== 'sending',
+  )
+  const commandRail = useMemo(
+    () => buildChatCommandRail(hasSuccessfulMessage),
+    [hasSuccessfulMessage],
+  )
+  const resumeLatestContext = useMemo(
+    () => buildResumeLatestContext(sessions ?? []),
+    [sessions],
+  )
+  const insertWorkflowPrompt = useCallback((prompt: string) => {
+    composerHandleRef.current?.setValue(`${prompt} `)
+  }, [])
+
+  const handleResumeLatestSession = useCallback(() => {
+    if (!resumeLatestContext.target) {
+      navigate({ to: '/chat/$sessionKey', params: { sessionKey: 'new' } })
+      return
+    }
+    navigate({
+      to: '/chat/$sessionKey',
+      params: { sessionKey: resumeLatestContext.target },
+    })
+  }, [navigate, resumeLatestContext.target])
+
+  const handleOpenWorkflowSettings = useCallback(() => {
+    emitSearchModalEvent(SEARCH_MODAL_EVENTS.OPEN_SETTINGS)
+  }, [])
+
+  const handleOpenWorkflowPalette = useCallback(() => {
+    setSearchScope('actions')
+    openSearchModal()
+  }, [openSearchModal, setSearchScope])
+
+  const handleExportWorkflowConversation = useCallback(() => {
+    const exported = exportConversationTranscript({
+      sessionLabel: activeTitle || activeFriendlyId || 'conversation',
+      messages: finalDisplayMessages,
+    })
+    if (exported) toast('Conversation exported', { type: 'success' })
+  }, [activeFriendlyId, activeTitle, finalDisplayMessages])
 
   // Pull-to-refresh offset removed
 
@@ -2743,6 +3070,26 @@ export function ChatScreen({
                 activeSession?.key ||
                 activeSessionKey
               }
+            />
+          )}
+
+          {hideUi || compact ? null : (
+            <ChatWorkflowPanel
+              summary={workflowSummary}
+              commandRail={commandRail}
+              resumeLatestContext={resumeLatestContext}
+              onNewSession={() =>
+                navigate({
+                  to: '/chat/$sessionKey',
+                  params: { sessionKey: 'new' },
+                })
+              }
+              onResumeLatest={handleResumeLatestSession}
+              onChooseProfile={handleOpenWorkflowSettings}
+              onOpenCommandPalette={handleOpenWorkflowPalette}
+              onInsertPrompt={insertWorkflowPrompt}
+              onSendToLily={() => navigate({ to: '/lily' })}
+              onExportConversation={handleExportWorkflowConversation}
             />
           )}
 

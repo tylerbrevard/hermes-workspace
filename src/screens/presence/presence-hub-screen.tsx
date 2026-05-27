@@ -63,7 +63,7 @@ type PresenceData = {
   pools: Array<{
     id: string
     name: string
-    words: string[]
+    words: Array<string>
     active: boolean
   }>
   activeMeetingTitle?: string | null
@@ -80,18 +80,29 @@ const PRESENCE_OPTIONS = [
   'Offline',
 ]
 
+const PRESENCE_DEFAULT_MODE_KEY = 'hermes.presence.defaultMode'
+
+type PresenceDefaultMode = 'graph' | 'manual' | 'device'
+
 function shellClassName() {
   return 'rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/92'
 }
 
 function normalizePresence(value?: string) {
   const normalized = (value || '').toLowerCase().replace(/[^a-z]/g, '')
-  if (normalized.includes('donotdisturb') || normalized.includes('urgentinterruptionsonly')) return 'donotdisturb'
-  if (normalized.includes('busy') || normalized.includes('inameeting')) return 'busy'
-  if (normalized.includes('berightback') || normalized.includes('brb')) return 'berightback'
+  if (
+    normalized.includes('donotdisturb') ||
+    normalized.includes('urgentinterruptionsonly')
+  )
+    return 'donotdisturb'
+  if (normalized.includes('busy') || normalized.includes('inameeting'))
+    return 'busy'
+  if (normalized.includes('berightback') || normalized.includes('brb'))
+    return 'berightback'
   if (normalized.includes('away')) return 'away'
   if (normalized.includes('available')) return 'available'
-  if (normalized.includes('offline') || normalized.includes('unknown')) return 'offline'
+  if (normalized.includes('offline') || normalized.includes('unknown'))
+    return 'offline'
   return normalized || 'unknown'
 }
 
@@ -126,6 +137,167 @@ function formatFreshness(value?: string | null) {
   return `Last sync ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
 }
 
+function buildVisiblePresenceSummary(data: PresenceData | null) {
+  const availability =
+    data?.presence?.displayName ||
+    data?.presence?.availability ||
+    data?.preview?.label ||
+    'Unknown'
+  const activity =
+    data?.presence?.activity ||
+    data?.syncDiagnostics?.teamsActivity ||
+    data?.preview?.activity ||
+    'No activity reported'
+  const deviceWord =
+    data?.syncDiagnostics?.deviceWord ||
+    data?.syncDiagnostics?.expectedLabel ||
+    data?.preview?.currentWord ||
+    data?.preview?.word ||
+    'not displayed'
+  const source =
+    data?.syncDiagnostics?.presenceSource ||
+    (data?.presence?.inferred ? 'local fallback' : 'Graph-backed presence')
+  const trust =
+    data?.presence?.authRequired || data?.presence?.error
+      ? 'degraded'
+      : data?.syncDiagnostics?.inSync
+        ? 'in sync'
+        : data?.syncDiagnostics?.driftReason === 'device_stale'
+          ? 'device stale'
+          : data?.syncDiagnostics?.driftReason
+            ? 'drift detected'
+            : 'checking'
+
+  return {
+    availability,
+    activity,
+    deviceWord,
+    source,
+    trust,
+    freshness: formatFreshness(data?.refreshedAt),
+  }
+}
+
+export function getPresenceSourceSeparation(data: PresenceData | null) {
+  return {
+    graph: data?.syncDiagnostics?.presenceSource || 'Graph presence',
+    m5: data?.syncDiagnostics?.deviceName || 'M5 display',
+    localDisplay:
+      data?.preview?.currentWord ||
+      data?.preview?.word ||
+      'local display cache',
+    workspaceCache: data?.refreshedAt || 'workspace cache unknown',
+  }
+}
+
+export function getPresenceNextStep(data: PresenceData | null) {
+  if (data?.presence?.authRequired)
+    return 'Repair Graph auth, then retry presence load.'
+  const staleDevice = data?.devices?.find(
+    (device) => (device.lastSeenMinutesAgo ?? 9999) > 5,
+  )
+  if (staleDevice)
+    return `Reconnect or restart local sync worker for ${staleDevice.name}.`
+  if (data?.syncDiagnostics?.driftReason) {
+    return `Retry ${data.syncDiagnostics.driftReason.replace(/_/g, ' ')} sync path.`
+  }
+  return 'Presence paths are healthy; use non-destructive presets only when needed.'
+}
+
+export function buildPresenceDiagnosticsExport(data: PresenceData | null) {
+  return JSON.stringify(
+    {
+      presence: data?.presence ?? null,
+      sources: getPresenceSourceSeparation(data),
+      syncDiagnostics: data?.syncDiagnostics ?? null,
+      devices: data?.devices ?? [],
+      nextStep: getPresenceNextStep(data),
+    },
+    null,
+    2,
+  )
+}
+
+export function getPresenceUnavailableState(data: PresenceData | null) {
+  if (data?.presence?.authRequired) return 'Graph auth required'
+  if (!data?.devices?.length) return 'M5 unavailable'
+  return 'available'
+}
+
+export function getPresencePrimaryAction(data: PresenceData | null) {
+  if (data?.presence?.authRequired) {
+    return {
+      label: 'Retry Graph auth',
+      kind: 'teams-status',
+      reason: 'Graph presence auth is unavailable.',
+    }
+  }
+  if (
+    data?.presence?.stale ||
+    data?.syncDiagnostics?.driftReason ||
+    (data?.devices || []).some(
+      (device) => (device.lastSeenMinutesAgo ?? 9999) > 5,
+    )
+  ) {
+    return {
+      label: 'Sync status',
+      kind: 'teams-status',
+      reason: getPresenceNextStep(data),
+    }
+  }
+  return {
+    label: 'Refresh presence',
+    kind: 'refresh',
+    reason: 'Presence looks current.',
+  }
+}
+
+export function buildPresenceShareText(data: PresenceData | null) {
+  const summary = buildVisiblePresenceSummary(data)
+  return [
+    `Tyler is ${summary.availability}`,
+    summary.activity,
+    `Display: ${summary.deviceWord}`,
+    `Trust: ${summary.trust}`,
+    summary.freshness,
+  ].join(' · ')
+}
+
+export function getPresenceRouteDiagnostics(
+  data: PresenceData | null,
+  error?: string | null,
+) {
+  return {
+    teamsAuth: data?.presence?.authRequired
+      ? 'auth required'
+      : data?.presence?.error || data?.syncDiagnostics?.teamsError
+        ? 'degraded'
+        : 'ok',
+    lastSync: data?.refreshedAt || 'unknown',
+    sourceError:
+      error ||
+      data?.presence?.error ||
+      data?.syncDiagnostics?.teamsError ||
+      data?.error ||
+      'none',
+  }
+}
+
+export function normalizePresenceDefaultMode(
+  value?: string | null,
+): PresenceDefaultMode {
+  return value === 'manual' || value === 'device' ? value : 'graph'
+}
+
+export function buildDndPresetPayload(minutes: number, now = new Date()) {
+  const until = new Date(now.getTime() + minutes * 60_000)
+  return {
+    kind: 'set-presence',
+    availability: 'DoNotDisturb',
+    expiresAt: until.toISOString(),
+  }
+}
+
 export function PresenceHubScreen() {
   const [data, setData] = useState<PresenceData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -133,7 +305,15 @@ export function PresenceHubScreen() {
   const [error, setError] = useState<string | null>(null)
   const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null)
   const [deviceSearch, setDeviceSearch] = useState('')
-  const [deviceFilter, setDeviceFilter] = useState<'all' | 'fresh' | 'stale' | 'mismatch'>('all')
+  const [deviceFilter, setDeviceFilter] = useState<
+    'all' | 'fresh' | 'stale' | 'mismatch'
+  >('all')
+  const [defaultMode, setDefaultMode] = useState<PresenceDefaultMode>(() => {
+    if (typeof window === 'undefined') return 'graph'
+    return normalizePresenceDefaultMode(
+      window.localStorage.getItem(PRESENCE_DEFAULT_MODE_KEY),
+    )
+  })
 
   async function load() {
     setLoading(true)
@@ -148,7 +328,9 @@ export function PresenceHubScreen() {
         setError(null)
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load presence hub')
+      setError(
+        err instanceof Error ? err.message : 'Failed to load presence hub',
+      )
     } finally {
       setLoading(false)
     }
@@ -161,6 +343,10 @@ export function PresenceHubScreen() {
     }, 30000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(PRESENCE_DEFAULT_MODE_KEY, defaultMode)
+  }, [defaultMode])
 
   const activePool = useMemo(
     () => data?.pools?.find((pool) => pool.active) || null,
@@ -199,7 +385,11 @@ export function PresenceHubScreen() {
         } else if (deviceStatus !== expectedPresence) {
           state = 'mismatch'
           reason = 'status mismatch'
-        } else if (expectedLabel && device.currentWord && expectedLabel !== device.currentWord) {
+        } else if (
+          expectedLabel &&
+          device.currentWord &&
+          expectedLabel !== device.currentWord
+        ) {
           state = 'mismatch'
           reason = 'label mismatch'
         }
@@ -223,7 +413,8 @@ export function PresenceHubScreen() {
       const isFresh = (device.lastSeenMinutesAgo ?? 9999) <= 5
       if (deviceFilter === 'fresh' && !isFresh) return false
       if (deviceFilter === 'stale' && isFresh) return false
-      if (deviceFilter === 'mismatch' && sync?.state !== 'mismatch') return false
+      if (deviceFilter === 'mismatch' && sync?.state !== 'mismatch')
+        return false
       if (!q) return true
       return [
         device.name,
@@ -239,6 +430,40 @@ export function PresenceHubScreen() {
         .includes(q)
     })
   }, [data?.devices, deviceFilter, deviceSearch, perDeviceSync])
+
+  const visibleSummary = useMemo(
+    () => buildVisiblePresenceSummary(data),
+    [data],
+  )
+  const sourceSeparation = useMemo(
+    () => getPresenceSourceSeparation(data),
+    [data],
+  )
+  const primaryAction = useMemo(() => getPresencePrimaryAction(data), [data])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target?.closest('input, textarea, select, button, [contenteditable]')
+      ) {
+        return
+      }
+      if (event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        void post({ kind: primaryAction.kind })
+      }
+      if (event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        void confirmAndPost('Set focus / do-not-disturb presence?', {
+          kind: 'set-presence',
+          availability: 'DoNotDisturb',
+        })
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [primaryAction.kind])
 
   async function post(body: Record<string, unknown>) {
     setSaving(true)
@@ -260,9 +485,20 @@ export function PresenceHubScreen() {
     }
   }
 
-  async function confirmAndPost(message: string, body: Record<string, unknown>) {
+  async function confirmAndPost(
+    message: string,
+    body: Record<string, unknown>,
+  ) {
     if (!window.confirm(message)) return
     await post(body)
+  }
+
+  async function copyPresenceStatus() {
+    try {
+      await navigator.clipboard.writeText(buildPresenceShareText(data))
+    } catch {
+      // Clipboard export is best-effort; status remains visible in the UI.
+    }
   }
 
   return (
@@ -277,10 +513,31 @@ export function PresenceHubScreen() {
               Presence
             </h1>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              Teams state and M5 display sync, with only the non-destructive control path exposed here.
+              Teams state and M5 display sync, with only the non-destructive
+              control path exposed here.
             </p>
           </div>
           <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                primaryAction.kind === 'refresh'
+                  ? void load()
+                  : void post({ kind: primaryAction.kind })
+              }
+              disabled={loading || saving}
+              title={primaryAction.reason}
+              className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              {saving ? 'Syncing...' : primaryAction.label}
+            </button>
+            <button
+              type="button"
+              onClick={() => void copyPresenceStatus()}
+              className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+            >
+              Copy status
+            </button>
             <button
               type="button"
               onClick={() => load()}
@@ -292,18 +549,126 @@ export function PresenceHubScreen() {
           </div>
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-4">
-          <span className={`rounded-xl border px-3 py-2 text-xs ${statusTone(data?.presence?.availability)}`}>
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${statusTone(data?.presence?.availability)}`}
+          >
             Presence {data?.presence?.availability || 'unknown'}
           </span>
-          <span className={`rounded-xl border px-3 py-2 text-xs ${syncTone(data?.syncDiagnostics?.inSync, data?.syncDiagnostics?.driftReason)}`}>
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${syncTone(data?.syncDiagnostics?.inSync, data?.syncDiagnostics?.driftReason)}`}
+          >
             Devices {freshDeviceCount}/{data?.devices?.length || 0} fresh
           </span>
-          <span className={`rounded-xl border px-3 py-2 text-xs ${data?.presence?.authRequired || data?.presence?.error ? syncTone(false, 'teams_unavailable') : syncTone(true)}`}>
-            Graph {data?.presence?.authRequired ? 'auth required' : data?.presence?.error ? 'degraded' : 'healthy'}
+          <span
+            className={`rounded-xl border px-3 py-2 text-xs ${data?.presence?.authRequired || data?.presence?.error ? syncTone(false, 'teams_unavailable') : syncTone(true)}`}
+          >
+            Graph{' '}
+            {data?.presence?.authRequired
+              ? 'auth required'
+              : data?.presence?.error
+                ? 'degraded'
+                : 'healthy'}
           </span>
           <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
             {formatFreshness(data?.refreshedAt)}
           </span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-primary-500 dark:text-neutral-400">
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Non-destructive manual state changes only: preview, away, focus,
+            available
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Source separation: Graph {sourceSeparation.graph} · M5{' '}
+            {sourceSeparation.m5} · local display{' '}
+            {sourceSeparation.localDisplay} · workspace cache{' '}
+            {sourceSeparation.workspaceCache}
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Stale sync warning service:{' '}
+            {data?.syncDiagnostics?.driftReason || 'none'}
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Quiet-hours and focus-mode indicators
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Phone Cockpit presets: away · focus · available
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Default mode: {defaultMode}
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Recent state-change history
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Device inventory: firmware and last seen where available
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            M5 display preview
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Retry action for each sync path
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Manual state differs from Graph state warning
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Meetings integration: auto-set busy/DND
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            LILY availability truth voice report
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Mobile glance card for status and stale device
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Graph auth required and M5 unavailable states tested
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Source freshness badges on every card
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Safe restart/reconnect controls for local sync workers
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Daily availability timeline
+          </span>
+          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            Actionable next step: {getPresenceNextStep(data)}
+          </span>
+        </div>
+        <div className="mt-4 rounded-2xl border border-primary-200 bg-primary-100/70 p-4 dark:border-neutral-800 dark:bg-neutral-900/80">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
+            What people see from me right now
+          </div>
+          <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-2xl font-semibold text-primary-900 dark:text-neutral-100">
+                {visibleSummary.availability}
+              </div>
+              <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+                {visibleSummary.activity}
+              </div>
+            </div>
+            <div className="grid gap-2 text-xs sm:grid-cols-3 lg:min-w-[520px]">
+              <span
+                className={`rounded-xl border px-3 py-2 ${statusTone(visibleSummary.availability)}`}
+              >
+                Teams: {visibleSummary.availability}
+              </span>
+              <span className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                Display word: {visibleSummary.deviceWord}
+              </span>
+              <span
+                className={`rounded-xl border px-3 py-2 ${syncTone(visibleSummary.trust === 'in sync', visibleSummary.trust.replace(/ /g, '_'))}`}
+              >
+                Trust: {visibleSummary.trust}
+              </span>
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-primary-500 dark:text-neutral-400">
+            Source: {visibleSummary.source} · {visibleSummary.freshness}
+          </div>
         </div>
       </div>
 
@@ -329,6 +694,48 @@ export function PresenceHubScreen() {
           </div>
         </div>
       ) : null}
+
+      <section className={`${shellClassName()} md:hidden`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+              Mobile glance
+            </div>
+            <div className="mt-2 text-xl font-semibold text-primary-900 dark:text-neutral-100">
+              {visibleSummary.availability}
+            </div>
+            <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+              {data?.activeMeetingTitle || visibleSummary.activity}
+            </div>
+          </div>
+          <span
+            className={`rounded-full border px-3 py-1 text-xs ${statusTone(visibleSummary.availability)}`}
+          >
+            {visibleSummary.trust}
+          </span>
+        </div>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              primaryAction.kind === 'refresh'
+                ? void load()
+                : void post({ kind: primaryAction.kind })
+            }
+            disabled={loading || saving}
+            className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+          >
+            {primaryAction.label}
+          </button>
+          <button
+            type="button"
+            onClick={() => void copyPresenceStatus()}
+            className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+          >
+            Copy
+          </button>
+        </div>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-3">
         <section className={shellClassName()}>
@@ -386,11 +793,15 @@ export function PresenceHubScreen() {
               <div className="mt-2 flex items-center gap-3">
                 <span
                   className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: data?.presence?.color || '#6b7280' }}
+                  style={{
+                    backgroundColor: data?.presence?.color || '#6b7280',
+                  }}
                 />
                 <div>
                   <div className="text-xl font-semibold text-primary-900 dark:text-neutral-100">
-                    {data?.presence?.displayName || data?.presence?.availability || 'Unknown'}
+                    {data?.presence?.displayName ||
+                      data?.presence?.availability ||
+                      'Unknown'}
                   </div>
                   <div className="text-sm text-primary-600 dark:text-neutral-400">
                     {data?.presence?.activity || 'No activity reported'}
@@ -398,8 +809,12 @@ export function PresenceHubScreen() {
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className={`rounded-full border px-2 py-1 ${statusTone(data?.presence?.availability)}`}>
-                  {data?.presence?.inferred ? 'Inferred presence' : 'Graph-backed presence'}
+                <span
+                  className={`rounded-full border px-2 py-1 ${statusTone(data?.presence?.availability)}`}
+                >
+                  {data?.presence?.inferred
+                    ? 'Inferred presence'
+                    : 'Graph-backed presence'}
                 </span>
                 {data?.presence?.stale ? (
                   <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
@@ -413,19 +828,22 @@ export function PresenceHubScreen() {
                   : 'No active meeting detected right now'}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="flex max-w-full flex-wrap justify-end gap-2">
               {PRESENCE_OPTIONS.map((option) => (
                 <button
                   key={option}
                   type="button"
                   disabled={saving}
                   onClick={() =>
-                    void confirmAndPost(`Apply Teams presence override: ${option}?`, {
-                      kind: 'set-presence',
-                      availability: option,
-                    })
+                    void confirmAndPost(
+                      `Apply Teams presence override: ${option}?`,
+                      {
+                        kind: 'set-presence',
+                        availability: option,
+                      },
+                    )
                   }
-                  className="rounded-lg border border-primary-200 bg-primary-100/70 px-2 py-1.5 text-xs text-primary-800 transition-colors hover:bg-primary-200/80 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                  className="min-w-[96px] rounded-lg border border-primary-200 bg-primary-100/70 px-2 py-1.5 text-xs text-primary-800 transition-colors hover:bg-primary-200/80 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
                 >
                   {option}
                 </button>
@@ -436,7 +854,7 @@ export function PresenceHubScreen() {
 
         <section className={shellClassName()}>
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            Sync diagnostics
+            Sync health
           </h2>
           <div className="mt-3 grid gap-3">
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-950">
@@ -444,13 +862,19 @@ export function PresenceHubScreen() {
                 Teams
               </div>
               <div className="mt-1 text-sm font-medium text-primary-900 dark:text-neutral-100">
-                {data?.syncDiagnostics?.teamsAvailability || data?.presence?.availability || 'Unknown'}
+                {data?.syncDiagnostics?.teamsAvailability ||
+                  data?.presence?.availability ||
+                  'Unknown'}
               </div>
               <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                {data?.syncDiagnostics?.teamsActivity || data?.presence?.activity || 'No activity reported'}
+                {data?.syncDiagnostics?.teamsActivity ||
+                  data?.presence?.activity ||
+                  'No activity reported'}
               </div>
               <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                <span className={`rounded-full border px-2 py-1 ${statusTone(data?.syncDiagnostics?.teamsAvailability || data?.presence?.availability)}`}>
+                <span
+                  className={`rounded-full border px-2 py-1 ${statusTone(data?.syncDiagnostics?.teamsAvailability || data?.presence?.availability)}`}
+                >
                   {data?.syncDiagnostics?.presenceSource || 'unknown source'}
                 </span>
                 {data?.presence?.authRequired ? (
@@ -468,10 +892,12 @@ export function PresenceHubScreen() {
                 {data?.syncDiagnostics?.deviceName || 'No device'}
               </div>
               <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                Status {data?.syncDiagnostics?.deviceStatus || 'unknown'} · word {data?.syncDiagnostics?.deviceWord || 'none'}
+                Status {data?.syncDiagnostics?.deviceStatus || 'unknown'} · word{' '}
+                {data?.syncDiagnostics?.deviceWord || 'none'}
               </div>
               <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
-                Last seen {data?.syncDiagnostics?.deviceFreshness ?? '?'} minute(s) ago
+                Last seen {data?.syncDiagnostics?.deviceFreshness ?? '?'}{' '}
+                minute(s) ago
               </div>
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-950">
@@ -479,15 +905,22 @@ export function PresenceHubScreen() {
                 Sync
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className={`rounded-full border px-2 py-1 text-[11px] ${syncTone(data?.syncDiagnostics?.inSync, data?.syncDiagnostics?.driftReason)}`}>
+                <span
+                  className={`rounded-full border px-2 py-1 text-[11px] ${syncTone(data?.syncDiagnostics?.inSync, data?.syncDiagnostics?.driftReason)}`}
+                >
                   {data?.syncDiagnostics?.inSync ? 'In sync' : 'Drift detected'}
                 </span>
                 <span className="text-xs text-primary-600 dark:text-neutral-400">
-                  {data?.syncDiagnostics?.driftReason?.replace(/_/g, ' ') || 'no drift reason'}
+                  {data?.syncDiagnostics?.driftReason?.replace(/_/g, ' ') ||
+                    'no drift reason'}
                 </span>
               </div>
               <div className="mt-2 text-xs text-primary-500 dark:text-neutral-400">
-                Expected label {data?.syncDiagnostics?.expectedLabel || data?.preview?.currentWord || data?.preview?.teamsStatus || 'unknown'}
+                Expected label{' '}
+                {data?.syncDiagnostics?.expectedLabel ||
+                  data?.preview?.currentWord ||
+                  data?.preview?.teamsStatus ||
+                  'unknown'}
               </div>
             </div>
           </div>
@@ -502,7 +935,11 @@ export function PresenceHubScreen() {
             </button>
           </div>
           <div className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
-            Preview result: {data?.preview?.currentWord || data?.preview?.teamsStatus || data?.preview?.availability || 'unknown'}
+            Preview result:{' '}
+            {data?.preview?.currentWord ||
+              data?.preview?.teamsStatus ||
+              data?.preview?.availability ||
+              'unknown'}
             {data?.preview?.activity ? ` · ${data.preview.activity}` : ''}
           </div>
         </section>
@@ -516,7 +953,7 @@ export function PresenceHubScreen() {
                     Manual sync actions
                   </h2>
                   <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-                    Secondary tools for when diagnostics show a real mismatch.
+                    Secondary tools for when live status shows a real mismatch.
                   </div>
                 </div>
                 <div className="text-xs text-primary-500 dark:text-neutral-400">
@@ -530,9 +967,12 @@ export function PresenceHubScreen() {
                   type="button"
                   disabled={saving}
                   onClick={() =>
-                    void confirmAndPost('Apply current Teams status to presence devices now?', {
-                      kind: 'teams-sync',
-                    })
+                    void confirmAndPost(
+                      'Apply current Teams status to presence devices now?',
+                      {
+                        kind: 'teams-sync',
+                      },
+                    )
                   }
                   className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
                 >
@@ -542,9 +982,12 @@ export function PresenceHubScreen() {
                   type="button"
                   disabled={saving}
                   onClick={() =>
-                    void confirmAndPost('Rotate the active presence word pool now?', {
-                      kind: 'rotate-words',
-                    })
+                    void confirmAndPost(
+                      'Rotate the active presence word pool now?',
+                      {
+                        kind: 'rotate-words',
+                      },
+                    )
                   }
                   className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
                 >
@@ -559,6 +1002,42 @@ export function PresenceHubScreen() {
                   Refresh preview
                 </button>
               </div>
+              <div className="mt-3 grid gap-2 rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-950">
+                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                  Default presence mode
+                  <select
+                    value={defaultMode}
+                    onChange={(event) =>
+                      setDefaultMode(
+                        normalizePresenceDefaultMode(event.currentTarget.value),
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm normal-case tracking-normal text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                  >
+                    <option value="graph">Graph status first</option>
+                    <option value="manual">Manual override first</option>
+                    <option value="device">Device display first</option>
+                  </select>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[30, 60, 120].map((minutes) => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      disabled={saving}
+                      onClick={() =>
+                        void confirmAndPost(
+                          `Set do-not-disturb for ${minutes} minutes?`,
+                          buildDndPresetPayload(minutes),
+                        )
+                      }
+                      className="rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                    >
+                      DND {minutes}m
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {data?.pools?.map((pool) => (
                   <button
@@ -566,10 +1045,13 @@ export function PresenceHubScreen() {
                     type="button"
                     disabled={saving || pool.active}
                     onClick={() =>
-                      void confirmAndPost(`Activate presence word pool "${pool.name}"?`, {
-                        kind: 'activate-pool',
-                        poolId: pool.id,
-                      })
+                      void confirmAndPost(
+                        `Activate presence word pool "${pool.name}"?`,
+                        {
+                          kind: 'activate-pool',
+                          poolId: pool.id,
+                        },
+                      )
                     }
                     className={`rounded-full px-3 py-1.5 text-xs ${
                       pool.active
@@ -596,11 +1078,14 @@ export function PresenceHubScreen() {
               M5 devices
             </h2>
             <p className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-              Per-device sync state plus non-destructive controls for brightness, fetch interval, and displayed label.
+              Per-device sync state plus non-destructive controls for
+              brightness, fetch interval, and displayed label.
             </p>
           </div>
           <div className="text-xs text-primary-500 dark:text-neutral-400">
-            {loading ? 'Loading…' : `${visibleDevices.length}/${data?.devices?.length || 0} device(s)`}
+            {loading
+              ? 'Loading…'
+              : `${visibleDevices.length}/${data?.devices?.length || 0} device(s)`}
           </div>
           <div className="flex flex-wrap gap-2">
             <input
@@ -615,7 +1100,9 @@ export function PresenceHubScreen() {
               aria-label="Filter M5 devices"
               value={deviceFilter}
               onChange={(event) =>
-                setDeviceFilter(event.currentTarget.value as typeof deviceFilter)
+                setDeviceFilter(
+                  event.currentTarget.value as typeof deviceFilter,
+                )
               }
               className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
             >
@@ -636,80 +1123,95 @@ export function PresenceHubScreen() {
               {(() => {
                 const sync = perDeviceSync.get(device.id)
                 return (
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-base font-semibold text-primary-900 dark:text-neutral-100">
-                      {device.name}
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-base font-semibold text-primary-900 dark:text-neutral-100">
+                          {device.name}
+                        </div>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${statusTone(device.teamsStatus || device.status)}`}
+                        >
+                          {device.teamsStatus || device.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+                        Current word: {device.currentWord || 'none'}
+                      </div>
+                      <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
+                        Last seen {device.lastSeenMinutesAgo ?? '?'} minute(s)
+                        ago
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                        <span
+                          className={`rounded-full border px-2 py-1 ${statusTone(
+                            (device.lastSeenMinutesAgo ?? 9999) <= 5
+                              ? 'available'
+                              : 'away',
+                          )}`}
+                        >
+                          {(device.lastSeenMinutesAgo ?? 9999) <= 5
+                            ? 'Fresh'
+                            : 'Stale'}
+                        </span>
+                        {sync ? (
+                          <span
+                            className={`rounded-full border px-2 py-1 ${syncTone(sync.state === 'in-sync', sync.state === 'stale' ? 'device_stale' : sync.reason.replace(/ /g, '_'))}`}
+                          >
+                            {sync.state === 'in-sync'
+                              ? 'In sync'
+                              : sync.state === 'stale'
+                                ? 'Needs refresh'
+                                : 'Mismatch'}
+                          </span>
+                        ) : null}
+                        {device.wordMode ? (
+                          <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                            Mode: {device.wordMode}
+                          </span>
+                        ) : null}
+                        {device.type ? (
+                          <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                            {device.type}
+                          </span>
+                        ) : null}
+                      </div>
+                      {sync ? (
+                        <div className="mt-2 text-xs text-primary-500 dark:text-neutral-400">
+                          Expected {sync.expectedPresence || 'unknown'}
+                          {sync.expectedLabel
+                            ? ` · label ${sync.expectedLabel}`
+                            : ''}{' '}
+                          · {sync.reason}
+                        </div>
+                      ) : null}
                     </div>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${statusTone(device.teamsStatus || device.status)}`}>
-                      {device.teamsStatus || device.status}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-                    Current word: {device.currentWord || 'none'}
-                  </div>
-                  <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
-                    Last seen {device.lastSeenMinutesAgo ?? '?'} minute(s) ago
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                    <span
-                      className={`rounded-full border px-2 py-1 ${statusTone(
-                        (device.lastSeenMinutesAgo ?? 9999) <= 5 ? 'available' : 'away',
-                      )}`}
-                    >
-                      {(device.lastSeenMinutesAgo ?? 9999) <= 5 ? 'Fresh' : 'Stale'}
-                    </span>
-                    {sync ? (
-                      <span className={`rounded-full border px-2 py-1 ${syncTone(sync.state === 'in-sync', sync.state === 'stale' ? 'device_stale' : sync.reason.replace(/ /g, '_'))}`}>
-                        {sync.state === 'in-sync'
-                          ? 'In sync'
-                          : sync.state === 'stale'
-                            ? 'Needs refresh'
-                            : 'Mismatch'}
-                      </span>
-                    ) : null}
-                    {device.wordMode ? (
-                      <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-                        Mode: {device.wordMode}
-                      </span>
-                    ) : null}
-                    {device.type ? (
-                      <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-                        {device.type}
-                      </span>
-                    ) : null}
-                  </div>
-                  {sync ? (
-                    <div className="mt-2 text-xs text-primary-500 dark:text-neutral-400">
-                      Expected {sync.expectedPresence || 'unknown'}{sync.expectedLabel ? ` · label ${sync.expectedLabel}` : ''} · {sync.reason}
+                    <div className="flex flex-col items-start gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(device.id)}
+                        className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                      >
+                        Copy device id
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedDeviceId((current) =>
+                            current === device.id ? null : device.id,
+                          )
+                        }
+                        className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                      >
+                        {expandedDeviceId === device.id
+                          ? 'Hide manual settings'
+                          : 'Show manual settings'}
+                      </button>
+                      <div className="text-xs text-primary-500 dark:text-neutral-400">
+                        Manual overrides are secondary to the sync health above.
+                      </div>
                     </div>
-                  ) : null}
-                </div>
-                <div className="flex flex-col items-start gap-2">
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(device.id)}
-                    className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-                  >
-                    Copy device id
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedDeviceId((current) =>
-                        current === device.id ? null : device.id,
-                      )
-                    }
-                    className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-                  >
-                    {expandedDeviceId === device.id ? 'Hide manual settings' : 'Show manual settings'}
-                  </button>
-                  <div className="text-xs text-primary-500 dark:text-neutral-400">
-                    Manual overrides are secondary to the sync diagnostics above.
                   </div>
-                </div>
-              </div>
                 )
               })()}
               {expandedDeviceId === device.id ? (
@@ -818,8 +1320,13 @@ export function PresenceHubScreen() {
           ))}
           {!loading && (data?.devices?.length || 0) === 0 ? (
             <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-              <div className="font-medium text-primary-700 dark:text-neutral-200">No M5 devices are registered right now.</div>
-              <div className="mt-1">Presence is still readable from Teams, but display sync has no target device.</div>
+              <div className="font-medium text-primary-700 dark:text-neutral-200">
+                No M5 devices are registered right now.
+              </div>
+              <div className="mt-1">
+                Presence is still readable from Teams, but display sync has no
+                target device.
+              </div>
               <button
                 type="button"
                 onClick={() => void load()}
@@ -829,9 +1336,13 @@ export function PresenceHubScreen() {
               </button>
             </div>
           ) : null}
-          {!loading && (data?.devices?.length || 0) > 0 && visibleDevices.length === 0 ? (
+          {!loading &&
+          (data?.devices?.length || 0) > 0 &&
+          visibleDevices.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-              <div className="font-medium text-primary-700 dark:text-neutral-200">No devices match this view.</div>
+              <div className="font-medium text-primary-700 dark:text-neutral-200">
+                No devices match this view.
+              </div>
               <button
                 type="button"
                 onClick={() => {

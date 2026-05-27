@@ -15,13 +15,22 @@ import {
   VolumeHighIcon,
 } from '@hugeicons/core-free-icons'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { SettingsControlCenter } from './-settings-control-center'
+import {
+  SETTINGS_SECTION_KEYS,
+  getSettingsMobileGroup,
+  getSettingsSearchSummary,
+  searchSettingsSections,
+} from './-settings-utils'
+import type { SettingsSaveState } from './-settings-control-center'
 import type * as React from 'react'
 import type { LoaderStyle } from '@/hooks/use-chat-settings'
 import type { BrailleSpinnerPreset } from '@/components/ui/braille-spinner'
 import type { ThemeId } from '@/lib/theme'
 import type { SettingsNavId } from '@/components/settings/settings-sidebar'
 import type { LocaleId } from '@/lib/i18n'
+import type { StudioSettings } from '@/hooks/use-settings'
 import { GROQ_STT_MODELS, STT_PROVIDER_OPTIONS } from '@/lib/stt-config'
 import {
   SETTINGS_NAV_ITEMS,
@@ -31,7 +40,7 @@ import {
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { useSettings } from '@/hooks/use-settings'
+import { defaultStudioSettings, useSettings } from '@/hooks/use-settings'
 import { LOCALE_LABELS, getLocale, setLocale } from '@/lib/i18n'
 import { THEMES, getTheme, isDarkTheme, setTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -49,19 +58,6 @@ import { ThreeDotsSpinner } from '@/components/ui/three-dots-spinner'
 const VALID_SECTION_IDS: ReadonlyArray<SettingsNavId> = SETTINGS_NAV_ITEMS.map(
   (item) => item.id,
 )
-
-const SETTINGS_SECTION_KEYWORDS: Record<SettingsNavId, string> = {
-  connection: 'connection auth gateway health tokens endpoint',
-  claude: 'model provider api key base url anthropic openai local',
-  agent: 'agent behavior turns timeout approvals system prompt',
-  routing: 'routing models fallback local cloud cost quality',
-  voice: 'voice tts stt microphone speaker livekit speech',
-  display: 'display streaming markdown compact cost usage',
-  appearance: 'appearance theme palette color dark light',
-  chat: 'chat composer sessions title messages',
-  notifications: 'notifications alerts usage threshold suggestions',
-  language: 'language locale translation interface',
-}
 
 export const Route = createFileRoute('/settings/')({
   ssr: false,
@@ -316,6 +312,8 @@ function SettingsRoute() {
   const { settings, updateSettings } = useSettings()
   const navigate = useNavigate()
   const [sectionSearch, setSectionSearch] = useState('')
+  const [saveState, setSaveState] = useState<SettingsSaveState>('autosaved')
+  const saveTimerRef = useRef<number | null>(null)
 
   // Phase 4.2: Fetch models for preferred model dropdowns
   const [availableModels, setAvailableModels] = useState<
@@ -350,15 +348,85 @@ function SettingsRoute() {
   const { section } = Route.useSearch()
   const activeSection: SettingsSectionId = section ?? 'claude'
   const matchingSections = useMemo(() => {
-    const q = sectionSearch.trim().toLowerCase()
-    if (!q) return SETTINGS_NAV_ITEMS
-    return SETTINGS_NAV_ITEMS.filter((item) =>
-      [item.label, item.id, SETTINGS_SECTION_KEYWORDS[item.id]]
-        .join(' ')
-        .toLowerCase()
-        .includes(q),
-    )
+    return searchSettingsSections(sectionSearch)
   }, [sectionSearch])
+  const settingsSearchSummary = getSettingsSearchSummary(
+    sectionSearch,
+    matchingSections,
+  )
+
+  const navigateToSection = useCallback(
+    (id: SettingsNavId) => {
+      void navigate({ to: '/settings', search: { section: id } })
+    },
+    [navigate],
+  )
+
+  const trackedUpdateSettings = useCallback(
+    (updates: Partial<StudioSettings>) => {
+      setSaveState('unsaved')
+      try {
+        updateSettings(updates)
+        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = window.setTimeout(() => {
+          setSaveState('autosaved')
+          saveTimerRef.current = null
+        }, 450)
+      } catch {
+        setSaveState('failed')
+      }
+    },
+    [updateSettings],
+  )
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    function handleSettingsKeyboard(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      const tagName = target?.tagName.toLowerCase()
+      if (
+        tagName === 'input' ||
+        tagName === 'select' ||
+        tagName === 'textarea' ||
+        target?.isContentEditable
+      ) {
+        return
+      }
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      const currentIndex = SETTINGS_NAV_ITEMS.findIndex(
+        (item) => item.id === activeSection,
+      )
+      if (currentIndex === -1) return
+      const nextIndex =
+        event.key === 'ArrowRight'
+          ? (currentIndex + 1) % SETTINGS_NAV_ITEMS.length
+          : (currentIndex - 1 + SETTINGS_NAV_ITEMS.length) %
+            SETTINGS_NAV_ITEMS.length
+      event.preventDefault()
+      navigateToSection(SETTINGS_NAV_ITEMS[nextIndex].id)
+    }
+    window.addEventListener('keydown', handleSettingsKeyboard)
+    return () => window.removeEventListener('keydown', handleSettingsKeyboard)
+  }, [activeSection, navigateToSection])
+
+  const resetSection = useCallback(
+    (id: SettingsNavId) => {
+      const keys = SETTINGS_SECTION_KEYS[id]
+      if (keys.length === 0) return
+      trackedUpdateSettings(
+        keys.reduce<Partial<StudioSettings>>((updates, key) => {
+          updates[key] = defaultStudioSettings[key] as never
+          return updates
+        }, {}),
+      )
+    },
+    [trackedUpdateSettings],
+  )
 
   return (
     <div className="min-h-screen bg-surface text-primary-900">
@@ -381,6 +449,13 @@ function SettingsRoute() {
                 <p className="mt-1 text-sm text-primary-700">
                   Jump directly to the section that owns a model, voice, theme,
                   routing, or notification setting.
+                </p>
+                <p className="mt-1 text-xs font-medium text-primary-500">
+                  {settingsSearchSummary} · {saveState === 'autosaved'
+                    ? 'Autosaved'
+                    : saveState === 'unsaved'
+                      ? 'Saving changes'
+                      : 'Save failed'}
                 </p>
               </div>
               <div className="w-full md:max-w-sm">
@@ -417,7 +492,12 @@ function SettingsRoute() {
                       : 'border-primary-200 bg-white/70 text-primary-600 hover:text-primary-900',
                   )}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {sectionSearch.trim() ? (
+                    <span className="ml-1 text-[10px] font-normal opacity-70">
+                      {getSettingsMobileGroup(item.id)}
+                    </span>
+                  ) : null}
                 </button>
               ))}
               {matchingSections.length === 0 ? (
@@ -427,6 +507,14 @@ function SettingsRoute() {
               ) : null}
             </div>
           </section>
+
+          <SettingsControlCenter
+            activeSection={activeSection}
+            settings={settings}
+            saveState={saveState}
+            onNavigate={navigateToSection}
+            onResetSection={resetSection}
+          />
 
           {/* -- Connection ------------------ */}
           {activeSection === 'connection' && <ConnectionSection />}
@@ -493,7 +581,9 @@ function SettingsRoute() {
                     max={20}
                     value={settings.editorFontSize}
                     onChange={(e) =>
-                      updateSettings({ editorFontSize: Number(e.target.value) })
+                      trackedUpdateSettings({
+                        editorFontSize: Number(e.target.value),
+                      })
                     }
                     className="w-full accent-primary-900 dark:accent-primary-400"
                     aria-label={`Editor font size: ${settings.editorFontSize} pixels`}
@@ -513,7 +603,7 @@ function SettingsRoute() {
                 <Switch
                   checked={settings.editorWordWrap}
                   onCheckedChange={(checked) =>
-                    updateSettings({ editorWordWrap: checked })
+                    trackedUpdateSettings({ editorWordWrap: checked })
                   }
                   aria-label="Word wrap"
                 />
@@ -525,7 +615,7 @@ function SettingsRoute() {
                 <Switch
                   checked={settings.editorMinimap}
                   onCheckedChange={(checked) =>
-                    updateSettings({ editorMinimap: checked })
+                    trackedUpdateSettings({ editorMinimap: checked })
                   }
                   aria-label="Show minimap"
                 />
@@ -578,7 +668,7 @@ function SettingsRoute() {
                   <Switch
                     checked={settings.notificationsEnabled}
                     onCheckedChange={(checked) =>
-                      updateSettings({ notificationsEnabled: checked })
+                      trackedUpdateSettings({ notificationsEnabled: checked })
                     }
                     aria-label="Enable alerts"
                   />
@@ -594,7 +684,7 @@ function SettingsRoute() {
                       max={100}
                       value={settings.usageThreshold}
                       onChange={(e) =>
-                        updateSettings({
+                        trackedUpdateSettings({
                           usageThreshold: Number(e.target.value),
                         })
                       }
@@ -622,10 +712,10 @@ function SettingsRoute() {
                   description="Suggest cheaper models for simple tasks or better models for complex work."
                 >
                   <Switch
-                    checked={settings.smartSuggestionsEnabled}
-                    onCheckedChange={(checked) =>
-                      updateSettings({ smartSuggestionsEnabled: checked })
-                    }
+                  checked={settings.smartSuggestionsEnabled}
+                  onCheckedChange={(checked) =>
+                    trackedUpdateSettings({ smartSuggestionsEnabled: checked })
+                  }
                     aria-label="Enable smart suggestions"
                   />
                 </SettingsRow>
@@ -636,7 +726,9 @@ function SettingsRoute() {
                   <select
                     value={settings.preferredBudgetModel}
                     onChange={(e) =>
-                      updateSettings({ preferredBudgetModel: e.target.value })
+                      trackedUpdateSettings({
+                        preferredBudgetModel: e.target.value,
+                      })
                     }
                     className="h-9 w-full rounded-lg border border-primary-200 dark:border-gray-600 bg-primary-50 dark:bg-gray-800 px-3 text-sm text-primary-900 dark:text-gray-100 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-500 md:max-w-xs"
                     aria-label="Preferred budget model"
@@ -659,7 +751,9 @@ function SettingsRoute() {
                   <select
                     value={settings.preferredPremiumModel}
                     onChange={(e) =>
-                      updateSettings({ preferredPremiumModel: e.target.value })
+                      trackedUpdateSettings({
+                        preferredPremiumModel: e.target.value,
+                      })
                     }
                     className="h-9 w-full rounded-lg border border-primary-200 dark:border-gray-600 bg-primary-50 dark:bg-gray-800 px-3 text-sm text-primary-900 dark:text-gray-100 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary-400 dark:focus-visible:ring-primary-500 md:max-w-xs"
                     aria-label="Preferred premium model"
@@ -680,10 +774,10 @@ function SettingsRoute() {
                   description="Never suggest upgrades, only suggest cheaper alternatives."
                 >
                   <Switch
-                    checked={settings.onlySuggestCheaper}
-                    onCheckedChange={(checked) =>
-                      updateSettings({ onlySuggestCheaper: checked })
-                    }
+                  checked={settings.onlySuggestCheaper}
+                  onCheckedChange={(checked) =>
+                    trackedUpdateSettings({ onlySuggestCheaper: checked })
+                  }
                     aria-label="Only suggest cheaper models"
                   />
                 </SettingsRow>

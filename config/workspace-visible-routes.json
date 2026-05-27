@@ -2,6 +2,7 @@
   {
     "route": "/dashboard",
     "smokeText": "Hermes Workspace",
+    "mobileSmokeText": "Phone Cockpit",
     "screenshotName": "dashboard"
   },
   {
@@ -10,11 +11,17 @@
     "screenshotName": "phone-cockpit",
     "mobileOnly": true
   },
-  { "route": "/lily", "smokeText": "Start LILY", "screenshotName": "lily" },
+  {
+    "route": "/lily",
+    "smokeText": "Start LILY",
+    "screenshotName": "lily",
+    "mobileVisibleSelector": "[data-testid=\"lily-mic-control\"]"
+  },
   {
     "route": "/chat/main",
     "smokeText": "SESSIONS",
-    "visualText": "HERMES WORKSPACE",
+    "mobileSmokeText": "Compact mobile composer mode ready",
+    "visualText": "Ready for the next turn",
     "screenshotName": "chat-main"
   },
   {
@@ -28,12 +35,56 @@
     "smokeText": "Terminal",
     "screenshotName": "terminal"
   },
-  { "route": "/jobs", "smokeText": "Jobs", "screenshotName": "jobs" },
-  { "route": "/tasks", "smokeText": "Tasks", "screenshotName": "tasks" },
+  {
+    "route": "/jobs",
+    "smokeText": "Jobs",
+    "screenshotName": "jobs",
+    "routeSmokeFixtures": [
+      {
+        "route": "/jobs?smokeFixture=failed",
+        "smokeText": "Smoke fixture failure",
+        "mobileSmokeText": "Smoke fixture failure"
+      }
+    ]
+  },
+  {
+    "route": "/tasks",
+    "smokeText": "Tasks",
+    "screenshotName": "tasks",
+    "routeSmokeFixtures": [
+      {
+        "route": "/tasks?create=task",
+        "smokeText": "Create Task",
+        "mobileSmokeText": "Create Task"
+      }
+    ]
+  },
   {
     "route": "/75-tracker",
     "smokeText": "75 Hard/Soft",
-    "screenshotName": "75-tracker"
+    "screenshotName": "75-tracker",
+    "routeSmokeFixtures": [
+      {
+        "route": "/75-tracker?mode=hard&quick=1",
+        "smokeText": "1 gallon",
+        "mobileSmokeText": "1 gallon"
+      }
+    ]
+  },
+  {
+    "route": "/wegovy",
+    "smokeText": "Wegovy Shots",
+    "screenshotName": "wegovy"
+  },
+  {
+    "route": "/zyn-tracker",
+    "smokeText": "Zyn Tracker",
+    "screenshotName": "zyn-tracker"
+  },
+  {
+    "route": "/food-log",
+    "smokeText": "Food Log",
+    "screenshotName": "food-log"
   },
   {
     "route": "/conductor",
@@ -43,7 +94,14 @@
   {
     "route": "/operations",
     "smokeText": "Operations",
-    "screenshotName": "operations"
+    "screenshotName": "operations",
+    "routeSmokeFixtures": [
+      {
+        "route": "/operations?create=agent",
+        "smokeText": "New Agent",
+        "mobileSmokeText": "New Agent"
+      }
+    ]
   },
   {
     "route": "/ops-intelligence",
@@ -65,6 +123,7 @@
   {
     "route": "/profiles",
     "smokeText": "Profiles",
+    "visualText": "Browse and manage Hermes profiles",
     "screenshotName": "profiles"
   },
   {

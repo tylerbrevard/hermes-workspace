@@ -125,7 +125,7 @@ function parseExecNotification(text: string): ExecNotification | null {
 
   if (!name) {
     const withoutPrefix = trimmed.replace(/^Exec completed[:\s-]*/i, '').trim()
-    const nameMatch = withoutPrefix.match(/^([^\(\{\[]+?)(?:\s*\(|\s*$)/)
+    const nameMatch = withoutPrefix.match(/^([^{([]+?)(?:\s*[(]|\s*$)/)
     if (nameMatch) name = nameMatch[1].trim()
   }
 
@@ -188,8 +188,7 @@ function isOptimisticUserMessage(message: ChatMessage): boolean {
   // being treated as pending and duplicated in the transcript.
   if (status === 'sent' || status === 'done') return false
   return (
-    status === 'sending' ||
-    normalizeMessageValue(raw.__optimisticId).length > 0
+    status === 'sending' || normalizeMessageValue(raw.__optimisticId).length > 0
   )
 }
 
@@ -339,10 +338,10 @@ export function useChatHistory({
       const cached = queryClient.getQueryData(historyKey)
       const optimisticMessages = Array.isArray((cached as any)?.messages)
         ? (cached as any).messages.filter((message: any) => {
-          if (message.status === 'sending') return true
-          if (message.__optimisticId) return true
-          return Boolean(message.clientId)
-        })
+            if (message.status === 'sending') return true
+            if (message.__optimisticId) return true
+            return Boolean(message.clientId)
+          })
         : []
 
       const serverData = await fetchHistory({
@@ -462,8 +461,8 @@ export function useChatHistory({
   const historyMessages = useMemo(() => {
     const messages = persistedPending
       ? mergeOptimisticHistoryMessages(rawHistoryMessages, [
-        persistedPending.optimisticMessage,
-      ])
+          persistedPending.optimisticMessage,
+        ])
       : rawHistoryMessages
     const last = messages[messages.length - 1]
     const lastId =
@@ -493,7 +492,7 @@ export function useChatHistory({
         const text = textFromMessage(msg)
         const execNotification = parseExecNotification(text)
         if (execNotification) {
-          ; (msg as any).__execNotification = execNotification
+          ;(msg as any).__execNotification = execNotification
           return true
         }
         if ((msg as any).__execNotification) {
@@ -580,7 +579,7 @@ export function useChatHistory({
           filtered.splice(i, 1)
           i--
         } else {
-          ; (msg as any).__isNarration = true
+          ;(msg as any).__isNarration = true
         }
       }
     }

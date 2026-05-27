@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { PlaygroundWorldId } from '../lib/playground-rpg'
+import { useWorkspaceStore } from '@/stores/workspace-store'
 
 export type ChatMessage = {
   id: string
@@ -13,7 +13,7 @@ export type ChatMessage = {
 
 type Props = {
   worldId: PlaygroundWorldId
-  messages: ChatMessage[]
+  messages: Array<ChatMessage>
   onSend: (body: string) => void
   collapsed?: boolean
   onToggle?: () => void
@@ -74,8 +74,8 @@ function PlaygroundChatInner({
   }, [])
   const liveConnected = transport === 'ws' || transport === 'both'
   const { humanMessages, npcMessages } = useMemo(() => {
-    const humans: ChatMessage[] = []
-    const npcs: ChatMessage[] = []
+    const humans: Array<ChatMessage> = []
+    const npcs: Array<ChatMessage> = []
     for (const message of messages) {
       if (
         typeof message.authorId === 'string' &&
