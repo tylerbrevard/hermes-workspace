@@ -1,12 +1,12 @@
 {
   "source": "docs/hermes-workspace-look-code-review-2026-05-27.md",
-  "updatedAt": "2026-05-27T17:32:00-04:00",
+  "updatedAt": "2026-05-27T17:40:00-04:00",
   "summary": {
     "reviewPages": 23,
     "reviewRecommendations": 460,
     "crossPageRecommendations": 10,
-    "implementedItems": 338,
-    "remainingEstimatedItems": 132
+    "implementedItems": 350,
+    "remainingEstimatedItems": 120
   },
   "implemented": [
     {
@@ -70,7 +70,10 @@
         "Phone freshness labels now use the shared workspace freshness utility.",
         "Phone tabs, card preference helpers, mode readouts, at-a-glance summaries, signal rail, daily loops, quick logs, freshness notices, and queue readouts now live in a route-private helper module.",
         "Phone helper tests import the pure helper module directly instead of the full route component.",
-        "Phone route file is reduced from 3017 to 2335 lines while preserving current daily-mode behavior."
+        "Phone route file is reduced from 3017 to 2335 lines while preserving current daily-mode behavior.",
+        "Phone shared status dot, action link, icon tile, card, empty state, external action, and stat pill primitives now live in a route-private UI module.",
+        "Phone route imports UI primitives directly instead of carrying duplicate JSX helper definitions.",
+        "Phone route file is reduced from 2335 to 2113 lines while preserving current daily-mode behavior."
       ]
     },
     {
@@ -236,7 +239,10 @@
         "Skills cards now show search-result snippets explaining why a skill matched.",
         "Skills mutation buttons now expose install, remove, and toggle risk labels.",
         "Skills route links now include MCP when a skill references MCP, tools, or servers.",
-        "Pinned favorite skills now surface as a first-viewport favorites section."
+        "Pinned favorite skills now surface as a first-viewport favorites section.",
+        "Skills tab, filter, API, hub, usage, provenance, compatibility, diagnostics, route-link, mutation-risk, search-tier, and inventory-export contracts now live in a route-private workflow module.",
+        "Skills helper tests now import pure workflow logic directly instead of importing the full route component.",
+        "Skills route file is reduced from 1993 to 1729 lines while preserving installed, marketplace, featured, favorites, sorting, and action-dialog behavior."
       ]
     },
     {
@@ -491,6 +497,7 @@
         "Build passes after Phone Cockpit helper extraction.",
         "Runtime sync refreshed stale served assets before Phone Cockpit smoke verification.",
         "Mobile route smoke passes after Phone Cockpit helper extraction.",
+        "Phone Cockpit route imports the extracted UI primitive module without duplicate local helper definitions.",
         "Meetings helper tests pass after extracting workflow helpers into a route-private utility module.",
         "Lint passes after Meetings workflow helper extraction.",
         "Build passes after Meetings workflow helper extraction.",
@@ -521,7 +528,12 @@
         "Lint passes after Dashboard UI primitive extraction.",
         "Build passes after Dashboard UI primitive extraction.",
         "Runtime sync refreshed served assets before Dashboard route smoke verification.",
-        "Desktop and mobile route smoke pass after Dashboard UI primitive extraction."
+        "Desktop and mobile route smoke pass after Dashboard UI primitive extraction.",
+        "Skills helper tests pass after extracting workflow helpers into a route-private module.",
+        "Lint passes after Skills workflow helper extraction.",
+        "Build passes after Skills workflow helper extraction.",
+        "Runtime sync refreshed stale served assets before Skills route smoke verification.",
+        "Desktop and mobile route smoke pass after Skills workflow helper extraction."
       ]
     }
   ],
