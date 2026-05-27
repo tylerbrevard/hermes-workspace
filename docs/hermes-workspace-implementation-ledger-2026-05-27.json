@@ -1,12 +1,12 @@
 {
   "source": "docs/hermes-workspace-look-code-review-2026-05-27.md",
-  "updatedAt": "2026-05-27T16:22:11-04:00",
+  "updatedAt": "2026-05-27T17:18:00-04:00",
   "summary": {
     "reviewPages": 23,
     "reviewRecommendations": 460,
     "crossPageRecommendations": 10,
-    "implementedItems": 322,
-    "remainingEstimatedItems": 148
+    "implementedItems": 330,
+    "remainingEstimatedItems": 140
   },
   "implemented": [
     {
@@ -159,7 +159,10 @@
         "Conductor route diagnostics can be copied as a safe JSON bundle with phase, session key, stream state, worker counts, cwd, and error state.",
         "Conductor portable-plan copy now previews goal, constraints, verification, handoff, readiness, and explicitly excludes secrets.",
         "Conductor mission drafts now persist through versioned launch-draft storage with legacy goal-draft fallback.",
-        "Conductor modal readiness summary shares the same helper logic as the first-viewport launch flow."
+        "Conductor modal readiness summary shares the same helper logic as the first-viewport launch flow.",
+        "Conductor launch draft contracts, Tyler recurring templates, readiness helpers, diagnostics, portable plan preview, and draft serialization now live in a route-private workflow module.",
+        "Conductor helper tests now import pure workflow logic directly instead of loading the full route component for launch-readiness coverage.",
+        "Conductor route file is reduced from 4068 to 3791 lines while preserving current mission launch, diagnostics, portable plan, and readiness behavior."
       ]
     },
     {
@@ -505,7 +508,12 @@
         "Lint passes after Chat workflow helper extraction.",
         "Build passes after Chat workflow helper extraction.",
         "Runtime sync refreshed stale served assets before Chat route smoke verification.",
-        "Desktop and mobile route smoke pass after Chat workflow helper extraction."
+        "Desktop and mobile route smoke pass after Chat workflow helper extraction.",
+        "Conductor helper tests pass after extracting launch workflow helpers into a route-private utility module.",
+        "Lint passes after Conductor launch workflow helper extraction.",
+        "Build passes after Conductor launch workflow helper extraction.",
+        "Runtime sync refreshed stale served assets before Conductor route smoke verification.",
+        "Desktop and mobile route smoke pass after Conductor launch workflow helper extraction."
       ]
     }
   ],
