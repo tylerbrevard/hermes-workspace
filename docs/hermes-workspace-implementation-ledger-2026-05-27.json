@@ -1,12 +1,12 @@
 {
   "source": "docs/hermes-workspace-look-code-review-2026-05-27.md",
-  "updatedAt": "2026-05-27T17:18:00-04:00",
+  "updatedAt": "2026-05-27T17:32:00-04:00",
   "summary": {
     "reviewPages": 23,
     "reviewRecommendations": 460,
     "crossPageRecommendations": 10,
-    "implementedItems": 330,
-    "remainingEstimatedItems": 140
+    "implementedItems": 338,
+    "remainingEstimatedItems": 132
   },
   "implemented": [
     {
@@ -50,7 +50,10 @@
         "Dashboard command-center scoring, status brief, next-action ranking, diagnostics, and workflow presets now live in a route-private pure utility module.",
         "Dashboard command strip now lives in a route-private component module instead of the main route file.",
         "Dashboard helper tests now import pure command-center logic directly instead of importing the full route component.",
-        "Dashboard route file is reduced from 2876 to 2633 lines while preserving the current command-center behavior."
+        "Dashboard route file is reduced from 2876 to 2633 lines while preserving the current command-center behavior.",
+        "Dashboard shared palette, card shell, unavailable widget, time/number formatting, color alpha, and secondary action primitives now live in a route-private UI module.",
+        "Dashboard route file is reduced from 2633 to 2444 lines while preserving current first-viewport, command strip, session, and widget behavior.",
+        "Dashboard UI primitive extraction keeps the shared source-freshness footer and icon-button semantics consistent across existing route cards."
       ]
     },
     {
@@ -513,7 +516,12 @@
         "Lint passes after Conductor launch workflow helper extraction.",
         "Build passes after Conductor launch workflow helper extraction.",
         "Runtime sync refreshed stale served assets before Conductor route smoke verification.",
-        "Desktop and mobile route smoke pass after Conductor launch workflow helper extraction."
+        "Desktop and mobile route smoke pass after Conductor launch workflow helper extraction.",
+        "Dashboard helper tests pass after extracting shared UI primitives into a route-private module.",
+        "Lint passes after Dashboard UI primitive extraction.",
+        "Build passes after Dashboard UI primitive extraction.",
+        "Runtime sync refreshed served assets before Dashboard route smoke verification.",
+        "Desktop and mobile route smoke pass after Dashboard UI primitive extraction."
       ]
     }
   ],
