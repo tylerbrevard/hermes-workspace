@@ -1,8 +1,7 @@
-import { Settings02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useEffect, useState } from 'react'
+import type { Settings02Icon } from '@hugeicons/core-free-icons'
 import type { ReactNode } from 'react'
-import { getUnavailableReason } from '@/lib/feature-gates'
 import { cn } from '@/lib/utils'
 
 // `IconSvgObject` isn't exported from @hugeicons/react; reuse the
@@ -157,12 +156,6 @@ export function UnavailableWidget({
         <p className="text-sm text-muted">{description}</p>
       </div>
     </GlassCard>
-  )
-}
-
-export function FeatureUnavailableWidget({ title }: { title: string }) {
-  return (
-    <UnavailableWidget title={title} description={getUnavailableReason(title)} />
   )
 }
 
