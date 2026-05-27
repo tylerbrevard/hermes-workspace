@@ -422,7 +422,7 @@ describe('buildDashboardOverview', () => {
       '/api/logs': {
         file: 'agent',
         lines: [
-          "WARNING tools.mcp_tool: MCP server 'obsidian' keepalive failed, triggering reconnect:\n",
+          'WARNING worker.pool: background refresh failed without blocking user requests\n',
           'ERROR gateway.run: real failure\n',
         ],
       },
@@ -439,6 +439,21 @@ describe('buildDashboardOverview', () => {
         lines: [
           'ERROR gateway.run: Another gateway instance is already running (PID 123)\n',
           '❌ Gateway already running (PID 123).\n',
+        ],
+      },
+    })
+    const overview = await buildDashboardOverview({ fetcher, logsLimit: 10 })
+    expect(overview.logs?.errorCount).toBe(0)
+    expect(overview.logs?.warnCount).toBe(0)
+    expect(overview.incidents).toEqual([])
+  })
+
+  it('ignores transient MCP keepalive reconnect lines', async () => {
+    const fetcher = makeFetcher({
+      '/api/logs': {
+        file: 'agent',
+        lines: [
+          "WARNING tools.mcp_tool: MCP server 'obsidian' keepalive failed, triggering reconnect:\n",
         ],
       },
     })

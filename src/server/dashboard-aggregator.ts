@@ -964,7 +964,8 @@ function normalizeLogs(
     const lower = line.toLowerCase()
     if (
       lower.includes('another gateway instance is already running') ||
-      lower.includes('gateway already running')
+      lower.includes('gateway already running') ||
+      lower.includes('keepalive failed, triggering reconnect')
     ) {
       continue
     }
