@@ -47,7 +47,6 @@ import {
   UnavailableWidget,
   alpha,
   formatNumber,
-  readDashboardPalette,
   themeColor,
   timeAgo,
   useDashboardPalette,
@@ -62,6 +61,7 @@ import {
 import { normalizeDashboardSessionsPayload } from './lib/sessions-query'
 import { useDashboardLayout } from './lib/use-dashboard-layout'
 import { buildWeeklyWorkspaceUtilizationReport } from './lib/weekly-utilization-report'
+import type { readDashboardPalette } from './dashboard-ui'
 import type { SessionRowData } from './components/sessions-intelligence-card'
 import type { AnalyticsPeriod } from './components/analytics-chart-card'
 import type { ClaudeSession } from '@/server/claude-api'
