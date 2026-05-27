@@ -11,7 +11,7 @@ import {
   parseMissionLaunchDraft,
   serializeMissionLaunchDraft,
   validateMissionLaunchDraft,
-} from './conductor'
+} from './conductor-workflow'
 
 describe('Conductor Tyler workflow templates', () => {
   it('includes recurring workflows with built-in verification and preservation language', () => {
