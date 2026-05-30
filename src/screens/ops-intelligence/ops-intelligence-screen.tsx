@@ -1,4 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
+import {
+  Alert01Icon,
+  CheckListIcon,
+  File01Icon,
+  Route01Icon,
+  Search01Icon,
+} from '@hugeicons/core-free-icons'
+import type { HugeIcon } from '@/screens/dashboard/dashboard-ui'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 import { apiPath, withBasePath } from '@/lib/base-path'
 import {
   normalizeWorkspaceStatusTone,
@@ -6,6 +20,15 @@ import {
 } from '@/lib/source-freshness'
 
 type OpsSeverity = 'ok' | 'info' | 'warn' | 'error'
+type OpsCommandAction = 'observe' | 'triage' | 'route' | 'prove' | 'sync'
+
+const OPS_COMMAND_ICONS: Record<OpsCommandAction, HugeIcon> = {
+  observe: Search01Icon,
+  triage: Alert01Icon,
+  route: Route01Icon,
+  prove: File01Icon,
+  sync: CheckListIcon,
+}
 
 type DependencyProbe = {
   id: string
@@ -122,6 +145,15 @@ function panelClass() {
 function statusClass(status: OpsSeverity | RecommendationCapability['status']) {
   if (status === 'planned') return workspaceStatusClass('info')
   return workspaceStatusClass(normalizeWorkspaceStatusTone(status))
+}
+
+function appToneForOps(
+  status: OpsSeverity,
+): 'green' | 'blue' | 'amber' | 'red' {
+  if (status === 'ok') return 'green'
+  if (status === 'info') return 'blue'
+  if (status === 'warn') return 'amber'
+  return 'red'
 }
 
 function bytes(value: number) {
@@ -448,6 +480,57 @@ export function OpsIntelligenceScreen() {
     detail: string
     status: OpsSeverity
   }>
+  const commandHealth: OpsSeverity =
+    (snapshot?.summary.productionError ?? 0) > 0 ||
+    (snapshot?.summary.dependenciesError ?? 0) > 0
+      ? 'error'
+      : activeRiskCount > 0 || freshness === 'stale'
+        ? 'warn'
+        : freshness === 'unknown'
+          ? 'info'
+          : 'ok'
+  const opsCommandTiles: Array<{
+    id: OpsCommandAction
+    title: string
+    value: string
+    detail: string
+    status: OpsSeverity
+  }> = [
+    ...opsCommandCards.map((card) => ({
+      id: card.label.toLowerCase() as OpsCommandAction,
+      title: card.label,
+      value: card.value,
+      detail: card.detail,
+      status: card.status,
+    })),
+    {
+      id: 'sync',
+      title: 'Sync',
+      value: freshness === 'fresh' ? 'Fresh' : freshness,
+      detail: loading ? 'Running' : 'Refresh',
+      status: commandHealth,
+    },
+  ]
+
+  function activateOpsCommand(action: OpsCommandAction) {
+    if (action === 'sync') {
+      void load()
+      return
+    }
+    if (action === 'triage') {
+      setRiskFamily('all')
+      return
+    }
+    if (action === 'route') {
+      setCapabilityFilter('partial')
+      return
+    }
+    if (action === 'prove') {
+      setSearch('')
+      return
+    }
+    setRiskFamily('all')
+  }
 
   function exportSnapshot() {
     if (!snapshot) return
@@ -581,55 +664,31 @@ export function OpsIntelligenceScreen() {
             </button>
           ))}
         </div>
-        <section className="mt-4 rounded-2xl border border-primary-200 bg-white/80 p-4 dark:border-neutral-800 dark:bg-neutral-950/80">
-          <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-            <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-                Ops cockpit
-              </div>
-              <div className="mt-3 flex items-end gap-2">
-                <div className="text-5xl font-semibold text-primary-900 dark:text-neutral-100">
-                  {healthScore}
-                </div>
-                <div className="pb-2 text-sm text-primary-500 dark:text-neutral-500">
-                  /100
-                </div>
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-primary-100 dark:bg-neutral-800">
-                <div
-                  className={`h-2 rounded-full ${
-                    healthScore >= 85
-                      ? 'bg-emerald-600 dark:bg-emerald-300'
-                      : healthScore >= 65
-                        ? 'bg-amber-500 dark:bg-amber-300'
-                        : 'bg-red-600 dark:bg-red-300'
-                  }`}
-                  style={{ width: `${healthScore}%` }}
-                />
-              </div>
-              <div className="mt-3 text-sm text-primary-600 dark:text-neutral-400">
-                {activeRiskCount > 0
-                  ? `${activeRiskCount} active risk signals need ownership.`
-                  : 'No active risk signals are promoted.'}
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-4">
-              {opsCommandCards.map((card) => (
-                <div
-                  key={card.label}
-                  className={`rounded-2xl border p-3 ${statusClass(card.status)}`}
-                >
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">
-                    {card.label}
-                  </div>
-                  <div className="mt-2 text-3xl font-semibold">
-                    {card.value}
-                  </div>
-                  <div className="mt-1 text-xs opacity-80">{card.detail}</div>
-                </div>
-              ))}
-            </div>
+      </section>
+        <AppSurface className="mt-4">
+          <AppSectionHeader
+            title="Ops command center"
+            meta={`${healthScore}/100 health · ${activeRiskCount} active`}
+            action={
+              <AppStatusPill tone={appToneForOps(commandHealth)}>
+                {freshness}
+              </AppStatusPill>
+            }
+          />
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+            {opsCommandTiles.map((tile) => (
+              <AppTile
+                key={tile.id}
+                title={tile.title}
+                value={tile.value}
+                detail={tile.detail}
+                icon={OPS_COMMAND_ICONS[tile.id]}
+                tone={appToneForOps(tile.status)}
+                actionLabel={tile.id === 'sync' ? 'Refresh' : 'Open'}
+                className="min-h-[118px]"
+                onClick={() => activateOpsCommand(tile.id)}
+              />
+            ))}
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -675,10 +734,9 @@ export function OpsIntelligenceScreen() {
               </article>
             ))}
           </div>
-        </section>
-      </section>
+        </AppSurface>
 
-      <section className="grid gap-3 md:hidden">
+      <section className="hidden gap-3 md:hidden">
         <div className={panelClass()}>
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
             At a glance

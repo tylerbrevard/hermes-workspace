@@ -3,8 +3,13 @@ import { useSearch } from '@tanstack/react-router'
 import { motion } from 'motion/react'
 import {
   AiBrain03Icon,
+  Alert01Icon,
+  CheckListIcon,
+  Clock01Icon,
   PlusSignIcon,
+  RefreshIcon,
   SlidersHorizontalIcon,
+  Task01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { seedAgentPresets } from './agent-presets'
@@ -17,6 +22,13 @@ import { FullOutputsView } from './components/full-outputs-view'
 import { useOperations } from './hooks/use-operations'
 import type { CSSProperties } from 'react'
 import type { OperationsAgent } from './hooks/use-operations'
+import type { HugeIcon } from '@/screens/dashboard/dashboard-ui'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 import { Button } from '@/components/ui/button'
 import { withBasePath } from '@/lib/base-path'
 import { cn } from '@/lib/utils'
@@ -109,6 +121,14 @@ type OperationsCockpitTile = {
   progress: number
 }
 
+const OPERATIONS_TILE_ICONS: Record<string, HugeIcon> = {
+  active: Task01Icon,
+  failed: Alert01Icon,
+  blocked: CheckListIcon,
+  waiting: Clock01Icon,
+  freshness: RefreshIcon,
+}
+
 function compactOperationsLabel(value: string): string {
   return value
     .replace(/ops-maintenance/gi, 'Ops')
@@ -142,6 +162,15 @@ function tileToneClass(tone: OperationsCockpitTile['tone']) {
     return 'border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/35 dark:text-emerald-100'
   }
   return 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)]'
+}
+
+function appToneForOperations(
+  tone: OperationsCockpitTile['tone'],
+): 'green' | 'amber' | 'red' | 'blue' | 'neutral' {
+  if (tone === 'good') return 'green'
+  if (tone === 'warning') return 'amber'
+  if (tone === 'danger') return 'red'
+  return 'neutral'
 }
 
 function buildLatestError(agent: OperationsAgent): string {
@@ -539,7 +568,7 @@ export function OperationsScreen() {
               Config
             </Button>
           </div>
-          <div className="grid w-full min-w-0 grid-cols-3 gap-2 text-xs lg:grid-cols-6">
+          <div className="hidden w-full min-w-0 grid-cols-3 gap-2 text-xs md:grid lg:grid-cols-6">
             {[
               ['Agents', fleetCounts.total],
               ['Active', fleetCounts.active],
@@ -562,7 +591,7 @@ export function OperationsScreen() {
               </div>
             ))}
           </div>
-          <div className="flex w-full min-w-0 flex-wrap gap-2 text-xs text-[var(--theme-muted)]">
+          <div className="hidden w-full min-w-0 flex-wrap gap-2 text-xs text-[var(--theme-muted)] md:flex">
             <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
               {primaryAction.description}
             </span>
@@ -583,47 +612,49 @@ export function OperationsScreen() {
           </div>
         </header>
 
-        <section
-          aria-label="Agent operations cockpit"
-          className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-4"
-        >
-          {cockpitTiles.slice(0, 4).map((tile) => (
-            <button
-              key={tile.id}
-              type="button"
-              onClick={() => setFleetFilter(tile.filter)}
-              className={cn(
-                'group min-h-0 rounded-xl border p-3 text-left shadow-sm transition-[border-color,background-color,box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)] md:min-h-[7rem]',
-                tileToneClass(tile.tone),
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">
-                    {tile.label}
-                  </p>
-                  <p className="mt-1 truncate text-xl font-semibold tracking-normal">
-                    {tile.value}
-                  </p>
-                </div>
-                <span className="shrink-0 rounded-full border border-current/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-normal opacity-75">
-                  {tile.tone}
-                </span>
-              </div>
-              <p className="mt-2 line-clamp-1 text-xs leading-snug opacity-80">
-                {tile.detail}
-              </p>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-current/10 md:mt-3">
-                <div
-                  className="h-full rounded-full bg-current transition-[width]"
-                  style={{
-                    width: `${Math.min(100, Math.max(4, tile.progress))}%`,
-                  }}
-                />
-              </div>
-            </button>
-          ))}
-        </section>
+        <AppSurface>
+          <AppSectionHeader
+            title="Agent command center"
+            meta={primaryAction.description}
+            action={
+              <AppStatusPill
+                tone={
+                  error || fleetCounts.error > 0
+                    ? 'red'
+                    : fleetCounts.needsSetup > 0
+                      ? 'amber'
+                      : 'green'
+                }
+              >
+                {error
+                  ? 'Offline'
+                  : fleetCounts.error > 0
+                    ? 'Repair'
+                    : fleetCounts.needsSetup > 0
+                      ? 'Setup'
+                      : 'Ready'}
+              </AppStatusPill>
+            }
+          />
+          <div
+            aria-label="Agent operations cockpit"
+            className="grid grid-cols-2 gap-2 lg:grid-cols-5"
+          >
+            {cockpitTiles.map((tile) => (
+              <AppTile
+                key={tile.id}
+                title={tile.label}
+                value={tile.value}
+                detail={tile.detail}
+                icon={OPERATIONS_TILE_ICONS[tile.id] ?? Task01Icon}
+                tone={appToneForOperations(tile.tone)}
+                actionLabel={tile.id === 'freshness' ? 'Check' : 'Open'}
+                className="min-h-[118px]"
+                onClick={() => setFleetFilter(tile.filter)}
+              />
+            ))}
+          </div>
+        </AppSurface>
 
         {isLoading ? (
           <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-6 py-12 text-center text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)]">
