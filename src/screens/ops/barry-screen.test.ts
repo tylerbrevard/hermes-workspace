@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildBarryCockpitTiles,
   buildBarryFollowUpTask,
   buildBarryMeetingBrief,
   getBarryLastInteraction,
@@ -8,6 +9,40 @@ import {
 } from './barry-screen'
 
 describe('BarryScreen helpers', () => {
+  it('builds cockpit tiles for next meeting, prep, follow-ups, wins, and sync', () => {
+    const meeting = {
+      id: 'barry-124',
+      date: '2026-05-26T14:00:00.000Z',
+      status: 'upcoming' as const,
+      agenda: [{ text: 'Review blockers', discussed: false }],
+      winsDiscussed: ['Won project'],
+      actionItems: [{ text: 'Follow up', owner: 'Tyler', done: false }],
+      notes: '## Notes',
+    }
+
+    expect(
+      buildBarryCockpitTiles({
+        meetings: [meeting],
+        wins: [
+          {
+            id: 'win-1',
+            win: 'Closed Q2 project',
+            category: 'Delivery',
+            date: '2026-05-25',
+          },
+        ],
+        nextMeeting: meeting,
+        refreshedAt: '2026-05-26T13:00:00.000Z',
+      }),
+    ).toMatchObject([
+      { id: 'next', action: 'next', tone: 'ok' },
+      { id: 'prep', value: '100%', action: 'prep', tone: 'ok' },
+      { id: 'follow-ups', value: '1', action: 'follow-ups', tone: 'warn' },
+      { id: 'wins', value: '1', action: 'wins', tone: 'ok' },
+      { id: 'sync', action: 'sync', tone: 'ok' },
+    ])
+  })
+
   it('builds a real task payload from an open Barry action item', () => {
     const task = buildBarryFollowUpTask(
       {
@@ -78,9 +113,9 @@ describe('BarryScreen helpers', () => {
       notes: 'Ready notes',
     }
 
-    expect(getBarryNextAction(null)).toBe('Schedule Barry 1-on-1')
-    expect(getBarryNextAction(upcoming)).toBe('Prep next 1-on-1')
-    expect(getBarryNextAction(ready)).toBe('Create follow-up tasks')
+    expect(getBarryNextAction(null)).toBe('New 1-on-1')
+    expect(getBarryNextAction(upcoming)).toBe('Prep')
+    expect(getBarryNextAction(ready)).toBe('Tasks')
     expect(
       getBarryLastInteraction([
         upcoming,

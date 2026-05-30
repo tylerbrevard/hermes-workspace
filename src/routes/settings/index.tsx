@@ -273,7 +273,7 @@ function SettingsSection({ title, description, icon, children }: SectionProps) {
           <h2 className="text-base font-medium text-primary-900 text-balance">
             {title}
           </h2>
-          <p className="text-sm text-primary-600 text-pretty">{description}</p>
+          <p className="sr-only">{description}</p>
         </div>
       </div>
       <div className="space-y-4">{children}</div>
@@ -289,14 +289,15 @@ type RowProps = {
 
 function SettingsRow({ label, description, children }: RowProps) {
   return (
-    <div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between">
+    <div
+      className="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between"
+      title={description}
+    >
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-primary-900 text-balance">
           {label}
         </p>
-        {description ? (
-          <p className="text-xs text-primary-600 text-pretty">{description}</p>
-        ) : null}
+        {description ? <p className="sr-only">{description}</p> : null}
       </div>
       <div className="flex w-full items-center gap-2 md:w-auto md:justify-end">
         {children}
@@ -430,9 +431,6 @@ function SettingsRoute() {
 
   return (
     <div className="min-h-screen bg-surface text-primary-900">
-      <div className="pointer-events-none fixed inset-0 bg-radial from-primary-400/20 via-transparent to-transparent" />
-      <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-primary-100/25 via-transparent to-primary-300/20" />
-
       <main className="relative mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pt-6 pb-24 sm:px-6 md:flex-row md:gap-6 md:pb-8 lg:pt-8">
         <SettingsSidebar activeId={activeSection} />
 
@@ -444,14 +442,11 @@ function SettingsRoute() {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-500">
-                  Settings Search
-                </p>
-                <p className="mt-1 text-sm text-primary-700">
-                  Jump directly to the section that owns a model, voice, theme,
-                  routing, or notification setting.
+                  Find
                 </p>
                 <p className="mt-1 text-xs font-medium text-primary-500">
-                  {settingsSearchSummary} · {saveState === 'autosaved'
+                  {settingsSearchSummary} ·{' '}
+                  {saveState === 'autosaved'
                     ? 'Autosaved'
                     : saveState === 'unsaved'
                       ? 'Saving changes'
@@ -474,38 +469,38 @@ function SettingsRoute() {
                 />
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {matchingSections.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() =>
-                    void navigate({
-                      to: '/settings',
-                      search: { section: item.id },
-                    })
-                  }
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs font-medium transition',
-                    activeSection === item.id
-                      ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-subtle)] text-[var(--theme-accent)]'
-                      : 'border-primary-200 bg-white/70 text-primary-600 hover:text-primary-900',
-                  )}
-                >
-                  <span>{item.label}</span>
-                  {sectionSearch.trim() ? (
+            {sectionSearch.trim() ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {matchingSections.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      void navigate({
+                        to: '/settings',
+                        search: { section: item.id },
+                      })
+                    }
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                      activeSection === item.id
+                        ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-subtle)] text-[var(--theme-accent)]'
+                        : 'border-primary-200 bg-white/70 text-primary-600 hover:text-primary-900',
+                    )}
+                  >
+                    <span>{item.label}</span>
                     <span className="ml-1 text-[10px] font-normal opacity-70">
                       {getSettingsMobileGroup(item.id)}
                     </span>
-                  ) : null}
-                </button>
-              ))}
-              {matchingSections.length === 0 ? (
-                <span className="rounded-full border border-dashed border-primary-200 px-3 py-1.5 text-xs text-primary-500">
-                  No settings sections match.
-                </span>
-              ) : null}
-            </div>
+                  </button>
+                ))}
+                {matchingSections.length === 0 ? (
+                  <span className="rounded-full border border-dashed border-primary-200 px-3 py-1.5 text-xs text-primary-500">
+                    No matches
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
           <SettingsControlCenter
@@ -712,10 +707,12 @@ function SettingsRoute() {
                   description="Suggest cheaper models for simple tasks or better models for complex work."
                 >
                   <Switch
-                  checked={settings.smartSuggestionsEnabled}
-                  onCheckedChange={(checked) =>
-                    trackedUpdateSettings({ smartSuggestionsEnabled: checked })
-                  }
+                    checked={settings.smartSuggestionsEnabled}
+                    onCheckedChange={(checked) =>
+                      trackedUpdateSettings({
+                        smartSuggestionsEnabled: checked,
+                      })
+                    }
                     aria-label="Enable smart suggestions"
                   />
                 </SettingsRow>
@@ -774,10 +771,10 @@ function SettingsRoute() {
                   description="Never suggest upgrades, only suggest cheaper alternatives."
                 >
                   <Switch
-                  checked={settings.onlySuggestCheaper}
-                  onCheckedChange={(checked) =>
-                    trackedUpdateSettings({ onlySuggestCheaper: checked })
-                  }
+                    checked={settings.onlySuggestCheaper}
+                    onCheckedChange={(checked) =>
+                      trackedUpdateSettings({ onlySuggestCheaper: checked })
+                    }
                     aria-label="Only suggest cheaper models"
                   />
                 </SettingsRow>
@@ -1512,7 +1509,7 @@ function ClaudeConfigSection({
     return (
       <SettingsSection
         title="Hermes Agent"
-        description="Loading configuration..."
+        description="Loading config..."
         icon={Settings02Icon}
       >
         <div
@@ -1527,11 +1524,11 @@ function ClaudeConfigSection({
     return (
       <SettingsSection
         title="Hermes Agent"
-        description="Could not load Hermes configuration."
+        description="Could not load Hermes config."
         icon={Settings02Icon}
       >
         <p className="text-sm" style={{ color: 'var(--theme-muted)' }}>
-          Make sure Hermes Agent is running on localhost:18789
+          Check Hermes Agent on localhost:18789.
         </p>
       </SettingsSection>
     )
@@ -1668,7 +1665,7 @@ function ClaudeConfigSection({
   function saveCurrentToCustomProvidersList() {
     if (!providerInput.trim() || !baseUrlInput.trim()) {
       setSaveMessage(
-        'Enter both provider and base URL in Model & Provider, then try again.',
+        'Enter both provider and base URL in Model, then try again.',
       )
       setTimeout(() => setSaveMessage(null), 4000)
       return
@@ -1705,8 +1702,8 @@ function ClaudeConfigSection({
   const renderClaudeOverview = () => (
     <>
       <SettingsSection
-        title="Model & Provider"
-        description="Configure the default AI model for Hermes Agent."
+        title="Model"
+        description="Default provider, model, and base URL."
         icon={SourceCodeSquareIcon}
       >
         <SettingsRow
@@ -1800,12 +1797,10 @@ function ClaudeConfigSection({
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="space-y-0.5">
               <p className="text-sm font-medium text-primary-900">
-                Fallback model (optional)
+                Fallback
               </p>
               <p className="text-xs text-primary-600">
-                Used only if the primary model fails. Keep empty to disable —
-                avoids mixing this up with your main provider (for example
-                OpenRouter only here, local primary above).
+                Optional backup when primary fails.
               </p>
             </div>
             <Button
@@ -1815,9 +1810,7 @@ function ClaudeConfigSection({
               className="shrink-0"
               onClick={() => setShowFallbackRow((v) => !v)}
             >
-              {showFallbackRow
-                ? 'Hide fallback fields'
-                : 'Show fallback fields'}
+              {showFallbackRow ? 'Hide' : 'Show'}
             </Button>
           </div>
           {showFallbackRow ? (
@@ -1893,7 +1886,7 @@ function ClaudeConfigSection({
               void saveConfig({ config: configUpdate })
             }}
           >
-            {saving ? 'Saving...' : 'Save Model'}
+            {saving ? 'Saving...' : 'Save'}
           </Button>
         </div>
       </SettingsSection>
@@ -2558,7 +2551,7 @@ function ClaudeConfigSection({
       >
         <SettingsRow
           label="Config location"
-          description="Where Claude stores its configuration."
+          description="Claude config path."
         >
           <span
             className="text-xs font-mono"

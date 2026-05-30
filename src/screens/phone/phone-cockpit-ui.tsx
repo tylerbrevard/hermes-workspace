@@ -41,9 +41,9 @@ export function IconTile({
   return (
     <Link
       to={to}
-      className="flex min-h-[68px] min-w-0 items-center gap-2 rounded-[9px] border border-white/10 bg-white/[0.04] px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70 motion-safe:active:scale-[0.99]"
+      className="flex min-h-[72px] min-w-0 items-center gap-2.5 rounded-[18px] border border-white/10 bg-white/[0.055] px-3 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,.05)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70 motion-safe:active:scale-[0.98]"
     >
-      <span className="grid size-9 shrink-0 place-items-center rounded-[8px] bg-black/20 text-[#8ee7d5]">
+      <span className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-black/25 text-[#8ee7d5]">
         <HugeiconsIcon icon={icon} size={18} aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
@@ -91,7 +91,7 @@ export function Card({
   return (
     <section
       className={cx(
-        'rounded-[10px] border border-white/10 bg-[#111820] p-3 shadow-[0_12px_30px_rgba(0,0,0,.22)]',
+        'rounded-[24px] border border-white/10 bg-[#111820]/90 p-3.5 shadow-[0_18px_44px_rgba(0,0,0,.28),inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-xl',
         className,
       )}
     >
@@ -108,7 +108,7 @@ export function Card({
           <span className="min-w-0 truncate">{title}</span>
         </h2>
         {kicker ? (
-          <span className="shrink-0 rounded border border-[#6ec6b8]/30 bg-[#6ec6b8]/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[#b8fff3]">
+          <span className="hidden shrink-0 rounded border border-[#6ec6b8]/30 bg-[#6ec6b8]/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[#b8fff3] sm:inline-flex">
             {kicker}
           </span>
         ) : null}
@@ -170,7 +170,7 @@ export function ActionLink({
       to={to}
       aria-label={label}
       className={cx(
-        'inline-flex min-h-11 items-center justify-center rounded-[8px] border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-[#dbe7e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70 motion-safe:active:scale-[0.99]',
+        'inline-flex min-h-12 items-center justify-center rounded-[16px] border border-white/10 bg-white/[0.055] px-3 text-sm font-semibold text-[#dbe7e8] shadow-[inset_0_1px_0_rgba(255,255,255,.05)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70 motion-safe:active:scale-[0.98]',
         className,
       )}
     >
@@ -198,7 +198,7 @@ export function ExternalAction({ item }: { item: PhoneAttentionItem }) {
       href={item.href}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-[8px] border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-[#dbe7e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70 motion-safe:active:scale-[0.99]"
+      className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-[16px] border border-white/10 bg-white/[0.055] px-3 text-sm font-semibold text-[#dbe7e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70 motion-safe:active:scale-[0.98]"
     >
       {label}
     </a>
@@ -207,7 +207,7 @@ export function ExternalAction({ item }: { item: PhoneAttentionItem }) {
 
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-[8px] border border-white/10 bg-white/[0.035] p-3 text-sm leading-6 text-[#b7c6c9]">
+    <p className="rounded-[18px] border border-white/10 bg-white/[0.04] p-3 text-sm leading-6 text-[#b7c6c9]">
       {children}
     </p>
   )
@@ -223,7 +223,7 @@ export function StatPill({
   value: ReactNode
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-[8px] bg-white/[0.04] px-2.5 py-2">
+    <div className="flex min-w-0 items-center gap-2 rounded-[16px] bg-white/[0.055] px-2.5 py-2">
       <HugeiconsIcon
         icon={icon}
         size={15}

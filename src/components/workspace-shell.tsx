@@ -57,13 +57,15 @@ export const DESKTOP_SIDEBAR_BACKDROP_CLASS =
   'fixed left-0 bottom-0 top-[var(--titlebar-h,0px)] w-[300px] z-10 bg-black/10 backdrop-blur-[1px]'
 
 export function getWorkspaceMobilePageTitle(pathname: string) {
-  if (pathname.startsWith('/phone')) return 'Phone Cockpit'
+  if (pathname.startsWith('/phone')) return 'Phone'
   if (pathname.startsWith('/health')) return 'Health'
   if (pathname.startsWith('/lily')) return 'LILY'
   if (pathname.startsWith('/terminal')) return 'Terminal'
   if (pathname.startsWith('/files')) return 'Files'
   if (pathname.startsWith('/75-tracker')) return '75 Hard/Soft'
   if (pathname.startsWith('/pto-tracker')) return 'PTO Tracker'
+  if (pathname.startsWith('/chief-of-staff-mailbox'))
+    return 'Chief of Staff Mailbox'
   if (pathname.startsWith('/wegovy')) return 'Wegovy Shots'
   if (pathname.startsWith('/zyn-tracker')) return 'Zyn Tracker'
   if (pathname.startsWith('/food-log')) return 'Food Log'
@@ -143,9 +145,14 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     if (path === '/dashboard' || path.startsWith('/phone')) return 0
     if (path.startsWith('/chat') || path === '/new' || path === '/') return 1
     if (path.startsWith('/lily')) return 2
-    if (path.startsWith('/files')) return 3
-    if (path.startsWith('/terminal')) return 4
-    if (path === '/swarm' || path.startsWith('/swarm2')) return 5
+    if (path.startsWith('/tasks')) return 3
+    if (
+      path.startsWith('/operations') ||
+      path.startsWith('/conductor') ||
+      path === '/swarm' ||
+      path.startsWith('/swarm2')
+    )
+      return 4
     return -1
   }, [])
 

@@ -1,32 +1,36 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-
   ReservationValidationError,
   confirmReservation,
   countReservations,
   createReservation,
-  validateReservationInput
+  validateReservationInput,
 } from './name-reservations'
-import type {NameReservationStore} from './name-reservations';
+import type { NameReservationStore } from './name-reservations'
 
-function makeStore(seed: {
-  reservations?: Array<{
-    id: string
-    desiredName: string
-    normalizedName: string
-    email: string
-    wallet: string | null
-    confirmationToken: string
-    confirmedAt: string | null
-    createdAt: string
-  }>
-} = {}): NameReservationStore {
+function makeStore(
+  seed: {
+    reservations?: Array<{
+      id: string
+      desiredName: string
+      normalizedName: string
+      email: string
+      wallet: string | null
+      confirmationToken: string
+      confirmedAt: string | null
+      createdAt: string
+    }>
+  } = {},
+): NameReservationStore {
   const reservations = [...(seed.reservations || [])]
 
   return {
     async findByNormalizedName(normalizedName) {
-      return reservations.find((entry) => entry.normalizedName === normalizedName) || null
+      return (
+        reservations.find((entry) => entry.normalizedName === normalizedName) ||
+        null
+      )
     },
     async insertReservation(input) {
       const created = {
@@ -46,7 +50,9 @@ function makeStore(seed: {
       return reservations.length
     },
     async confirmByToken(token) {
-      const found = reservations.find((entry) => entry.confirmationToken === token)
+      const found = reservations.find(
+        (entry) => entry.confirmationToken === token,
+      )
       if (!found) return null
       if (!found.confirmedAt) {
         found.confirmedAt = '2026-05-06T12:05:00.000Z'
@@ -151,7 +157,11 @@ describe('createReservation', () => {
 
   it('stores a pending reservation and sends a confirmation email', async () => {
     const store = makeStore()
-    const sent: Array<{ email: string; desiredName: string; confirmationUrl: string }> = []
+    const sent: Array<{
+      email: string
+      desiredName: string
+      confirmationUrl: string
+    }> = []
 
     const created = await createReservation(
       {
@@ -176,7 +186,8 @@ describe('createReservation', () => {
       {
         email: 'scout@example.com',
         desiredName: 'AgoraScout',
-        confirmationUrl: 'https://hermes-world.ai/reserve/confirm?token=tok_new',
+        confirmationUrl:
+          'https://hermes-world.ai/reserve/confirm?token=tok_new',
       },
     ])
     await expect(countReservations(store)).resolves.toBe(1)
@@ -187,7 +198,11 @@ describe('createReservation', () => {
     const sent: Array<string> = []
     const attempts = [
       { desiredName: 'AtlasOne', email: 'player1@example.com', token: 'tok_1' },
-      { desiredName: 'BeaconTwo', email: 'player2@example.com', token: 'tok_2' },
+      {
+        desiredName: 'BeaconTwo',
+        email: 'player2@example.com',
+        token: 'tok_2',
+      },
       { desiredName: 'Cipher_3', email: 'player3@example.com', token: 'tok_3' },
     ]
 

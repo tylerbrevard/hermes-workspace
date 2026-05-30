@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildDndPresetPayload,
+  buildPresenceCockpitTiles,
   buildPresenceDiagnosticsExport,
   buildPresenceShareText,
   getPresenceNextStep,
@@ -31,7 +32,7 @@ describe('PresenceHubScreen helpers', () => {
     }
 
     expect(getPresenceUnavailableState(data)).toBe('M5 unavailable')
-    expect(getPresenceSourceSeparation(data).graph).toBe('Graph presence')
+    expect(getPresenceSourceSeparation(data).graph).toBe('Graph')
   })
 
   it('exports device diagnostics and stale-device action', () => {
@@ -61,7 +62,7 @@ describe('PresenceHubScreen helpers', () => {
         devices: [],
         pools: [],
       }),
-    ).toMatchObject({ label: 'Retry Graph auth', kind: 'teams-status' })
+    ).toMatchObject({ label: 'Auth', kind: 'teams-status' })
     expect(
       getPresencePrimaryAction({
         presence: { availability: 'Available' },
@@ -76,7 +77,7 @@ describe('PresenceHubScreen helpers', () => {
         ],
         pools: [],
       }),
-    ).toMatchObject({ label: 'Sync status', kind: 'teams-status' })
+    ).toMatchObject({ label: 'Sync', kind: 'teams-status' })
     expect(
       getPresencePrimaryAction({
         presence: { availability: 'Available' },
@@ -91,7 +92,7 @@ describe('PresenceHubScreen helpers', () => {
         ],
         pools: [],
       }),
-    ).toMatchObject({ label: 'Refresh presence', kind: 'refresh' })
+    ).toMatchObject({ label: 'Refresh', kind: 'refresh' })
   })
 
   it('builds share text and route diagnostics', () => {
@@ -108,6 +109,54 @@ describe('PresenceHubScreen helpers', () => {
       teamsAuth: 'degraded',
       sourceError: 'Graph timeout',
     })
+  })
+
+  it('builds app-like cockpit tiles from Graph and M5 state', () => {
+    const tiles = buildPresenceCockpitTiles(
+      {
+        presence: { availability: 'Available', activity: 'Available' },
+        syncDiagnostics: {
+          inSync: false,
+          driftReason: 'label_mismatch',
+          presenceSource: 'Graph',
+          deviceWord: 'Focus',
+          deviceFreshness: 2,
+        },
+        devices: [
+          {
+            id: 'm5-1',
+            name: 'Desk M5',
+            status: 'Available',
+            lastSeenMinutesAgo: 1,
+          },
+          {
+            id: 'm5-2',
+            name: 'Door M5',
+            status: 'Busy',
+            lastSeenMinutesAgo: 20,
+          },
+        ],
+        pools: [],
+      },
+      {
+        freshDeviceCount: 1,
+        staleDeviceCount: 1,
+        mismatchDeviceCount: 1,
+      },
+    )
+
+    expect(tiles).toMatchObject([
+      { id: 'availability', label: 'Availability', value: 'Available' },
+      { id: 'sync-trust', label: 'Sync trust', tone: 'warning' },
+      {
+        id: 'm5-devices',
+        label: 'M5 devices',
+        value: '1/2',
+        action: 'mismatches',
+      },
+      { id: 'graph-source', label: 'Graph source', value: 'healthy' },
+      { id: 'display-word', label: 'Display word', value: 'Focus' },
+    ])
   })
 
   it('normalizes default mode and creates DND preset payloads', () => {

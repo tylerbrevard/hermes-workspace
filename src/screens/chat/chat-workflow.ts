@@ -30,6 +30,14 @@ export type ChatWorkflowSummary = {
   costGuard: string
 }
 
+export type ChatCockpitTile = {
+  id: 'flow' | 'tools' | 'decisions' | 'risk'
+  label: string
+  value: string
+  detail: string
+  tone: 'good' | 'warning' | 'danger' | 'neutral'
+}
+
 export type ChatRouteDiagnostics = {
   route: '/workspace/chat/main'
   activeSession: string
@@ -202,20 +210,69 @@ export function buildChatWorkflowSummary(payload: {
     provider: modelInfo.provider,
     fallback:
       payload.connectionState === 'connected'
-        ? 'SSE stream connected'
-        : 'HTTP refresh fallback armed',
+        ? 'SSE connected'
+        : 'HTTP fallback',
     sessionFreshness: formatChatAge(payload.updatedAt),
-    lastSave: payload.saving ? 'Saving current turn' : 'Last save synced',
-    loadingCopy: payload.waiting
-      ? 'Hermes is thinking, streaming tools, and reconciling history'
-      : 'Ready for the next turn',
-    errorRecovery: payload.error
-      ? 'Retry or refresh history'
-      : 'Recovery ready if send fails',
-    costGuard: isLocal
-      ? 'Cost guard: local/default model'
-      : 'Cost guard: confirm before long paid runs',
+    lastSave: payload.saving ? 'Saving' : 'Saved',
+    loadingCopy: payload.waiting ? 'Thinking + tools' : 'Ready',
+    errorRecovery: payload.error ? 'Retry / refresh' : 'Recovery armed',
+    costGuard: isLocal ? 'Cost local/default' : 'Cost confirm paid runs',
   }
+}
+
+export function buildChatCockpitTiles(
+  summary: ChatWorkflowSummary,
+): Array<ChatCockpitTile> {
+  const activeMessages =
+    summary.timeline.userMessages + summary.timeline.assistantMessages
+  const riskCount =
+    (summary.risks.blockedByMe ? 1 : 0) +
+    (summary.risks.waitingOnOthers ? 1 : 0) +
+    (summary.risks.riskyMutation ? 1 : 0)
+
+  return [
+    {
+      id: 'flow',
+      label: 'Flow state',
+      value: summary.loadingCopy.includes('Ready') ? 'Ready' : 'Working',
+      detail: `${activeMessages} messages · ${summary.sessionFreshness}`,
+      tone: summary.loadingCopy.includes('Ready') ? 'good' : 'warning',
+    },
+    {
+      id: 'tools',
+      label: 'Tool lane',
+      value: String(summary.timeline.toolCalls),
+      detail:
+        summary.timeline.toolCalls > 0
+          ? 'Tool activity is part of this thread'
+          : 'No tool calls in this thread yet',
+      tone: summary.timeline.toolCalls > 0 ? 'good' : 'neutral',
+    },
+    {
+      id: 'decisions',
+      label: 'Decision log',
+      value: String(summary.timeline.decisions),
+      detail:
+        summary.timeline.artifacts > 0
+          ? `${summary.timeline.artifacts} artifact signals`
+          : 'No artifact signals yet',
+      tone: summary.timeline.decisions > 0 ? 'good' : 'neutral',
+    },
+    {
+      id: 'risk',
+      label: 'Risk queue',
+      value: String(riskCount),
+      detail:
+        riskCount > 0
+          ? `${summary.risks.taskCandidates} task candidates need review`
+          : `${summary.risks.taskCandidates} task candidates · clear`,
+      tone: summary.risks.riskyMutation
+        ? 'danger'
+        : riskCount > 0
+          ? 'warning'
+          : 'good',
+    },
+  ]
 }
 
 export function buildChatRouteDiagnostics(payload: {
@@ -257,7 +314,7 @@ export function buildResumeLatestContext(
       available: false,
       target: null,
       label: 'Start a new session',
-      detail: 'No previous chat session is available to restore.',
+      detail: 'No previous session.',
     }
   }
   const target = latest.friendlyId || latest.key
@@ -265,7 +322,7 @@ export function buildResumeLatestContext(
     available: Boolean(target),
     target: target || null,
     label: `Resume ${latest.title || latest.friendlyId || latest.key}`,
-    detail: `Restores the latest session shell, message history, model context, and recovery state from ${formatChatAge(latest.updatedAt)}.`,
+    detail: `Latest shell, history, model, recovery · ${formatChatAge(latest.updatedAt)}.`,
   }
 }
 

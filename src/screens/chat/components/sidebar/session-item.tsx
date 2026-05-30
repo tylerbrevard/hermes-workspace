@@ -10,6 +10,10 @@ import {
 } from '@hugeicons/core-free-icons'
 import { memo, useMemo } from 'react'
 import { getMessageTimestamp } from '../../utils'
+import {
+  getFriendlyIdLabel,
+  getSessionDisplayTitle,
+} from '../../session-display'
 import type { SessionMeta } from '../../types'
 import { cn } from '@/lib/utils'
 import {
@@ -39,61 +43,12 @@ const timeFormatter = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 })
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
 function formatSessionTimestamp(timestamp?: number | null): string {
   if (!timestamp) return ''
   const date = new Date(timestamp)
   const now = new Date()
   const sameDay = date.toDateString() === now.toDateString()
   return (sameDay ? timeFormatter : dayFormatter).format(date)
-}
-
-function isUuidLike(value: string): boolean {
-  return UUID_PATTERN.test(value.trim())
-}
-
-function normalizeTitleValue(value: string | undefined): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  if (trimmed.length === 0) return null
-  if (isUuidLike(trimmed)) return null
-  return trimmed
-}
-
-function getSessionShortId(session: SessionMeta): string {
-  const candidates = [session.friendlyId, session.key]
-  for (const candidate of candidates) {
-    if (typeof candidate !== 'string') continue
-    const trimmed = candidate.trim()
-    if (trimmed.length === 0) continue
-    return trimmed.slice(0, 8)
-  }
-  return ''
-}
-
-function getSessionDisplayTitle(
-  session: SessionMeta,
-  isGenerating: boolean,
-): string {
-  const label = normalizeTitleValue(session.label)
-  if (label) return label
-
-  const derivedTitle = normalizeTitleValue(session.derivedTitle)
-  if (derivedTitle) return derivedTitle
-
-  const title = normalizeTitleValue(session.title)
-  if (title) return title
-
-  if (isGenerating) return 'Naming…'
-  const shortId = getSessionShortId(session)
-  return shortId ? `Session ${shortId}` : 'Session'
-}
-
-function getFriendlyIdLabel(friendlyId: string): string {
-  if (!isUuidLike(friendlyId)) return friendlyId
-  return `ID ${friendlyId.slice(0, 8)}`
 }
 
 function SessionItemComponent({

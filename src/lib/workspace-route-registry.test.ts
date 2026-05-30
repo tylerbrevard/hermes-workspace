@@ -22,9 +22,9 @@ describe('workspace route registry', () => {
   })
 
   it('groups routes by owner for menu and escalation work', () => {
-    expect(getWorkspaceRouteRegistryByOwner('agent-ops').length).toBeGreaterThan(
-      5,
-    )
+    expect(
+      getWorkspaceRouteRegistryByOwner('agent-ops').length,
+    ).toBeGreaterThan(5)
     expect(getWorkspaceRouteRegistryByOwner('settings')).toHaveLength(1)
   })
 })

@@ -90,7 +90,7 @@ export function TopologyBand({
           </div>
           {members.length === 0 ? (
             <div className="rounded-full border border-dashed border-emerald-400/20 px-3 py-1.5 text-xs text-emerald-100/45">
-              No swarm workers discovered from crew status.
+              No workers.
             </div>
           ) : (
             members.map((member) => {

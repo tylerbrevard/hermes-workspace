@@ -8,6 +8,14 @@ type RuntimeSecrets = {
   LIVEKIT_API_KEY?: string
   LIVEKIT_API_SECRET?: string
   LIVEKIT_AGENT_NAME?: string
+  OPENAI_API_KEY?: string
+  OPENAI_REALTIME_MODEL?: string
+  GEMINI_API_KEY?: string
+  GOOGLE_API_KEY?: string
+  GEMINI_LIVE_MODEL?: string
+  LILY_GEMINI_VOICE?: string
+  LILY_VOICE_PROVIDER?: string
+  LILY_REALTIME_VOICE?: string
   LILY_VOICE_WORKER_PORT?: string
   LIVEKIT_AGENT_HEALTH_URL?: string
   LILY_VOICE_WORKER_HEALTH_URL?: string
@@ -19,7 +27,29 @@ export type LilyLiveKitConfig = {
   configured: boolean
   serverUrl: string
   agentName: string
+  voiceProvider: LilyVoiceProvider
+  gemini: LilyGeminiLiveConfig
+  realtime: LilyRealtimeConfig
   voiceWorker: LilyVoiceWorkerHealth
+}
+
+export type LilyVoiceProvider =
+  | 'gemini_live'
+  | 'openai_realtime'
+  | 'livekit'
+  | 'chrome'
+  | 'auto'
+
+export type LilyRealtimeConfig = {
+  configured: boolean
+  model: string
+  voice: string
+}
+
+export type LilyGeminiLiveConfig = {
+  configured: boolean
+  model: string
+  voice: string
 }
 
 export type LilyVoiceWorkerHealth = {
@@ -36,6 +66,11 @@ export type LilyVoiceWorkerHealth = {
 const DEFAULT_AGENT_NAME = 'lily'
 const DEFAULT_ROOM_PREFIX = 'lily'
 const DEFAULT_WORKER_PORT = 8799
+const DEFAULT_REALTIME_MODEL = 'gpt-realtime-2'
+const DEFAULT_REALTIME_VOICE = 'marin'
+const DEFAULT_GEMINI_LIVE_MODEL =
+  'gemini-2.5-flash-native-audio-preview-12-2025'
+const DEFAULT_GEMINI_LIVE_VOICE = 'Kore'
 const WORKER_START_COMMAND = 'pnpm lily:voice:worker'
 const WORKER_DOCS_PATH = 'docs/lily-voice-worker.md'
 
@@ -65,6 +100,43 @@ export function readLilyRuntimeSecret(name: keyof RuntimeSecrets): string {
   return typeof fromFile === 'string' ? fromFile.trim() : ''
 }
 
+export function getLilyRealtimeConfig(): LilyRealtimeConfig {
+  return {
+    configured: Boolean(readLilyRuntimeSecret('OPENAI_API_KEY')),
+    model:
+      readLilyRuntimeSecret('OPENAI_REALTIME_MODEL') || DEFAULT_REALTIME_MODEL,
+    voice:
+      readLilyRuntimeSecret('LILY_REALTIME_VOICE') || DEFAULT_REALTIME_VOICE,
+  }
+}
+
+export function getLilyGeminiLiveConfig(): LilyGeminiLiveConfig {
+  return {
+    configured: Boolean(
+      readLilyRuntimeSecret('GEMINI_API_KEY') ||
+      readLilyRuntimeSecret('GOOGLE_API_KEY'),
+    ),
+    model:
+      readLilyRuntimeSecret('GEMINI_LIVE_MODEL') || DEFAULT_GEMINI_LIVE_MODEL,
+    voice:
+      readLilyRuntimeSecret('LILY_GEMINI_VOICE') || DEFAULT_GEMINI_LIVE_VOICE,
+  }
+}
+
+export function getLilyVoiceProvider(): LilyVoiceProvider {
+  const raw = readLilyRuntimeSecret('LILY_VOICE_PROVIDER').toLowerCase()
+  if (
+    raw === 'gemini_live' ||
+    raw === 'openai_realtime' ||
+    raw === 'livekit' ||
+    raw === 'chrome' ||
+    raw === 'auto'
+  ) {
+    return raw
+  }
+  return 'auto'
+}
+
 export function getLilyLiveKitConfig(): LilyLiveKitConfig {
   const serverUrl = readLilyRuntimeSecret('LIVEKIT_URL')
   const apiKey = readLilyRuntimeSecret('LIVEKIT_API_KEY')
@@ -76,6 +148,9 @@ export function getLilyLiveKitConfig(): LilyLiveKitConfig {
     configured: Boolean(serverUrl && apiKey && apiSecret),
     serverUrl,
     agentName,
+    voiceProvider: getLilyVoiceProvider(),
+    gemini: getLilyGeminiLiveConfig(),
+    realtime: getLilyRealtimeConfig(),
     voiceWorker: withVoiceWorkerRuntimeFields({
       status: 'unknown',
       checkedAt: new Date().toISOString(),

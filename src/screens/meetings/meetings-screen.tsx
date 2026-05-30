@@ -10,10 +10,8 @@ import {
   buildMeetingActionTodoItems,
   buildMeetingBriefMarkdown,
   buildMeetingExtractionSummary,
-  classifyTylerRole,
   formatMeetingTitle,
   getMeetingEmptyState,
-  getMeetingOwnerChips,
   getMeetingSeverity,
   getMeetingTrendInterpretation,
   isMeetingPrepWindow,
@@ -22,88 +20,29 @@ import {
   meetingMatchesSearch,
   participantList,
 } from './lib/meeting-workflow'
+import {
+  MeetingCockpitSection,
+  MeetingHeatmapSection,
+  MeetingListsSection,
+  MeetingMobileAgendaSection,
+  MeetingPrepAndCommitmentsSection,
+  MeetingSummaryStats,
+  MeetingsHeaderSection,
+} from './meeting-sections'
+import {
+  compactText,
+  formatWhen,
+  shellClassName,
+  stripTone,
+  toneForType,
+} from './meeting-ui'
+import type { ActionDraft, DecisionDraft, IssueDraft } from './meeting-ui'
 import type {
   Meeting,
+  MeetingCockpitAction,
   MeetingReviewFilter,
   MeetingsData,
 } from './lib/meeting-workflow'
-
-function shellClassName() {
-  return 'rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/92'
-}
-
-function toneForType(type?: string) {
-  switch (type) {
-    case 'client':
-      return 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-900/50 dark:bg-cyan-950/40 dark:text-cyan-200'
-    case 'project':
-      return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-200'
-    case 'team':
-      return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200'
-    case 'it-ops':
-      return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200'
-    default:
-      return 'border-primary-200 bg-primary-100/70 text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300'
-  }
-}
-
-function formatWhen(value: string) {
-  const date = new Date(value)
-  return date.toLocaleString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
-function formatFreshness(value?: string | null) {
-  if (!value) return 'Last Graph pull unknown'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Last Graph pull unknown'
-  return `Last Graph pull ${date.toLocaleString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })}`
-}
-
-function stripTone(state: 'ok' | 'warn' | 'bad') {
-  if (state === 'ok') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200'
-  }
-  if (state === 'warn') {
-    return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200'
-  }
-  return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200'
-}
-
-function participantLabel(meeting: Meeting) {
-  const names = participantList(meeting)
-  return names.slice(0, 4).join(', ')
-}
-
-type ActionDraft = {
-  text: string
-  assignee: string
-  priority: string
-  dueDate: string
-}
-
-type IssueDraft = {
-  title: string
-  description: string
-  status: string
-  priority: string
-  assignee: string
-}
-
-type DecisionDraft = {
-  text: string
-  decisionMaker: string
-  impact: string
-}
 
 export function MeetingsScreen() {
   const [data, setData] = useState<MeetingsData | null>(null)
@@ -292,6 +231,27 @@ export function MeetingsScreen() {
 
   function pickMeeting(meetingId: string) {
     setSelectedMeetingId(meetingId)
+  }
+
+  function activateMeetingCockpit(action: MeetingCockpitAction) {
+    if (action === 'sync') {
+      void post({ kind: 'force-sync' })
+      return
+    }
+    if (action === 'prep') {
+      if (nextMeeting) pickMeeting(nextMeeting.id)
+      else setReviewFilter('no-prep')
+      return
+    }
+    if (action === 'follow-up') {
+      setReviewFilter('needs-follow-up')
+      return
+    }
+    if (action === 'review') {
+      setReviewFilter('needs-review')
+      return
+    }
+    setReviewFilter('today')
   }
 
   async function createActionItem() {
@@ -485,171 +445,44 @@ export function MeetingsScreen() {
     setEditingDecisionId(null)
   }
 
-  function heatmapTone(intensity: 0 | 1 | 2 | 3 | 4) {
-    switch (intensity) {
-      case 4:
-        return 'bg-red-500/85 text-white dark:bg-red-500'
-      case 3:
-        return 'bg-amber-500/85 text-white dark:bg-amber-500'
-      case 2:
-        return 'bg-cyan-500/85 text-white dark:bg-cyan-500'
-      case 1:
-        return 'bg-primary-200 text-primary-900 dark:bg-neutral-800 dark:text-neutral-100'
-      default:
-        return 'bg-primary-100/70 text-primary-500 dark:bg-neutral-900 dark:text-neutral-500'
-    }
-  }
-
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-1 pb-6 sm:px-2">
-      <div className={shellClassName()}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-              Meetings
-            </div>
-            <h1 className="mt-1 text-lg font-semibold text-primary-900 dark:text-neutral-100">
-              Meetings
-            </h1>
-            <p className="text-sm text-primary-600 dark:text-neutral-400">
-              Native Workspace view for meeting health, today’s calendar, and
-              review state.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 sm:justify-end">
-            <input
-              type="search"
-              aria-label="Search meetings"
-              value={search}
-              onChange={(event) => setSearch(event.currentTarget.value)}
-              placeholder="Search title, attendee, action"
-              className="min-w-0 flex-1 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 sm:min-w-56 sm:flex-none"
-            />
-            <select
-              aria-label="Filter meetings by review status"
-              value={reviewFilter}
-              onChange={(event) =>
-                setReviewFilter(
-                  event.currentTarget.value as typeof reviewFilter,
-                )
-              }
-              className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
-            >
-              <option value="all">All review states</option>
-              <option value="today">Today</option>
-              <option value="this-week">This week</option>
-              <option value="needs-review">Needs review</option>
-              <option value="reviewed">Reviewed</option>
-              <option value="has-open-actions">Has open actions</option>
-              <option value="no-prep">No prep</option>
-              <option value="no-transcript">No transcript</option>
-              <option value="missing-notes">Missing notes</option>
-              <option value="needs-follow-up">Needs follow-up</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm('Force a fresh Graph meeting sync now?')) {
-                  void post({ kind: 'force-sync' })
-                }
-              }}
-              disabled={working}
-              className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
-            >
-              Force sync
-            </button>
-            <button
-              type="button"
-              onClick={() => void autoExtractRecent()}
-              disabled={working}
-              className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-            >
-              Auto-extract recent
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Mark ${unreviewedIds.length} unreviewed meeting(s) reviewed?`,
-                  )
-                ) {
-                  void post({ kind: 'bulk-review', meetingIds: unreviewedIds })
-                }
-              }}
-              disabled={working || unreviewedIds.length === 0}
-              className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-            >
-              Mark all reviewed
-            </button>
-            <button
-              type="button"
-              onClick={() => void exportMeetingBrief()}
-              className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-            >
-              Copy brief
-            </button>
-            <label className="flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200">
-              <input
-                type="checkbox"
-                checked={redactBrief}
-                onChange={(event) => setRedactBrief(event.currentTarget.checked)}
-                className="h-4 w-4"
-              />
-              Redact people
-            </label>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-2 md:grid-cols-4">
-          <span
-            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(error ? 'bad' : data?.graphWarning || data?.dataWarning ? 'warn' : 'ok')}`}
-          >
-            Calendar{' '}
-            {error
-              ? 'offline'
-              : data?.graphWarning || data?.dataWarning
-                ? 'degraded'
-                : 'connected'}
-          </span>
-          <span
-            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(data?.graphSource ? 'ok' : 'warn')}`}
-          >
-            Source {data?.graphSource || 'unknown'}
-          </span>
-          <span
-            className={`rounded-xl border px-3 py-2 text-xs ${stripTone(nextMeeting ? 'ok' : 'warn')}`}
-          >
-            Next {nextMeeting ? formatWhen(nextMeeting.date) : 'none scheduled'}
-          </span>
-          <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-            {formatFreshness(data?.refreshedAt)}
-          </span>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-primary-500 dark:text-neutral-400">
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            {extractionSummary.actionCount} extracted task
-            {extractionSummary.actionCount === 1 ? '' : 's'} ·{' '}
-            {extractionSummary.confidence} confidence
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Review state: {extractionSummary.reviewState}
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Tyler role:{' '}
-            {selectedMeeting ? classifyTylerRole(selectedMeeting) : 'unknown'}
-          </span>
-          <span
-            className={`rounded-md border px-2 py-1 ${stripTone(selectedSeverity === 'ok' ? 'ok' : selectedSeverity === 'blocked' ? 'bad' : 'warn')}`}
-          >
-            Selected meeting: {selectedSeverity}
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Route /meetings · selected {selectedMeetingId || 'none'} · detail{' '}
-            {detailLoading ? 'loading' : 'ready'} · action{' '}
-            {working ? 'running' : 'idle'}
-          </span>
-        </div>
-      </div>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-1 pb-[calc(var(--tabbar-h,0px)+12px)] sm:gap-4 sm:px-2 sm:pb-6">
+      <MeetingsHeaderSection
+        search={search}
+        reviewFilter={reviewFilter}
+        working={working}
+        unreviewedCount={unreviewedIds.length}
+        redactBrief={redactBrief}
+        error={error}
+        data={data}
+        nextMeeting={nextMeeting}
+        extractionSummary={extractionSummary}
+        selectedMeeting={selectedMeeting}
+        selectedSeverity={selectedSeverity}
+        selectedMeetingId={selectedMeetingId}
+        detailLoading={detailLoading}
+        onSearchChange={setSearch}
+        onReviewFilterChange={(value) =>
+          setReviewFilter(value as MeetingReviewFilter)
+        }
+        onForceSync={() => {
+          if (window.confirm('Force a fresh Graph meeting sync now?')) {
+            void post({ kind: 'force-sync' })
+          }
+        }}
+        onAutoExtractRecent={() => void autoExtractRecent()}
+        onBulkReview={() => {
+          if (
+            window.confirm(
+              `Mark ${unreviewedIds.length} unreviewed meeting(s) reviewed?`,
+            )
+          ) {
+            void post({ kind: 'bulk-review', meetingIds: unreviewedIds })
+          }
+        }}
+        onExportBrief={() => void exportMeetingBrief()}
+        onRedactBriefChange={setRedactBrief}
+      />
 
       {loading ? (
         <div className="grid gap-3 md:grid-cols-3">
@@ -664,7 +497,7 @@ export function MeetingsScreen() {
 
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-          <div className="font-semibold">Meeting data is unavailable</div>
+          <div className="font-semibold">Meetings unavailable</div>
           <div className="mt-1">{error}</div>
           <div className="mt-1">{getMeetingEmptyState(error)}</div>
           <button
@@ -672,7 +505,7 @@ export function MeetingsScreen() {
             onClick={() => void load(true)}
             className="mt-3 rounded-xl border border-red-300 bg-red-100/60 px-3 py-2 text-xs font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-100"
           >
-            Retry Graph sync
+            Retry
           </button>
         </div>
       ) : null}
@@ -682,513 +515,98 @@ export function MeetingsScreen() {
         </div>
       ) : null}
 
-      <section className={`${shellClassName()} md:hidden`}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-              Mobile agenda
-            </div>
-            <div className="mt-2 text-base font-semibold text-primary-900 dark:text-neutral-100">
-              {nextMeeting
-                ? formatMeetingTitle(nextMeeting.title)
-                : 'No next meeting'}
-            </div>
-            <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-              {nextMeeting
-                ? `${formatWhen(nextMeeting.date)} · ${nextMeeting.duration || 0} min`
-                : getMeetingEmptyState(null)}
-            </div>
-          </div>
-          {nextMeeting?.joinUrl ? (
-            <a
-              href={nextMeeting.joinUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
-            >
-              Join
-            </a>
-          ) : null}
-        </div>
-        <div className="mt-3 grid gap-2">
-          {nextNeedsPrep ? (
-            <button
-              type="button"
-              onClick={() => nextMeeting && pickMeeting(nextMeeting.id)}
-              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
-            >
-              Prep now: starts within 24 hours
-            </button>
-          ) : null}
-          {[...openActionItems, ...selectedOpenActionItems]
-            .slice(0, 3)
-            .map((item) => (
-              <div
-                key={`mobile-${item.id}`}
-                className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"
-              >
-                <div className="line-clamp-2 text-sm font-medium text-primary-900 dark:text-neutral-100">
-                  {item.text}
-                </div>
-                <div className="mt-1 text-[11px] text-primary-500 dark:text-neutral-400">
-                  {item.assignee || 'Unassigned'}
-                </div>
-              </div>
-            ))}
-          {unresolvedCommitmentCount === 0 ? (
-            <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50/50 px-3 py-3 text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-              No open follow-ups at a glance.
-            </div>
-          ) : null}
-        </div>
-      </section>
+      {!loading ? (
+        <MeetingCockpitSection
+          data={data}
+          nextMeeting={nextMeeting}
+          nextNeedsPrep={nextNeedsPrep}
+          unresolvedCommitmentCount={unresolvedCommitmentCount}
+          unreviewedCount={unreviewedIds.length}
+          onActivate={activateMeetingCockpit}
+        />
+      ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <section className={shellClassName()}>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                Next meeting prep
-              </div>
-              <div className="mt-2 text-lg font-semibold text-primary-900 dark:text-neutral-100">
-                {nextMeeting?.title || 'No upcoming meeting selected'}
-              </div>
-              <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-                {nextMeeting
-                  ? `${formatWhen(nextMeeting.date)} · ${nextMeeting.duration || 0} min`
-                  : 'Refresh calendar or select a recent meeting to build prep context.'}
-              </div>
-              {meetingBrief?.lastMeetingSummary?.summary ? (
-                <p className="mt-3 line-clamp-2 text-sm leading-6 text-primary-700 dark:text-neutral-300">
-                  {meetingBrief.lastMeetingSummary.summary}
-                </p>
-              ) : (
-                <p className="mt-3 text-sm leading-6 text-primary-600 dark:text-neutral-400">
-                  {meetingBrief?.message ||
-                    'Prep context appears after a meeting is selected.'}
-                </p>
-              )}
-              {nextNeedsPrep ? (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                  Prep window is open. Review carry-forward items before this
-                  meeting starts.
-                </div>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              {nextMeeting?.joinUrl ? (
-                <a
-                  href={nextMeeting.joinUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
-                >
-                  Join
-                </a>
-              ) : null}
-              {nextMeeting ? (
-                <button
-                  type="button"
-                  onClick={() => pickMeeting(nextMeeting.id)}
-                  className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-                >
-                  {nextNeedsPrep ? 'Prep now' : 'Open prep'}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => void load(true)}
-                disabled={working}
-                className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-3">
-            <span
-              className={`rounded-xl border px-3 py-2 text-xs ${stripTone(nextMeeting?.reviewed ? 'ok' : nextMeeting ? 'warn' : 'bad')}`}
-            >
-              Review{' '}
-              {nextMeeting?.reviewed
-                ? 'complete'
-                : nextMeeting
-                  ? 'needed'
-                  : 'unavailable'}
-            </span>
-            <span
-              className={`rounded-xl border px-3 py-2 text-xs ${stripTone(openActionItems.length > 0 ? 'warn' : 'ok')}`}
-            >
-              {openActionItems.length} carry-forward item
-              {openActionItems.length === 1 ? '' : 's'}
-            </span>
-            <span
-              className={`rounded-xl border px-3 py-2 text-xs ${stripTone(previousMeetings.length > 0 ? 'ok' : 'warn')}`}
-            >
-              {previousMeetings.length} related prior meeting
-              {previousMeetings.length === 1 ? '' : 's'}
-            </span>
-          </div>
-        </section>
+      <MeetingMobileAgendaSection
+        nextMeeting={nextMeeting}
+        nextNeedsPrep={nextNeedsPrep}
+        openActionItems={openActionItems}
+        selectedOpenActionItems={selectedOpenActionItems}
+        unresolvedCommitmentCount={unresolvedCommitmentCount}
+        onPickMeeting={pickMeeting}
+      />
 
-        <section className={shellClassName()}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                Unresolved commitments
-              </div>
-              <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
-                {unresolvedCommitmentCount}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => void sendOpenActionItemsToTodo()}
-              disabled={working || actionTodoItems.length === 0}
-              className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-            >
-              Send to To Do
-            </button>
-          </div>
-          <div className="mt-4 grid gap-2">
-            {[...openActionItems, ...selectedOpenActionItems]
-              .slice(0, 4)
-              .map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"
-                >
-                  <div className="line-clamp-2 text-sm font-medium text-primary-900 dark:text-neutral-100">
-                    {item.text}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
-                    <span>{item.assignee || 'Unassigned'}</span>
-                    {item.priority ? <span>{item.priority}</span> : null}
-                    {item.dueDate ? (
-                      <span>Due {formatWhen(item.dueDate)}</span>
-                    ) : null}
-                    {'meetingTitle' in item && item.meetingTitle ? (
-                      <span>{item.meetingTitle}</span>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            {selectedOpenIssues.slice(0, 2).map((issue) => (
-              <div
-                key={issue.id}
-                className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
-              >
-                <div className="line-clamp-2 text-sm font-medium">
-                  {issue.title}
-                </div>
-                <div className="mt-1 text-[11px]">
-                  {issue.status || 'open'} · {issue.priority || 'medium'}
-                </div>
-              </div>
-            ))}
-            {unresolvedCommitmentCount === 0 ? (
-              <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50/50 px-3 py-4 text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-                No unresolved carry-forward items for the selected meeting.
-              </div>
-            ) : null}
-          </div>
-        </section>
+      <div className="hidden md:contents">
+        <MeetingPrepAndCommitmentsSection
+          nextMeeting={nextMeeting}
+          nextNeedsPrep={nextNeedsPrep}
+          meetingBrief={meetingBrief}
+          openActionItems={openActionItems}
+          previousMeetings={previousMeetings}
+          selectedOpenActionItems={selectedOpenActionItems}
+          selectedOpenIssues={selectedOpenIssues}
+          unresolvedCommitmentCount={unresolvedCommitmentCount}
+          actionTodoItemsCount={actionTodoItems.length}
+          working={working}
+          onPickMeeting={pickMeeting}
+          onRefresh={() => void load(true)}
+          onSendOpenItems={() => void sendOpenActionItemsToTodo()}
+        />
+
+        <MeetingSummaryStats
+          data={data}
+          unreviewedCount={unreviewedIds.length}
+        />
+
+        <MeetingListsSection
+          data={data}
+          loading={loading}
+          selectedMeetingId={selectedMeetingId}
+          visibleRecentMeetings={visibleRecentMeetings}
+          working={working}
+          onPickMeeting={pickMeeting}
+          onRefresh={() => void load(true)}
+          onShowAll={() => setReviewFilter('all')}
+          onToggleReviewed={(meeting) =>
+            void post({
+              kind: 'set-reviewed',
+              meetingId: meeting.id,
+              reviewed: !meeting.reviewed,
+            })
+          }
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <section className={shellClassName()}>
-          <div className="text-xs uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            Today
-          </div>
-          <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
-            {data?.todayMeetings?.length || 0}
-          </div>
-          <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            Upcoming and current meetings in the next 5-day window
-          </div>
-        </section>
-        <section className={shellClassName()}>
-          <div className="text-xs uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            Total tracked
-          </div>
-          <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
-            {data?.total || data?.meetings?.length || 0}
-          </div>
-          <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            Graph source: {data?.graphSource || 'unknown'}
-          </div>
-        </section>
-        <section className={shellClassName()}>
-          <div className="text-xs uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            Unreviewed
-          </div>
-          <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
-            {unreviewedIds.length}
-          </div>
-          <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            Native Workspace review state
-          </div>
-        </section>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <section className={shellClassName()}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-              Today and next
-            </h2>
-            <div className="text-xs text-primary-500 dark:text-neutral-400">
-              {loading
-                ? 'Loading…'
-                : `${data?.todayMeetings?.length || 0} meetings`}
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3">
-            {(data?.todayMeetings || []).map((meeting) => (
-              <div
-                key={`${meeting.id}-${meeting.date}`}
-                className={`rounded-2xl border px-4 py-3 transition-colors dark:border-neutral-800 ${
-                  selectedMeetingId === meeting.id
-                    ? 'border-primary-400 bg-primary-100/80 dark:bg-neutral-900/90'
-                    : 'border-primary-200 bg-primary-50/70 dark:bg-neutral-900/70'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => pickMeeting(meeting.id)}
-                  className="block w-full text-left"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-base font-semibold text-primary-900 dark:text-neutral-100">
-                          {formatMeetingTitle(meeting.title)}
-                        </div>
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${toneForType(meeting.type)}`}
-                        >
-                          {meeting.type || 'other'}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-                        {formatWhen(meeting.date)} · {meeting.duration || 0} min
-                      </div>
-                      <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
-                        {participantLabel(meeting)}
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {getMeetingOwnerChips(meeting).map((chip) => (
-                          <span
-                            key={chip}
-                            className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-0.5 text-[10px] text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
-                          >
-                            {chip}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            ))}
-            {!loading && (data?.todayMeetings?.length || 0) === 0 ? (
-              <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-                <div className="font-medium text-primary-700 dark:text-neutral-200">
-                  No meetings in the current window.
-                </div>
-                <div className="mt-1">{getMeetingEmptyState(null)}</div>
-                <button
-                  type="button"
-                  onClick={() => void load(true)}
-                  className="mt-3 rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
-                >
-                  Refresh calendar
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </section>
+      <div className="hidden gap-4 md:grid xl:grid-cols-[0.75fr_1.25fr]">
+        <MeetingHeatmapSection
+          heatmapDays={data?.heatmapDays || []}
+          trendInterpretation={trendInterpretation}
+        />
 
         <section className={shellClassName()}>
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-              Recent meeting records
-            </h2>
-            <div className="text-xs text-primary-500 dark:text-neutral-400">
-              {loading ? 'Loading…' : `${visibleRecentMeetings.length} rows`}
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3">
-            {visibleRecentMeetings.slice(0, 24).map((meeting) => (
-              <div
-                key={meeting.id}
-                data-testid="meeting-record"
-                className={`rounded-2xl border px-4 py-3 transition-colors dark:border-neutral-800 ${
-                  selectedMeetingId === meeting.id
-                    ? 'border-primary-400 bg-primary-100/80 dark:bg-neutral-900/90'
-                    : 'border-primary-200 bg-primary-50/70 dark:bg-neutral-900/70'
-                }`}
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <button
-                    type="button"
-                    onClick={() => pickMeeting(meeting.id)}
-                    className="text-left lg:min-w-0"
-                    aria-current={
-                      selectedMeetingId === meeting.id ? 'true' : undefined
-                    }
-                  >
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-base font-semibold text-primary-900 dark:text-neutral-100">
-                          {formatMeetingTitle(meeting.title)}
-                        </div>
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${toneForType(meeting.type)}`}
-                        >
-                          {meeting.type || 'other'}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-                        {formatWhen(meeting.date)} · {meeting.duration || 0} min
-                      </div>
-                      <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
-                        {participantLabel(meeting)}
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {getMeetingOwnerChips(meeting).map((chip) => (
-                          <span
-                            key={chip}
-                            className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-0.5 text-[10px] text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
-                          >
-                            {chip}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-                          {(meeting.actionItems || []).length} action item(s)
-                        </span>
-                        {meeting.reviewed ? (
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-                            Reviewed
-                          </span>
-                        ) : (
-                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
-                            Needs review
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      post({
-                        kind: 'set-reviewed',
-                        meetingId: meeting.id,
-                        reviewed: !meeting.reviewed,
-                      })
-                    }
-                    disabled={working}
-                    className={`rounded-xl px-3 py-2 text-sm ${
-                      meeting.reviewed
-                        ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200'
-                        : 'border border-primary-200 bg-primary-100/70 text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200'
-                    }`}
-                  >
-                    {meeting.reviewed ? 'Reviewed' : 'Mark reviewed'}
-                  </button>
-                </div>
-              </div>
-            ))}
-            {!loading && visibleRecentMeetings.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/50 px-4 py-8 text-center text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-                <div className="font-medium text-primary-700 dark:text-neutral-200">
-                  No meetings match this review filter.
-                </div>
-                <div className="mt-1">{getMeetingEmptyState(null)}</div>
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter('all')}
-                  className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs font-medium text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
-                >
-                  Show all meetings
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </section>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[0.75fr_1.25fr]">
-        <section className={shellClassName()}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-              Two-week load
-            </h2>
-            <div className="text-xs text-primary-500 dark:text-neutral-400">
-              Forward-looking meeting density
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
-            {(data?.heatmapDays || []).map((day) => (
-              <div
-                key={day.date}
-                className="rounded-2xl border border-primary-200 bg-primary-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/60"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                    {day.dayLabel}
-                  </div>
-                  <div
-                    className={`rounded-full px-2 py-1 text-[10px] font-semibold ${heatmapTone(day.intensity)}`}
-                  >
-                    {day.totalHours}h
-                  </div>
-                </div>
-                <div className="mt-2 text-sm font-semibold text-primary-900 dark:text-neutral-100">
-                  {new Date(day.date).toLocaleDateString([], {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </div>
-                <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                  {day.meetingCount} meeting(s)
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-            {trendInterpretation}
-          </div>
-        </section>
-
-        <section className={shellClassName()}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-              Selected meeting
+              Selected
             </h2>
             <div className="text-xs text-primary-500 dark:text-neutral-400">
               {detailLoading
-                ? 'Refreshing detail…'
+                ? 'Refreshing…'
                 : selectedMeeting
-                  ? formatMeetingTitle(selectedMeeting.title)
+                  ? compactText(formatMeetingTitle(selectedMeeting.title), 30)
                   : meetingBrief?.meetingTitle
-                    ? formatMeetingTitle(meetingBrief.meetingTitle)
-                    : 'Select a meeting'}
+                    ? compactText(
+                        formatMeetingTitle(meetingBrief.meetingTitle),
+                        30,
+                      )
+                    : 'Pick'}
             </div>
           </div>
 
           {selectedMeeting ? (
             <div className="mt-4 grid gap-4">
               <div className="rounded-2xl border border-primary-200 bg-primary-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
-                <div className="text-base font-semibold text-primary-900 dark:text-neutral-100">
-                  {formatMeetingTitle(selectedMeeting.title)}
-                </div>
-                <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+                <div className="text-sm text-primary-600 dark:text-neutral-400">
                   {formatWhen(selectedMeeting.date)} ·{' '}
-                  {selectedMeeting.duration || 0} min
+                  {selectedMeeting.duration || 0}m
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
                   <span
@@ -1207,7 +625,7 @@ export function MeetingsScreen() {
                     </span>
                   ) : (
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
-                      Needs review
+                      Review
                     </span>
                   )}
                   <span
@@ -1227,7 +645,7 @@ export function MeetingsScreen() {
                       disabled={working}
                       className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                     >
-                      Extract insights
+                      Extract
                     </button>
                   ) : null}
                   <button
@@ -1236,7 +654,7 @@ export function MeetingsScreen() {
                     disabled={working || actionTodoItems.length === 0}
                     className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                   >
-                    Send open items to To Do
+                    To Do
                   </button>
                   <button
                     type="button"
@@ -1250,7 +668,7 @@ export function MeetingsScreen() {
                     disabled={working}
                     className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
                   >
-                    Mark reviewed
+                    Reviewed
                   </button>
                   {selectedMeeting.joinUrl ? (
                     <a
@@ -1259,7 +677,7 @@ export function MeetingsScreen() {
                       rel="noreferrer"
                       className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                     >
-                      Join link
+                      Join
                     </a>
                   ) : null}
                   <button
@@ -1269,13 +687,13 @@ export function MeetingsScreen() {
                     }
                     className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                   >
-                    Copy source id
+                    ID
                   </button>
                 </div>
                 {selectedMeeting.content ? (
                   <details className="mt-3 rounded-xl border border-primary-200 bg-primary-100/70 p-3 text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
                     <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                      Meeting source notes
+                      Notes
                     </summary>
                     <div className="mt-3 whitespace-pre-wrap break-words">
                       {selectedMeeting.content}
@@ -1283,42 +701,76 @@ export function MeetingsScreen() {
                   </details>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {participantList(selectedMeeting).map((participant) => (
-                    <span
-                      key={participant}
-                      className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-[11px] text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
-                    >
-                      {participant}
+                  {participantList(selectedMeeting)
+                    .slice(0, 4)
+                    .map((participant) => (
+                      <span
+                        key={participant}
+                        className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-[11px] text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
+                      >
+                        {participant}
+                      </span>
+                    ))}
+                  {participantList(selectedMeeting).length > 4 ? (
+                    <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-[11px] text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                      +{participantList(selectedMeeting).length - 4}
                     </span>
-                  ))}
+                  ) : null}
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+              <details className="rounded-2xl border border-primary-200 bg-primary-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
+                        Detail
+                      </div>
+                      <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+                        Actions, risks, decisions, and carry-forward context.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                        {(selectedMeeting.actionItems || []).length} actions
+                      </span>
+                      <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                        {(selectedMeeting.issues || []).length} risks
+                      </span>
+                      <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+                        {(selectedMeeting.decisions || []).length} decisions
+                      </span>
+                    </div>
+                  </div>
+                </summary>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
                 <div className="rounded-2xl border border-primary-200 bg-primary-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                    Prior meetings
+                    Prior
                   </div>
                   <div className="mt-3 grid gap-2">
-                    {previousMeetings.map((meeting) => (
-                      <button
+                    {previousMeetings.slice(0, 3).map((meeting) => (
+                      <div
                         key={meeting.id}
-                        type="button"
-                        onClick={() => pickMeeting(meeting.id)}
                         className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-left text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                       >
-                        <div className="font-medium">
-                          {formatMeetingTitle(meeting.title)}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => pickMeeting(meeting.id)}
+                          className="font-medium text-primary-900 dark:text-neutral-100"
+                        >
+                          {compactText(formatMeetingTitle(meeting.title), 24)}
+                        </button>
                         <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
                           {formatWhen(meeting.date)} · {meeting.duration || 0}{' '}
-                          min
+                          m
                         </div>
-                      </button>
+                      </div>
                     ))}
                     {previousMeetings.length === 0 ? (
                       <div className="text-sm text-primary-500 dark:text-neutral-400">
-                        No overlapping-participant history found.
+                        No history.
                       </div>
                     ) : null}
                   </div>
@@ -1326,7 +778,7 @@ export function MeetingsScreen() {
 
                 <div className="rounded-2xl border border-primary-200 bg-primary-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                    Action items
+                    Actions
                   </div>
                   <div className="mt-3 flex gap-2">
                     <input
@@ -1337,7 +789,7 @@ export function MeetingsScreen() {
                       }
                       placeholder={
                         selectedMeeting
-                          ? `Add action item for ${formatMeetingTitle(selectedMeeting.title)}`
+                          ? `Add action for ${compactText(formatMeetingTitle(selectedMeeting.title), 28)}`
                           : 'Add action item'
                       }
                       className="w-full rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
@@ -1455,12 +907,12 @@ export function MeetingsScreen() {
                               {item.text}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
-                              <span>{item.assignee || 'Unassigned'}</span>
+                              <span>{item.assignee || 'Open'}</span>
                               {item.priority ? (
                                 <span>{item.priority}</span>
                               ) : null}
                               {item.dueDate ? (
-                                <span>Due {formatWhen(item.dueDate)}</span>
+                                <span>{formatWhen(item.dueDate)}</span>
                               ) : null}
                               {item.status ? <span>{item.status}</span> : null}
                             </div>
@@ -1537,14 +989,14 @@ export function MeetingsScreen() {
                             disabled={working}
                             className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
                           >
-                            Delete
+                            Del
                           </button>
                         </div>
                       </div>
                     ))}
                     {(selectedMeeting.actionItems || []).length === 0 ? (
                       <div className="text-sm text-primary-500 dark:text-neutral-400">
-                        No action items recorded for this meeting.
+                        Clear.
                       </div>
                     ) : null}
                   </div>
@@ -1565,7 +1017,7 @@ export function MeetingsScreen() {
                       }
                       className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                     >
-                      Send to To Do
+                      To Do
                     </button>
                   </div>
                   <div className="mt-3 grid gap-2">
@@ -1789,14 +1241,14 @@ export function MeetingsScreen() {
                             disabled={working}
                             className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
                           >
-                            Delete
+                            Del
                           </button>
                         </div>
                       </div>
                     ))}
                     {(selectedMeeting.issues || []).length === 0 ? (
                       <div className="text-sm text-primary-500 dark:text-neutral-400">
-                        No issues recorded for this meeting.
+                        Clear.
                       </div>
                     ) : null}
                   </div>
@@ -1816,7 +1268,7 @@ export function MeetingsScreen() {
                       }
                       className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                     >
-                      Send to To Do
+                      To Do
                     </button>
                   </div>
                   <div className="mt-3 grid gap-2">
@@ -1865,7 +1317,7 @@ export function MeetingsScreen() {
                                     },
                                   }))
                                 }
-                                placeholder="Decision maker"
+                                placeholder="Owner"
                                 className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                               />
                               <select
@@ -1978,14 +1430,14 @@ export function MeetingsScreen() {
                             disabled={working}
                             className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
                           >
-                            Delete
+                            Del
                           </button>
                         </div>
                       </div>
                     ))}
                     {(selectedMeeting.decisions || []).length === 0 ? (
                       <div className="text-sm text-primary-500 dark:text-neutral-400">
-                        No decisions recorded for this meeting.
+                        Clear.
                       </div>
                     ) : null}
                   </div>
@@ -1995,29 +1447,29 @@ export function MeetingsScreen() {
               {meetingBrief ? (
                 <div className="rounded-2xl border border-primary-200 bg-primary-50/60 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                    Carry-forward context
+                    Context
                   </div>
                   <div className="mt-3 text-sm text-primary-600 dark:text-neutral-400">
-                    Related history and carry-forward items for overlapping
-                    participants.
+                    Related history.
                   </div>
                   <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
                     <div className="grid gap-2">
                       {previousMeetings.map((meeting) => (
-                        <button
+                        <div
                           key={meeting.id}
-                          type="button"
-                          onClick={() => pickMeeting(meeting.id)}
                           className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-left text-sm text-primary-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
                         >
-                          <div className="font-medium">
-                            {formatMeetingTitle(meeting.title)}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => pickMeeting(meeting.id)}
+                            className="font-medium text-primary-900 dark:text-neutral-100"
+                          >
+                            {compactText(formatMeetingTitle(meeting.title), 24)}
+                          </button>
                           <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
-                            {formatWhen(meeting.date)} · {meeting.duration || 0}{' '}
-                            min
+                            {formatWhen(meeting.date)} · {meeting.duration || 0}m
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                     <div className="grid gap-2">
@@ -2030,12 +1482,12 @@ export function MeetingsScreen() {
                             {item.text}
                           </div>
                           <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
-                            <span>{item.assignee || 'Unassigned'}</span>
+                            <span>{item.assignee || 'Open'}</span>
                             {item.priority ? (
                               <span>{item.priority}</span>
                             ) : null}
                             {item.dueDate ? (
-                              <span>Due {formatWhen(item.dueDate)}</span>
+                              <span>{formatWhen(item.dueDate)}</span>
                             ) : null}
                           </div>
                         </div>
@@ -2044,10 +1496,11 @@ export function MeetingsScreen() {
                   </div>
                 </div>
               ) : null}
+              </details>
             </div>
           ) : (
             <div className="mt-4 text-sm text-primary-500 dark:text-neutral-400">
-              Meeting detail is not available yet.
+              Pick a meeting.
             </div>
           )}
         </section>

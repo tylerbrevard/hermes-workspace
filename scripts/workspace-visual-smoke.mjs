@@ -258,6 +258,9 @@ for (const {
     if (/^(\s*)?(404|not found|route not found)\b/i.test(bodyText)) {
       throw new Error('rendered not-found state')
     }
+    if (/\bROUTE ERROR\b/i.test(bodyText)) {
+      throw new Error('rendered route error state')
+    }
     if (mobile && layout.horizontalOverflowPx > 2) {
       throw new Error(
         `document horizontal overflow: ${layout.horizontalOverflowPx}px`,

@@ -1,3 +1,5 @@
+import { readJsonStorage, writeJsonStorage } from '@/lib/typed-storage'
+
 export type WorkflowTemplate = {
   id: string
   name: string
@@ -17,12 +19,41 @@ export type WorkflowTemplate = {
 
 const STORAGE_KEY = 'clawsuite:workflow-templates'
 
+function isWorkflowTemplate(value: unknown): value is WorkflowTemplate {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const item = value as Partial<WorkflowTemplate>
+  return (
+    typeof item.id === 'string' &&
+    typeof item.name === 'string' &&
+    typeof item.description === 'string' &&
+    typeof item.icon === 'string' &&
+    typeof item.goal === 'string' &&
+    Array.isArray(item.tasks) &&
+    item.tasks.every(
+      (task) =>
+        task &&
+        typeof task === 'object' &&
+        !Array.isArray(task) &&
+        typeof task.title === 'string',
+    ) &&
+    typeof item.createdAt === 'number' &&
+    typeof item.updatedAt === 'number'
+  )
+}
+
+function isWorkflowTemplateArray(
+  value: unknown,
+): value is Array<WorkflowTemplate> {
+  return Array.isArray(value) && value.every(isWorkflowTemplate)
+}
+
 // Built-in templates that ship with ClawSuite
 export const BUILT_IN_TEMPLATES: Array<WorkflowTemplate> = [
   {
     id: 'tpl-code-review',
     name: 'Code Review',
-    description: 'Review codebase for bugs, performance issues, and code quality',
+    description:
+      'Review codebase for bugs, performance issues, and code quality',
     icon: '🔍',
     goal: 'Review the codebase for bugs, performance issues, and code quality improvements',
     tags: ['review', 'quality', 'audit'],
@@ -92,7 +123,8 @@ export const BUILT_IN_TEMPLATES: Array<WorkflowTemplate> = [
   {
     id: 'tpl-refactor',
     name: 'Refactor',
-    description: 'Refactor code for better organization, performance, or readability',
+    description:
+      'Refactor code for better organization, performance, or readability',
     icon: '♻️',
     goal: 'Refactor the specified code area to improve organization, reduce complexity, and maintain existing functionality. No behavioral changes.',
     tasks: [
@@ -109,7 +141,8 @@ export const BUILT_IN_TEMPLATES: Array<WorkflowTemplate> = [
   {
     id: 'tpl-audit',
     name: 'Security Audit',
-    description: 'Audit codebase for security vulnerabilities and best practices',
+    description:
+      'Audit codebase for security vulnerabilities and best practices',
     icon: '🛡️',
     goal: 'Perform a security audit of the codebase. Check for common vulnerabilities (XSS, injection, auth bypass, secrets exposure, dependency issues). Produce a severity-ranked report.',
     tasks: [
@@ -126,26 +159,20 @@ export const BUILT_IN_TEMPLATES: Array<WorkflowTemplate> = [
 ]
 
 export function loadCustomTemplates(): Array<WorkflowTemplate> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    return JSON.parse(raw) as Array<WorkflowTemplate>
-  } catch {
-    return []
-  }
+  return readJsonStorage(STORAGE_KEY, [], isWorkflowTemplateArray).value
 }
 
 export function saveCustomTemplates(templates: Array<WorkflowTemplate>): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(templates))
-  } catch { /* ignore */ }
+  writeJsonStorage(STORAGE_KEY, templates)
 }
 
 export function getAllTemplates(): Array<WorkflowTemplate> {
   return [...BUILT_IN_TEMPLATES, ...loadCustomTemplates()]
 }
 
-export function saveAsTemplate(template: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>): WorkflowTemplate {
+export function saveAsTemplate(
+  template: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'updatedAt'>,
+): WorkflowTemplate {
   const newTemplate: WorkflowTemplate = {
     ...template,
     id: `tpl-custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

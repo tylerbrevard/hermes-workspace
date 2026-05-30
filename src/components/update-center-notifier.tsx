@@ -246,7 +246,8 @@ export function UpdateCenterNotifier() {
       <div className="pointer-events-none fixed bottom-[calc(var(--tabbar-h,80px)+1rem)] left-3 right-3 z-[9998] flex flex-col items-end gap-2 md:bottom-auto md:left-auto md:right-4 md:top-[calc(var(--titlebar-h,0px)+1rem)] md:w-[360px]">
         <AnimatePresence>
           {visibleProducts.map((product) =>
-            expandedProducts.has(product.id) || phases[product.id] === 'error' ? (
+            expandedProducts.has(product.id) ||
+            phases[product.id] === 'error' ? (
               <UpdateCard
                 key={product.id}
                 product={product}
@@ -467,7 +468,9 @@ function UpdateCard({
               {product.repoPath}
             </p>
           ) : null}
-          {blocked && product.blockingFiles && product.blockingFiles.length > 0 ? (
+          {blocked &&
+          product.blockingFiles &&
+          product.blockingFiles.length > 0 ? (
             <ul className="mt-1 max-h-24 overflow-auto pr-1">
               {product.blockingFiles.slice(0, 8).map((file) => (
                 <li

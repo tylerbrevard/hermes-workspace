@@ -43,7 +43,9 @@ import { Route as FilesRouteImport } from './routes/files'
 import { Route as EarlyAccessRouteImport } from './routes/early-access'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConductorRouteImport } from './routes/conductor'
+import { Route as ChiefOfStaffMailboxRouteImport } from './routes/chief-of-staff-mailbox'
 import { Route as BarryRouteImport } from './routes/barry'
+import { Route as AppleHealthRouteImport } from './routes/apple-health'
 import { Route as AgoraRouteImport } from './routes/agora'
 import { Route as R75TrackerRouteImport } from './routes/75-tracker'
 import { Route as SplatRouteImport } from './routes/$'
@@ -51,7 +53,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
 import { Route as SettingsProvidersRouteImport } from './routes/settings/providers'
-import { Route as ReserveConfirmRouteImport } from './routes/reserve/confirm'
+import { Route as ReserveConfirmRouteImport } from './routes/reserve.confirm'
 import { Route as ChatSessionKeyRouteImport } from './routes/chat/$sessionKey'
 import { Route as ApiWorkspaceRouteImport } from './routes/api/workspace'
 import { Route as ApiVtCapitalRouteImport } from './routes/api/vt-capital'
@@ -131,6 +133,7 @@ import { Route as ApiChatEventsRouteImport } from './routes/api/chat-events'
 import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiArtifactsRouteImport } from './routes/api/artifacts'
+import { Route as ApiAppleHealthRouteImport } from './routes/api/apple-health'
 import { Route as ApiUpdateWorkspaceRouteImport } from './routes/api/update/workspace'
 import { Route as ApiUpdateStatusRouteImport } from './routes/api/update/status'
 import { Route as ApiUpdateAgentRouteImport } from './routes/api/update/agent'
@@ -167,8 +170,10 @@ import { Route as ApiMcpHubSearchRouteImport } from './routes/api/mcp/hub-search
 import { Route as ApiMcpDiscoverRouteImport } from './routes/api/mcp/discover'
 import { Route as ApiMcpConfigureRouteImport } from './routes/api/mcp/configure'
 import { Route as ApiMcpNameRouteImport } from './routes/api/mcp/$name'
+import { Route as ApiLilyRealtimeSessionRouteImport } from './routes/api/lily/realtime-session'
 import { Route as ApiLilyLivekitTokenRouteImport } from './routes/api/lily/livekit-token'
 import { Route as ApiLilyHermesChatRouteImport } from './routes/api/lily/hermes-chat'
+import { Route as ApiLilyGeminiLiveTokenRouteImport } from './routes/api/lily/gemini-live-token'
 import { Route as ApiLilyConfigRouteImport } from './routes/api/lily/config'
 import { Route as ApiKnowledgeSyncRouteImport } from './routes/api/knowledge/sync'
 import { Route as ApiKnowledgeSearchRouteImport } from './routes/api/knowledge/search'
@@ -361,9 +366,19 @@ const ConductorRoute = ConductorRouteImport.update({
   path: '/conductor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChiefOfStaffMailboxRoute = ChiefOfStaffMailboxRouteImport.update({
+  id: '/chief-of-staff-mailbox',
+  path: '/chief-of-staff-mailbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BarryRoute = BarryRouteImport.update({
   id: '/barry',
   path: '/barry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppleHealthRoute = AppleHealthRouteImport.update({
+  id: '/apple-health',
+  path: '/apple-health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgoraRoute = AgoraRouteImport.update({
@@ -802,6 +817,11 @@ const ApiArtifactsRoute = ApiArtifactsRouteImport.update({
   path: '/api/artifacts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAppleHealthRoute = ApiAppleHealthRouteImport.update({
+  id: '/api/apple-health',
+  path: '/api/apple-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUpdateWorkspaceRoute = ApiUpdateWorkspaceRouteImport.update({
   id: '/api/update/workspace',
   path: '/api/update/workspace',
@@ -982,6 +1002,11 @@ const ApiMcpNameRoute = ApiMcpNameRouteImport.update({
   path: '/$name',
   getParentRoute: () => ApiMcpRoute,
 } as any)
+const ApiLilyRealtimeSessionRoute = ApiLilyRealtimeSessionRouteImport.update({
+  id: '/api/lily/realtime-session',
+  path: '/api/lily/realtime-session',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiLilyLivekitTokenRoute = ApiLilyLivekitTokenRouteImport.update({
   id: '/api/lily/livekit-token',
   path: '/api/lily/livekit-token',
@@ -990,6 +1015,11 @@ const ApiLilyLivekitTokenRoute = ApiLilyLivekitTokenRouteImport.update({
 const ApiLilyHermesChatRoute = ApiLilyHermesChatRouteImport.update({
   id: '/api/lily/hermes-chat',
   path: '/api/lily/hermes-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLilyGeminiLiveTokenRoute = ApiLilyGeminiLiveTokenRouteImport.update({
+  id: '/api/lily/gemini-live-token',
+  path: '/api/lily/gemini-live-token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiLilyConfigRoute = ApiLilyConfigRouteImport.update({
@@ -1107,7 +1137,9 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/75-tracker': typeof R75TrackerRoute
   '/agora': typeof AgoraRoute
+  '/apple-health': typeof AppleHealthRoute
   '/barry': typeof BarryRoute
+  '/chief-of-staff-mailbox': typeof ChiefOfStaffMailboxRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
@@ -1142,6 +1174,7 @@ export interface FileRoutesByFullPath {
   '/wegovy': typeof WegovyRoute
   '/world': typeof WorldRoute
   '/zyn-tracker': typeof ZynTrackerRoute
+  '/api/apple-health': typeof ApiAppleHealthRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1241,8 +1274,10 @@ export interface FileRoutesByFullPath {
   '/api/knowledge/search': typeof ApiKnowledgeSearchRoute
   '/api/knowledge/sync': typeof ApiKnowledgeSyncRoute
   '/api/lily/config': typeof ApiLilyConfigRoute
+  '/api/lily/gemini-live-token': typeof ApiLilyGeminiLiveTokenRoute
   '/api/lily/hermes-chat': typeof ApiLilyHermesChatRoute
   '/api/lily/livekit-token': typeof ApiLilyLivekitTokenRoute
+  '/api/lily/realtime-session': typeof ApiLilyRealtimeSessionRoute
   '/api/mcp/$name': typeof ApiMcpNameRouteWithChildren
   '/api/mcp/configure': typeof ApiMcpConfigureRoute
   '/api/mcp/discover': typeof ApiMcpDiscoverRoute
@@ -1290,7 +1325,9 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/75-tracker': typeof R75TrackerRoute
   '/agora': typeof AgoraRoute
+  '/apple-health': typeof AppleHealthRoute
   '/barry': typeof BarryRoute
+  '/chief-of-staff-mailbox': typeof ChiefOfStaffMailboxRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
@@ -1324,6 +1361,7 @@ export interface FileRoutesByTo {
   '/wegovy': typeof WegovyRoute
   '/world': typeof WorldRoute
   '/zyn-tracker': typeof ZynTrackerRoute
+  '/api/apple-health': typeof ApiAppleHealthRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1423,8 +1461,10 @@ export interface FileRoutesByTo {
   '/api/knowledge/search': typeof ApiKnowledgeSearchRoute
   '/api/knowledge/sync': typeof ApiKnowledgeSyncRoute
   '/api/lily/config': typeof ApiLilyConfigRoute
+  '/api/lily/gemini-live-token': typeof ApiLilyGeminiLiveTokenRoute
   '/api/lily/hermes-chat': typeof ApiLilyHermesChatRoute
   '/api/lily/livekit-token': typeof ApiLilyLivekitTokenRoute
+  '/api/lily/realtime-session': typeof ApiLilyRealtimeSessionRoute
   '/api/mcp/$name': typeof ApiMcpNameRouteWithChildren
   '/api/mcp/configure': typeof ApiMcpConfigureRoute
   '/api/mcp/discover': typeof ApiMcpDiscoverRoute
@@ -1473,7 +1513,9 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/75-tracker': typeof R75TrackerRoute
   '/agora': typeof AgoraRoute
+  '/apple-health': typeof AppleHealthRoute
   '/barry': typeof BarryRoute
+  '/chief-of-staff-mailbox': typeof ChiefOfStaffMailboxRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/early-access': typeof EarlyAccessRoute
@@ -1508,6 +1550,7 @@ export interface FileRoutesById {
   '/wegovy': typeof WegovyRoute
   '/world': typeof WorldRoute
   '/zyn-tracker': typeof ZynTrackerRoute
+  '/api/apple-health': typeof ApiAppleHealthRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRoute
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1607,8 +1650,10 @@ export interface FileRoutesById {
   '/api/knowledge/search': typeof ApiKnowledgeSearchRoute
   '/api/knowledge/sync': typeof ApiKnowledgeSyncRoute
   '/api/lily/config': typeof ApiLilyConfigRoute
+  '/api/lily/gemini-live-token': typeof ApiLilyGeminiLiveTokenRoute
   '/api/lily/hermes-chat': typeof ApiLilyHermesChatRoute
   '/api/lily/livekit-token': typeof ApiLilyLivekitTokenRoute
+  '/api/lily/realtime-session': typeof ApiLilyRealtimeSessionRoute
   '/api/mcp/$name': typeof ApiMcpNameRouteWithChildren
   '/api/mcp/configure': typeof ApiMcpConfigureRoute
   '/api/mcp/discover': typeof ApiMcpDiscoverRoute
@@ -1658,7 +1703,9 @@ export interface FileRouteTypes {
     | '/$'
     | '/75-tracker'
     | '/agora'
+    | '/apple-health'
     | '/barry'
+    | '/chief-of-staff-mailbox'
     | '/conductor'
     | '/dashboard'
     | '/early-access'
@@ -1693,6 +1740,7 @@ export interface FileRouteTypes {
     | '/wegovy'
     | '/world'
     | '/zyn-tracker'
+    | '/api/apple-health'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -1792,8 +1840,10 @@ export interface FileRouteTypes {
     | '/api/knowledge/search'
     | '/api/knowledge/sync'
     | '/api/lily/config'
+    | '/api/lily/gemini-live-token'
     | '/api/lily/hermes-chat'
     | '/api/lily/livekit-token'
+    | '/api/lily/realtime-session'
     | '/api/mcp/$name'
     | '/api/mcp/configure'
     | '/api/mcp/discover'
@@ -1841,7 +1891,9 @@ export interface FileRouteTypes {
     | '/$'
     | '/75-tracker'
     | '/agora'
+    | '/apple-health'
     | '/barry'
+    | '/chief-of-staff-mailbox'
     | '/conductor'
     | '/dashboard'
     | '/early-access'
@@ -1875,6 +1927,7 @@ export interface FileRouteTypes {
     | '/wegovy'
     | '/world'
     | '/zyn-tracker'
+    | '/api/apple-health'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -1974,8 +2027,10 @@ export interface FileRouteTypes {
     | '/api/knowledge/search'
     | '/api/knowledge/sync'
     | '/api/lily/config'
+    | '/api/lily/gemini-live-token'
     | '/api/lily/hermes-chat'
     | '/api/lily/livekit-token'
+    | '/api/lily/realtime-session'
     | '/api/mcp/$name'
     | '/api/mcp/configure'
     | '/api/mcp/discover'
@@ -2023,7 +2078,9 @@ export interface FileRouteTypes {
     | '/$'
     | '/75-tracker'
     | '/agora'
+    | '/apple-health'
     | '/barry'
+    | '/chief-of-staff-mailbox'
     | '/conductor'
     | '/dashboard'
     | '/early-access'
@@ -2058,6 +2115,7 @@ export interface FileRouteTypes {
     | '/wegovy'
     | '/world'
     | '/zyn-tracker'
+    | '/api/apple-health'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -2157,8 +2215,10 @@ export interface FileRouteTypes {
     | '/api/knowledge/search'
     | '/api/knowledge/sync'
     | '/api/lily/config'
+    | '/api/lily/gemini-live-token'
     | '/api/lily/hermes-chat'
     | '/api/lily/livekit-token'
+    | '/api/lily/realtime-session'
     | '/api/mcp/$name'
     | '/api/mcp/configure'
     | '/api/mcp/discover'
@@ -2207,7 +2267,9 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   R75TrackerRoute: typeof R75TrackerRoute
   AgoraRoute: typeof AgoraRoute
+  AppleHealthRoute: typeof AppleHealthRoute
   BarryRoute: typeof BarryRoute
+  ChiefOfStaffMailboxRoute: typeof ChiefOfStaffMailboxRoute
   ConductorRoute: typeof ConductorRoute
   DashboardRoute: typeof DashboardRoute
   EarlyAccessRoute: typeof EarlyAccessRoute
@@ -2242,6 +2304,7 @@ export interface RootRouteChildren {
   WegovyRoute: typeof WegovyRoute
   WorldRoute: typeof WorldRoute
   ZynTrackerRoute: typeof ZynTrackerRoute
+  ApiAppleHealthRoute: typeof ApiAppleHealthRoute
   ApiArtifactsRoute: typeof ApiArtifactsRouteWithChildren
   ApiAuthRoute: typeof ApiAuthRoute
   ApiAuthCheckRoute: typeof ApiAuthCheckRoute
@@ -2332,8 +2395,10 @@ export interface RootRouteChildren {
   ApiKnowledgeSearchRoute: typeof ApiKnowledgeSearchRoute
   ApiKnowledgeSyncRoute: typeof ApiKnowledgeSyncRoute
   ApiLilyConfigRoute: typeof ApiLilyConfigRoute
+  ApiLilyGeminiLiveTokenRoute: typeof ApiLilyGeminiLiveTokenRoute
   ApiLilyHermesChatRoute: typeof ApiLilyHermesChatRoute
   ApiLilyLivekitTokenRoute: typeof ApiLilyLivekitTokenRoute
+  ApiLilyRealtimeSessionRoute: typeof ApiLilyRealtimeSessionRoute
   ApiModelInfoRoute: typeof ApiModelInfoRoute
   ApiOauthDeviceCodeRoute: typeof ApiOauthDeviceCodeRoute
   ApiOauthPollTokenRoute: typeof ApiOauthPollTokenRoute
@@ -2594,11 +2659,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConductorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/chief-of-staff-mailbox': {
+      id: '/chief-of-staff-mailbox'
+      path: '/chief-of-staff-mailbox'
+      fullPath: '/chief-of-staff-mailbox'
+      preLoaderRoute: typeof ChiefOfStaffMailboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/barry': {
       id: '/barry'
       path: '/barry'
       fullPath: '/barry'
       preLoaderRoute: typeof BarryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/apple-health': {
+      id: '/apple-health'
+      path: '/apple-health'
+      fullPath: '/apple-health'
+      preLoaderRoute: typeof AppleHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agora': {
@@ -3210,6 +3289,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiArtifactsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/apple-health': {
+      id: '/api/apple-health'
+      path: '/api/apple-health'
+      fullPath: '/api/apple-health'
+      preLoaderRoute: typeof ApiAppleHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/update/workspace': {
       id: '/api/update/workspace'
       path: '/api/update/workspace'
@@ -3462,6 +3548,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMcpNameRouteImport
       parentRoute: typeof ApiMcpRoute
     }
+    '/api/lily/realtime-session': {
+      id: '/api/lily/realtime-session'
+      path: '/api/lily/realtime-session'
+      fullPath: '/api/lily/realtime-session'
+      preLoaderRoute: typeof ApiLilyRealtimeSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/lily/livekit-token': {
       id: '/api/lily/livekit-token'
       path: '/api/lily/livekit-token'
@@ -3474,6 +3567,13 @@ declare module '@tanstack/react-router' {
       path: '/api/lily/hermes-chat'
       fullPath: '/api/lily/hermes-chat'
       preLoaderRoute: typeof ApiLilyHermesChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lily/gemini-live-token': {
+      id: '/api/lily/gemini-live-token'
+      path: '/api/lily/gemini-live-token'
+      fullPath: '/api/lily/gemini-live-token'
+      preLoaderRoute: typeof ApiLilyGeminiLiveTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/lily/config': {
@@ -3854,7 +3954,9 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   R75TrackerRoute: R75TrackerRoute,
   AgoraRoute: AgoraRoute,
+  AppleHealthRoute: AppleHealthRoute,
   BarryRoute: BarryRoute,
+  ChiefOfStaffMailboxRoute: ChiefOfStaffMailboxRoute,
   ConductorRoute: ConductorRoute,
   DashboardRoute: DashboardRoute,
   EarlyAccessRoute: EarlyAccessRoute,
@@ -3889,6 +3991,7 @@ const rootRouteChildren: RootRouteChildren = {
   WegovyRoute: WegovyRoute,
   WorldRoute: WorldRoute,
   ZynTrackerRoute: ZynTrackerRoute,
+  ApiAppleHealthRoute: ApiAppleHealthRoute,
   ApiArtifactsRoute: ApiArtifactsRouteWithChildren,
   ApiAuthRoute: ApiAuthRoute,
   ApiAuthCheckRoute: ApiAuthCheckRoute,
@@ -3979,8 +4082,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiKnowledgeSearchRoute: ApiKnowledgeSearchRoute,
   ApiKnowledgeSyncRoute: ApiKnowledgeSyncRoute,
   ApiLilyConfigRoute: ApiLilyConfigRoute,
+  ApiLilyGeminiLiveTokenRoute: ApiLilyGeminiLiveTokenRoute,
   ApiLilyHermesChatRoute: ApiLilyHermesChatRoute,
   ApiLilyLivekitTokenRoute: ApiLilyLivekitTokenRoute,
+  ApiLilyRealtimeSessionRoute: ApiLilyRealtimeSessionRoute,
   ApiModelInfoRoute: ApiModelInfoRoute,
   ApiOauthDeviceCodeRoute: ApiOauthDeviceCodeRoute,
   ApiOauthPollTokenRoute: ApiOauthPollTokenRoute,

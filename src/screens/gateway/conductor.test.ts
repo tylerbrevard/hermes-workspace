@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   TYLER_RECURRING_WORKFLOW_TEMPLATES,
+  buildConductorCockpitTiles,
   buildConductorRouteDiagnostics,
   buildMissionPrompt,
   buildMissionReadinessChecklist,
@@ -67,7 +68,7 @@ describe('Conductor Tyler workflow templates', () => {
         activeWorkers: 0,
         staleGateway: true,
       }),
-    ).toBe('Worker pool stale: verify gateway before launch')
+    ).toBe('Worker pool stale')
     expect(getMissionExecutionGuard('Patch production settings')).toBe(
       'Review gate required before write/destructive action',
     )
@@ -88,7 +89,7 @@ describe('Conductor Tyler workflow templates', () => {
       orchestratorModel: '',
       workerModel: 'gpt-5-codex',
       supervised: false,
-      workerAvailabilitySummary: 'Worker availability: standing by',
+      workerAvailabilitySummary: 'Workers ready',
       executionGuard: getMissionExecutionGuard('Patch route'),
     })
 
@@ -110,6 +111,31 @@ describe('Conductor Tyler workflow templates', () => {
       totalCount: 5,
       warningCount: 1,
     })
+  })
+
+  it('builds conductor cockpit tiles for launch state', () => {
+    const tiles = buildConductorCockpitTiles({
+      readinessSummary: {
+        readyCount: 4,
+        totalCount: 5,
+        blockedCount: 0,
+        warningCount: 1,
+        label: '1 warning before launch',
+      },
+      workerAvailabilitySummary: 'Workers ready',
+      executionGuard: 'Browser QA launch option recommended',
+      activityCount: 7,
+      activeWorkerCount: 0,
+      totalWorkers: 0,
+      goalPresent: true,
+    })
+
+    expect(tiles).toMatchObject([
+      { id: 'readiness', label: 'Launch readiness', value: '4/5' },
+      { id: 'workers', label: 'Worker lane', value: 'Workers ready' },
+      { id: 'guardrail', label: 'Guardrail', value: 'browser' },
+      { id: 'activity', label: 'Mission queue', value: '7', tone: 'good' },
+    ])
   })
 
   it('exports route diagnostics without secrets', () => {
@@ -151,8 +177,8 @@ describe('Conductor Tyler workflow templates', () => {
       orchestratorModel: '',
       workerModel: '',
       supervised: true,
-      workerAvailabilitySummary: 'Worker availability: standing by',
-      executionGuard: 'Dry-run estimate available before launch',
+      workerAvailabilitySummary: 'Workers ready',
+      executionGuard: 'Dry-run ready',
     })
 
     const preview = buildPortablePlanPreview(draft, checklist)
@@ -162,6 +188,8 @@ describe('Conductor Tyler workflow templates', () => {
 
     const serialized = serializeMissionLaunchDraft(draft)
     expect(parseMissionLaunchDraft(JSON.stringify(serialized))).toEqual(draft)
-    expect(parseMissionLaunchDraft(JSON.stringify({ schema: 'old' }))).toBeNull()
+    expect(
+      parseMissionLaunchDraft(JSON.stringify({ schema: 'old' })),
+    ).toBeNull()
   })
 })

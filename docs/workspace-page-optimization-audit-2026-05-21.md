@@ -536,4 +536,3 @@ Current snapshot: page loads, but Chrome reports AudioContext autoplay warnings 
 18. Add mobile board/list toggle.
 19. Add undo for complete/delete.
 20. Add smoke tests for new task, show done, and completion.
-

@@ -1106,7 +1106,6 @@ function runWorker(
           timeout: timeoutMs,
           maxBuffer: MAX_OUTPUT_CHARS,
           killSignal: 'SIGTERM',
-          input: prompt,
         },
         (error, stdout, stderr) => {
           const durationMs = Date.now() - startedAt
@@ -1193,6 +1192,7 @@ function runWorker(
           resolve(result)
         },
       )
+      proc.stdin?.end(prompt)
 
       proc.on('error', (error) => {
         const result: WorkerResult = {

@@ -1,4 +1,5 @@
 import type { CrewMember } from '@/hooks/use-crew-status'
+import { getOnlineStatus } from '@/hooks/use-crew-status'
 
 export const SWARM2_INFORMATION_HIERARCHY = [
   'Status header: online workers, active room, refresh state, view switch.',
@@ -62,6 +63,144 @@ export const SWARM2_REAL_API_ENDPOINTS = [
 ] as const
 
 export type TerminalKind = 'tmux' | 'log-tail' | 'shell' | 'none'
+
+export type ViewMode = 'cards' | 'kanban' | 'runtime' | 'reports'
+
+export type RolePreset = {
+  role: string
+  specialty: string
+  mission: string
+  systemPrompt: string
+  skills: Array<string>
+  defaultModel?: string
+}
+
+export const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
+  {
+    role: 'Orchestrator',
+    specialty: 'control-plane state, dispatch, drift detection, escalation',
+    mission:
+      'Run the swarm. Read /swarm-specs/ at start. Dispatch workers per their standing missions. Detect drift, re-prompt, escalate to main agent when stuck.',
+    systemPrompt:
+      'You are the Hermes Agent orchestrator for the swarm. Read /swarm-specs/SWARM_SPEC.md and /swarm-specs/projects/swarmN.md for every worker before dispatching. Apply the swarm-orchestrator skill: assign work, request proof-bearing checkpoints, detect drift, re-prompt with stronger framing, escalate when blocked. Never make irreversible external actions without main-agent ack.',
+    skills: [
+      'swarm-orchestrator',
+      'swarm-worker-core',
+      'swarm-review-learning-loop',
+      'self-improvement',
+    ],
+    defaultModel: 'GPT-5.4',
+  },
+  {
+    role: 'Builder',
+    specialty: 'full-stack implementation, fast ship cycles',
+    mission:
+      'Implement features per dispatched briefs. Smallest landed artifact first. Tests + build + smoke before checkpoint.',
+    systemPrompt:
+      'You are a senior builder. Ship working code. Always read the brief, plan smallest landed artifact, implement, run tests + build + smoke, commit (not push), checkpoint with proof.',
+    skills: ['swarm-worker-core', 'byte-verified-code-review'],
+    defaultModel: 'GPT-5.5',
+  },
+  {
+    role: 'Reviewer',
+    specialty: 'byte-verified code review, naming + tests + build gate',
+    mission:
+      'No PR ships without you. Verify diff, byte-check naming, run tests/build/smoke, verdict APPROVED/CHANGES_REQUESTED/BLOCKED.',
+    systemPrompt:
+      'You are the merge gate. For every PR: pull branch, read diff, xxd byte-check naming-sensitive areas, run tests, run build, smoke test. Verdict APPROVED routes to main agent for merge ack. Never merge yourself.',
+    skills: [
+      'swarm-worker-core',
+      'byte-verified-code-review',
+      'swarm-review-learning-loop',
+    ],
+    defaultModel: 'GPT-5.4',
+  },
+  {
+    role: 'Triage',
+    specialty: 'autonomous PR/issues processor',
+    mission:
+      'Score open issues every 4h, repro top-1, fix branch + tests + PR, request review. Never merge or close.',
+    systemPrompt:
+      'You are the issues/PRs autopilot. Every 4h: gh issue list per repo, score by Impact x Tractability x (1 + locally-tested), pick top-1 unassigned, repro, fix branch, push, gh pr create, request reviewer. Never merge, never close, always escalate to main agent for greenlight.',
+    skills: [
+      'swarm-worker-core',
+      'byte-verified-code-review',
+      'swarm-review-learning-loop',
+    ],
+    defaultModel: 'GPT-5.5',
+  },
+  {
+    role: 'Lab',
+    specialty: 'local-model R&D, spec-dec, benchmarking',
+    mission:
+      'Run autonomous lab loop. Test new model pulls. Wire spec-dec/DFlash/TurboQuant. Push tk/s + quality. Document every experiment.',
+    systemPrompt:
+      'You are the local-model lab. Read /swarm-specs/projects/lane-c-lab.md. Iterate experiments from open hypothesis space. Log to lab-loop-runs.jsonl. Escalate breakthroughs (>=10% tk/s) and install requests to main agent.',
+    skills: [
+      'swarm-worker-core',
+      'pc1-ollama-gguf-bench',
+      'swarm-bench-worker',
+    ],
+    defaultModel: 'GPT-5.4',
+  },
+  {
+    role: 'Sage',
+    specialty: 'research + scripts + X content + creative briefs',
+    mission:
+      'Research what matters. Draft scripts, X content, briefs. Cite sources. Never post externally without ack.',
+    systemPrompt:
+      'You are the research/content scout. Find angles, write scripts and drafts, always cite sources. Never post X/Discord/blog without main-agent ack — always draft + escalate.',
+    skills: ['swarm-worker-core', 'last30days', 'pdf-and-paper-deep-reading'],
+    defaultModel: 'GPT-5.5',
+  },
+  {
+    role: 'Scribe',
+    specialty: 'docs, skills hygiene, memory curation',
+    mission:
+      'Keep docs current. Hygiene the skills folder. Curate memory. Write submission/release copy.',
+    systemPrompt:
+      'You are the source-of-truth keeper. Audit /skills/ every 12h, flag stale/unused/poorly-documented. Maintain SWARM_SPEC and worker specs as system evolves. Draft READMEs and changelogs.',
+    skills: ['swarm-worker-core', 'last30days', 'creative-writing'],
+    defaultModel: 'GPT-5.5',
+  },
+  {
+    role: 'Foundation',
+    specialty: 'infra, repair playbook, autopilot wiring',
+    mission:
+      'Keep the swarm running. Apply repair playbook. Wire autopilot. Maintain loop infra.',
+    systemPrompt:
+      'You are infrastructure. Maintain /swarm-specs/playbooks/auto-repair.yaml. Health-check tmux sessions, autopilot tick, dev server. Apply known fixes; escalate novel failures.',
+    skills: ['swarm-worker-core'],
+    defaultModel: 'GPT-5.4',
+  },
+  {
+    role: 'QA',
+    specialty: 'regression QA, render verification',
+    mission: 'Run regression suite on every commit + render. Block bad ships.',
+    systemPrompt:
+      'You are QA. On commit: full test suite. On render: ffprobe + tone consistency + pacing. Verdict PASS/FAIL/FLAKY with evidence.',
+    skills: ['swarm-worker-core', 'byte-verified-code-review'],
+    defaultModel: 'GPT-5.4',
+  },
+  {
+    role: 'Mirror Integrations',
+    specialty: 'asset packs, upstream sync',
+    mission: 'Generate assets. Watch upstream. Pack integrations.',
+    systemPrompt:
+      'You produce assets and watch upstream. Generate art/audio per Lane A. Every 12h diff upstream Hermes Agent main, surface portable items. Never cross-org PR without ack.',
+    skills: ['swarm-worker-core', 'claude-promo', 'songwriting-and-ai-music'],
+    defaultModel: 'GPT-5.4',
+  },
+  {
+    role: 'Custom',
+    specialty: '',
+    mission: '',
+    systemPrompt: '',
+    skills: [],
+  },
+] as const
+
+export const ROLE_NAMES = ROLE_PRESETS.map((preset) => preset.role)
 
 export type RuntimeArtifact = {
   id: string
@@ -199,13 +338,33 @@ export type SwarmWorkerOperatorState = {
   costGuard: string
 }
 
+export type Swarm2CockpitTile = {
+  id: 'workers' | 'runtime' | 'review' | 'mission' | 'router'
+  label: string
+  value: string
+  detail: string
+  tone: 'good' | 'warning' | 'danger' | 'neutral'
+  progress: number
+}
+
+export type RuntimeCommand = {
+  command: Array<string>
+  kind: TerminalKind
+  label: string
+}
+
+export type RuntimeCommandMode = 'auto' | 'logs' | 'shell'
+
 function isActiveMissionState(state: string) {
   return !/^(done|completed|complete|cancelled|canceled|archived)$/i.test(
     state.trim(),
   )
 }
 
-export function compactText(value: string | null | undefined, max = 38): string {
+export function compactText(
+  value: string | null | undefined,
+  max = 38,
+): string {
   if (!value) return '—'
   return value.length > max ? `${value.slice(0, max)}…` : value
 }
@@ -250,6 +409,166 @@ export function cleanSwarmLabel(
     .replace(/\s+/g, ' ')
     .trim()
   return compactText(cleaned || raw, maxLength)
+}
+
+// Pick the live command for a worker pane.
+export function commandForRuntime(
+  runtime: RuntimeEntry | undefined,
+  mode: RuntimeCommandMode = 'auto',
+): RuntimeCommand {
+  const cwd = runtime?.cwd?.replace(/"/g, '\\"')
+  const shellCommand = (): RuntimeCommand => ({
+    command: ['zsh', '-lc', cwd ? `cd "${cwd}" && exec zsh -l` : 'exec zsh -l'],
+    kind: 'shell',
+    label: cwd ? 'shell @ cwd' : 'shell',
+  })
+  const logCommand = (): RuntimeCommand | null =>
+    runtime?.logPath
+      ? {
+          command: ['tail', '-n', '200', '-F', runtime.logPath],
+          kind: 'log-tail',
+          label: 'tail -F agent.log',
+        }
+      : null
+
+  if (mode === 'logs') {
+    return logCommand() ?? shellCommand()
+  }
+  if (mode === 'shell') {
+    return shellCommand()
+  }
+  if (runtime?.tmuxAttachable && runtime.tmuxSession) {
+    return {
+      command: ['tmux', 'attach', '-t', runtime.tmuxSession],
+      kind: 'tmux',
+      label: `tmux:${runtime.tmuxSession}`,
+    }
+  }
+  if (runtime?.cwd) {
+    return shellCommand()
+  }
+  return logCommand() ?? shellCommand()
+}
+
+export function recentRuntimeLines(
+  entry: RuntimeEntry | undefined,
+): Array<string> {
+  return (entry?.recentLogTail ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-4)
+}
+
+function rankMember(roomIds: Array<string>) {
+  return (member: CrewMember) => {
+    if (roomIds.includes(member.id)) return 0
+    const status = getOnlineStatus(member)
+    if (status === 'online') return 1
+    if (status === 'offline') return 2
+    return 3
+  }
+}
+
+export function sortSwarmMembers(
+  members: Array<CrewMember>,
+  roomIds: Array<string>,
+) {
+  const rank = rankMember(roomIds)
+  return [...members]
+    .filter((member) => member.id && member.id.trim().length > 0)
+    .sort((a, b) => {
+      const ranked = rank(a) - rank(b)
+      if (ranked !== 0) return ranked
+      const numA = parseInt(a.id.replace(/\D/g, ''), 10) || 0
+      const numB = parseInt(b.id.replace(/\D/g, ''), 10) || 0
+      return numA - numB
+    })
+}
+
+export function isRuntimeActive(entry: RuntimeEntry | undefined): boolean {
+  if (!entry) return false
+  if (entry.tmuxAttachable) return true
+  if (entry.currentTask?.trim()) return true
+  const last = entry.lastOutputAt ?? entry.lastSessionStartedAt
+  return typeof last === 'number' && Date.now() - last < 12 * 60 * 60 * 1000
+}
+
+export function progressForRuntime(runtime: RuntimeEntry | undefined): number {
+  if (!runtime) return 0
+  if (
+    runtime.checkpointStatus === 'done' ||
+    runtime.checkpointStatus === 'handoff'
+  ) {
+    return 100
+  }
+  if (
+    runtime.checkpointStatus === 'blocked' ||
+    runtime.checkpointStatus === 'needs_input'
+  ) {
+    return 100
+  }
+  if (!runtime.currentTask?.trim()) return 0
+  const text =
+    `${runtime.phase ?? ''} ${runtime.currentTask ?? ''}`.toLowerCase()
+  if (text.includes('review')) return 72
+  if (text.includes('test') || text.includes('qa')) return 78
+  if (
+    text.includes('implement') ||
+    text.includes('build') ||
+    text.includes('patch')
+  ) {
+    return 64
+  }
+  if (
+    text.includes('plan') ||
+    text.includes('research') ||
+    text.includes('design')
+  ) {
+    return 48
+  }
+  return 58
+}
+
+export function displayTaskTitle(
+  runtime: RuntimeEntry | undefined,
+  fallback: string,
+): string {
+  const realSummary = runtime?.lastRealSummary ?? null
+  const realResult = runtime?.lastRealResult ?? null
+  return cleanSwarmLabel(
+    runtime?.blockedReason ||
+      runtime?.currentTask ||
+      realSummary ||
+      runtime?.lastSummary ||
+      realResult ||
+      runtime?.lastResult ||
+      fallback ||
+      '',
+    'Ready for task',
+    64,
+  )
+}
+
+export function formatAssignedModel(
+  model?: string | null,
+  provider?: string | null,
+): string {
+  const value = `${model || ''} ${provider || ''}`.toLowerCase()
+  if (value.includes('claude-opus-4-7') || value.includes('opus-4-7')) {
+    return 'Opus 4.7'
+  }
+  if (value.includes('claude-opus-4-6') || value.includes('opus-4-6')) {
+    return 'Opus 4.6'
+  }
+  if (value.includes('gpt-5.5')) return 'GPT-5.5'
+  if (value.includes('gpt-5.4')) return 'GPT-5.4'
+  if (value.includes('gpt-5.3')) return 'GPT-5.3'
+  if (model && model !== 'unknown') return model
+  if (provider && provider !== 'unknown') {
+    return provider.replace(/^custom:/, '').replace(/[-_]/g, ' ')
+  }
+  return 'Worker'
 }
 
 export function buildActiveMissionQueue(
@@ -307,7 +626,7 @@ export function buildActiveMissionQueue(
 }
 
 export function getSwarmSurfaceDistinction(): string {
-  return 'Swarm coordinates live workers; Conductor launches missions; Operations fixes worker/runtime health; Ops Intelligence explains incidents and risk.'
+  return 'Workers live here. Conductor launches; Ops fixes; Intel explains.'
 }
 
 export function buildWorkerOperatorStates(input: {
@@ -331,9 +650,9 @@ export function buildWorkerOperatorStates(input: {
       : !runtime
     const blocked = Boolean(
       runtime?.blockedReason ||
-        runtime?.needsHuman ||
-        runtime?.checkpointStatus === 'blocked' ||
-        runtime?.checkpointStatus === 'needs_input',
+      runtime?.needsHuman ||
+      runtime?.checkpointStatus === 'blocked' ||
+      runtime?.checkpointStatus === 'needs_input',
     )
     const reviewNeeded = /review|handoff|checkpoint/i.test(
       `${runtime?.checkpointStatus ?? ''} ${runtime?.phase ?? ''}`,
@@ -391,4 +710,97 @@ export function chooseRecommendedWorker(
     states.find((state) => state.status === 'idle')?.id ??
     'manual review'
   )
+}
+
+export function buildSwarm2CockpitTiles(input: {
+  memberCount: number
+  activeRuntimeCount: number
+  blockedWorkerCount: number
+  reviewWorkerCount: number
+  staleWorkerCount: number
+  terminalTargetCount: number
+  notificationCount: number
+  latestMission: {
+    title: string
+    state: string
+    assignmentCount: number
+    checkpointedCount: number
+  } | null
+  recommendedWorker: string
+}): Array<Swarm2CockpitTile> {
+  const safeMemberCount = Math.max(1, input.memberCount)
+  const needsReview = input.reviewWorkerCount + input.notificationCount
+  const missionProgress =
+    input.latestMission && input.latestMission.assignmentCount > 0
+      ? Math.round(
+          (input.latestMission.checkpointedCount /
+            input.latestMission.assignmentCount) *
+            100,
+        )
+      : 0
+
+  return [
+    {
+      id: 'workers',
+      label: 'Worker map',
+      value: `${input.memberCount}`,
+      detail:
+        input.memberCount > 0
+          ? `${input.activeRuntimeCount} active · ${input.staleWorkerCount} stale`
+          : 'No workers found',
+      tone:
+        input.memberCount === 0
+          ? 'danger'
+          : input.staleWorkerCount > 0
+            ? 'warning'
+            : 'good',
+      progress: Math.round((input.activeRuntimeCount / safeMemberCount) * 100),
+    },
+    {
+      id: 'runtime',
+      label: 'Runtime lane',
+      value: `${input.activeRuntimeCount}/${input.memberCount}`,
+      detail:
+        input.terminalTargetCount > 0
+          ? `${input.terminalTargetCount} terminal target${input.terminalTargetCount === 1 ? '' : 's'} ready`
+          : 'No terminal targets mounted',
+      tone: input.activeRuntimeCount > 0 ? 'good' : 'neutral',
+      progress: Math.round((input.activeRuntimeCount / safeMemberCount) * 100),
+    },
+    {
+      id: 'review',
+      label: 'Review queue',
+      value: String(needsReview),
+      detail: `${input.reviewWorkerCount} handoff · ${input.blockedWorkerCount} blocked`,
+      tone:
+        input.blockedWorkerCount > 0
+          ? 'danger'
+          : needsReview > 0
+            ? 'warning'
+            : 'good',
+      progress: needsReview > 0 ? Math.min(100, needsReview * 18) : 100,
+    },
+    {
+      id: 'mission',
+      label: 'Latest mission',
+      value: input.latestMission?.state ?? 'none',
+      detail: input.latestMission?.title ?? 'No active mission loaded',
+      tone:
+        input.latestMission?.state &&
+        /blocked|failed|needs_input/i.test(input.latestMission.state)
+          ? 'danger'
+          : input.latestMission
+            ? 'good'
+            : 'neutral',
+      progress: input.latestMission ? Math.max(8, missionProgress) : 0,
+    },
+    {
+      id: 'router',
+      label: 'Router pick',
+      value: input.recommendedWorker,
+      detail: 'Recommended worker for the current capability lane',
+      tone: input.recommendedWorker === 'manual review' ? 'warning' : 'good',
+      progress: input.recommendedWorker === 'manual review' ? 45 : 100,
+    },
+  ]
 }

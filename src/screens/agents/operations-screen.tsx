@@ -4,7 +4,7 @@ import { motion } from 'motion/react'
 import {
   AiBrain03Icon,
   PlusSignIcon,
-  Settings01Icon,
+  SlidersHorizontalIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { seedAgentPresets } from './agent-presets'
@@ -99,6 +99,25 @@ type OperationsHealthRow = {
   routeHref: string
 }
 
+type OperationsCockpitTile = {
+  id: string
+  label: string
+  value: string
+  detail: string
+  filter: OperationsFleetFilter
+  tone: 'good' | 'warning' | 'danger' | 'neutral'
+  progress: number
+}
+
+function compactOperationsLabel(value: string): string {
+  return value
+    .replace(/ops-maintenance/gi, 'Ops')
+    .replace(/maintenance/gi, 'Maint')
+    .replace(/^No action recorded$/i, 'No action')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function statusTone(status: OperationsAgent['status'], needsSetup = false) {
   if (needsSetup) {
     return 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100'
@@ -110,6 +129,19 @@ function statusTone(status: OperationsAgent['status'], needsSetup = false) {
     return 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/35 dark:text-emerald-100'
   }
   return 'border-primary-200 bg-primary-100/70 text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300'
+}
+
+function tileToneClass(tone: OperationsCockpitTile['tone']) {
+  if (tone === 'danger') {
+    return 'border-red-300 bg-red-50 text-red-950 dark:border-red-900/60 dark:bg-red-950/35 dark:text-red-100'
+  }
+  if (tone === 'warning') {
+    return 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100'
+  }
+  if (tone === 'good') {
+    return 'border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/35 dark:text-emerald-100'
+  }
+  return 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)]'
 }
 
 function buildLatestError(agent: OperationsAgent): string {
@@ -125,6 +157,69 @@ function buildLatestError(agent: OperationsAgent): string {
     )
   }
   return 'No current error'
+}
+
+export function buildOperationsCockpitTiles(
+  rows: Array<OperationsHealthRow>,
+): Array<OperationsCockpitTile> {
+  const total = Math.max(1, rows.length)
+  const active = rows.filter((row) => row.status === 'active').length
+  const failed = rows.filter((row) => row.status === 'error').length
+  const blocked = rows.filter((row) => row.needsTyler).length
+  const waiting = rows.filter((row) => row.waitingOnOthers).length
+  const stale = rows.filter((row) => row.stale).length
+
+  return [
+    {
+      id: 'active',
+      label: 'Active',
+      value: String(active),
+      detail: active > 0 ? 'Running' : 'Clear',
+      filter: 'active',
+      tone: active > 0 ? 'good' : 'neutral',
+      progress: Math.round((active / total) * 100),
+    },
+    {
+      id: 'failed',
+      label: 'Failures',
+      value: String(failed),
+      detail:
+        failed > 0 ? 'Inspect' : 'Clear',
+      filter: 'failed',
+      tone: failed > 0 ? 'danger' : 'good',
+      progress: Math.round((failed / total) * 100),
+    },
+    {
+      id: 'blocked',
+      label: 'Tyler',
+      value: String(blocked),
+      detail:
+        blocked > 0 ? 'Review' : 'Clear',
+      filter: 'needs Tyler',
+      tone: blocked > 0 ? 'warning' : 'good',
+      progress: Math.round((blocked / total) * 100),
+    },
+    {
+      id: 'waiting',
+      label: 'Waiting',
+      value: String(waiting),
+      detail:
+        waiting > 0 ? 'Queued' : 'Clear',
+      filter: 'all',
+      tone: waiting > 0 ? 'warning' : 'neutral',
+      progress: Math.round((waiting / total) * 100),
+    },
+    {
+      id: 'freshness',
+      label: 'Fresh',
+      value: `${Math.max(0, rows.length - stale)}/${rows.length}`,
+      detail:
+        stale > 0 ? `${stale} stale` : 'OK',
+      filter: 'recently changed',
+      tone: stale > 0 ? 'warning' : 'good',
+      progress: Math.round(((rows.length - stale) / total) * 100),
+    },
+  ]
 }
 
 export function buildOperationsHealthRows(
@@ -227,14 +322,14 @@ export function getOperationsPrimaryAction(rows: Array<OperationsHealthRow>): {
   if (rows.some((row) => row.status === 'error')) {
     return {
       label: 'Inspect failing agent',
-      description: 'Start with the current error before creating more work.',
+      description: 'Fix current error.',
       filter: 'failed',
     }
   }
   if (rows.some((row) => row.needsTyler)) {
     return {
       label: 'Fix Tyler-blocked setup',
-      description: 'Profiles or credentials need a human decision first.',
+      description: 'Profile or credential.',
       filter: 'needs Tyler',
       href: withBasePath('/profiles'),
     }
@@ -242,13 +337,13 @@ export function getOperationsPrimaryAction(rows: Array<OperationsHealthRow>): {
   if (rows.some((row) => row.status === 'active')) {
     return {
       label: 'Inspect active agents',
-      description: 'Review running work and latest useful output.',
+      description: 'Running work.',
       filter: 'active',
     }
   }
   return {
     label: 'Create agent',
-    description: 'No urgent agent needs attention; add capacity if needed.',
+    description: 'No urgent issue.',
     filter: 'all',
   }
 }
@@ -315,6 +410,10 @@ export function OperationsScreen() {
     return newest
   }, [agents])
   const healthRows = useMemo(() => buildOperationsHealthRows(agents), [agents])
+  const cockpitTiles = useMemo(
+    () => buildOperationsCockpitTiles(healthRows),
+    [healthRows],
+  )
   const primaryAction = useMemo(
     () => getOperationsPrimaryAction(healthRows),
     [healthRows],
@@ -354,12 +453,12 @@ export function OperationsScreen() {
 
   return (
     <main
-      className="min-h-full bg-surface px-3 pb-24 pt-5 text-primary-900 md:px-5 md:pt-8"
+      className="min-h-full bg-surface px-2 pb-[calc(var(--tabbar-h,0px)+12px)] pt-3 text-primary-900 md:px-5 md:pb-24 md:pt-8"
       style={THEME_STYLE}
     >
-      <section className="mx-auto w-full max-w-[1320px] space-y-4">
-        <header className="flex flex-col gap-4 rounded-xl border border-primary-200 bg-primary-50/80 px-5 py-4 shadow-sm md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
+      <section className="mx-auto w-full max-w-[1320px] space-y-3 md:space-y-4">
+        <header className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-3 shadow-sm md:flex-row md:flex-wrap md:items-center md:justify-between md:px-4">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-accent)] shadow-sm">
               <HugeiconsIcon icon={AiBrain03Icon} size={22} strokeWidth={1.8} />
             </div>
@@ -367,12 +466,9 @@ export function OperationsScreen() {
               <h1 className="text-base font-semibold text-primary-900">
                 Operations
               </h1>
-              <p className="mt-1 text-sm text-primary-600">
-                Your persistent agent team
-              </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button
               className="bg-[var(--theme-accent)] text-primary-950 hover:bg-[var(--theme-accent-strong)]"
               onClick={() => {
@@ -421,7 +517,7 @@ export function OperationsScreen() {
               onClick={() => setNewAgentOpen(true)}
             >
               <HugeiconsIcon icon={PlusSignIcon} size={16} strokeWidth={1.8} />
-              New Agent
+              New
             </Button>
             <Button
               variant="secondary"
@@ -436,57 +532,98 @@ export function OperationsScreen() {
               onClick={() => setSettingsOpen(true)}
             >
               <HugeiconsIcon
-                icon={Settings01Icon}
+                icon={SlidersHorizontalIcon}
                 size={16}
                 strokeWidth={1.8}
               />
-              Settings
+              Config
             </Button>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-xs md:basis-full lg:grid-cols-6">
+          <div className="grid w-full min-w-0 grid-cols-3 gap-2 text-xs lg:grid-cols-6">
             {[
               ['Agents', fleetCounts.total],
               ['Active', fleetCounts.active],
               ['Idle', fleetCounts.idle],
               ['Errors', fleetCounts.error],
-              ['Needs setup', fleetCounts.needsSetup],
+              ['Setup', fleetCounts.needsSetup],
               ['Jobs', fleetCounts.jobs],
             ].map(([label, value]) => (
               <div
                 key={String(label)}
                 data-testid={`operations-fleet-${String(label).toLowerCase().replace(/\s+/g, '-')}`}
-                className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2"
+                className="min-w-0 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1.5"
               >
-                <span className="text-[var(--theme-muted)]">{label}</span>
-                <p className="mt-1 text-lg font-semibold text-[var(--theme-text)]">
+                <span className="block truncate text-[var(--theme-muted)]">
+                  {label}
+                </span>
+                <p className="mt-0.5 text-base font-semibold text-[var(--theme-text)]">
                   {String(value)}
                 </p>
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2 text-xs text-[var(--theme-muted)] md:basis-full">
+          <div className="flex w-full min-w-0 flex-wrap gap-2 text-xs text-[var(--theme-muted)]">
             <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
-              Primary: {primaryAction.description}
+              {primaryAction.description}
             </span>
             <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
-              Source: Hermes profiles, gateway sessions, cron jobs
-            </span>
-            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
-              Last activity:{' '}
+              Last:{' '}
               {newestActivityAt
                 ? formatRelativeTime(newestActivityAt)
-                : 'none yet'}
+                : 'none'}
             </span>
             <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
               Health:{' '}
               {error
-                ? 'data source degraded'
+                ? 'degraded'
                 : fleetCounts.error > 0
-                  ? `${fleetCounts.error} agent issue${fleetCounts.error === 1 ? '' : 's'}`
-                  : 'no agent errors reported'}
+                  ? `${fleetCounts.error} issue${fleetCounts.error === 1 ? '' : 's'}`
+                  : 'ok'}
             </span>
           </div>
         </header>
+
+        <section
+          aria-label="Agent operations cockpit"
+          className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-4"
+        >
+          {cockpitTiles.slice(0, 4).map((tile) => (
+            <button
+              key={tile.id}
+              type="button"
+              onClick={() => setFleetFilter(tile.filter)}
+              className={cn(
+                'group min-h-0 rounded-xl border p-3 text-left shadow-sm transition-[border-color,background-color,box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)] md:min-h-[7rem]',
+                tileToneClass(tile.tone),
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">
+                    {tile.label}
+                  </p>
+                  <p className="mt-1 truncate text-xl font-semibold tracking-normal">
+                    {tile.value}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full border border-current/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-normal opacity-75">
+                  {tile.tone}
+                </span>
+              </div>
+              <p className="mt-2 line-clamp-1 text-xs leading-snug opacity-80">
+                {tile.detail}
+              </p>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-current/10 md:mt-3">
+                <div
+                  className="h-full rounded-full bg-current transition-[width]"
+                  style={{
+                    width: `${Math.min(100, Math.max(4, tile.progress))}%`,
+                  }}
+                />
+              </div>
+            </button>
+          ))}
+        </section>
 
         {isLoading ? (
           <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-6 py-12 text-center text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)]">
@@ -506,16 +643,15 @@ export function OperationsScreen() {
           <FullOutputsView />
         ) : (
           <>
-            <section className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-              <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm">
+            <section className="grid min-w-0 gap-3 md:gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+              <div className="min-w-0 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div>
                     <h2 className="text-base font-semibold text-[var(--theme-text)]">
-                      Agent Health Table
+                      Health
                     </h2>
                     <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                      Status, owner, last action, queue, exact latest error,
-                      stale-data badges, and source ownership.
+                      State, queue, error.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -524,7 +660,7 @@ export function OperationsScreen() {
                       className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]"
                       onClick={() => void refreshAll()}
                     >
-                      Bulk refresh
+                      Refresh
                     </Button>
                   </div>
                 </div>
@@ -547,118 +683,122 @@ export function OperationsScreen() {
                   ))}
                 </div>
 
-                <div className="mt-4 overflow-auto rounded-xl border border-[var(--theme-border)]">
-                  <table className="w-full min-w-[960px] text-left text-sm">
-                    <thead className="bg-[var(--theme-bg)] text-[11px] uppercase tracking-[0.14em] text-[var(--theme-muted)]">
-                      <tr>
-                        <th className="px-3 py-2">Agent</th>
-                        <th className="px-3 py-2">Owner</th>
-                        <th className="px-3 py-2">Status</th>
-                        <th className="px-3 py-2">Last action</th>
-                        <th className="px-3 py-2">Queue</th>
-                        <th className="px-3 py-2">Latest error</th>
-                        <th className="px-3 py-2">Ownership</th>
-                        <th className="px-3 py-2">Route</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredHealthRows.map((row) => (
-                        <tr
-                          key={row.id}
-                          tabIndex={0}
-                          data-operations-health-row
-                          aria-label={`${row.name} operations health row`}
-                          onKeyDown={(event) => {
-                            if (event.key === 'ArrowDown') {
-                              event.preventDefault()
-                              focusAdjacentHealthRow(
-                                event.currentTarget,
-                                'next',
-                              )
-                            }
-                            if (event.key === 'ArrowUp') {
-                              event.preventDefault()
-                              focusAdjacentHealthRow(
-                                event.currentTarget,
-                                'previous',
-                              )
-                            }
-                          }}
-                          className="border-t border-[var(--theme-border)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
-                        >
-                          <td className="px-3 py-3 font-medium text-[var(--theme-text)]">
-                            <div>{row.name}</div>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              <span
-                                className={cn(
-                                  'rounded-full border px-2 py-0.5 text-[10px]',
-                                  statusTone(
-                                    row.status,
-                                    row.latestError.includes('Model missing'),
-                                  ),
-                                )}
-                              >
-                                {row.staleLabel}
-                              </span>
-                              {row.needsTyler ? (
-                                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-900">
-                                  needs Tyler
-                                </span>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-[var(--theme-muted)]">
+                <div className="mt-4 grid gap-2 md:grid-cols-2">
+                  {filteredHealthRows.map((row) => (
+                    <article
+                      key={row.id}
+                      tabIndex={0}
+                      data-operations-health-row
+                      aria-label={`${row.name} operations health card`}
+                      onKeyDown={(event) => {
+                        if (event.key === 'ArrowDown') {
+                          event.preventDefault()
+                          focusAdjacentHealthRow(event.currentTarget, 'next')
+                        }
+                        if (event.key === 'ArrowUp') {
+                          event.preventDefault()
+                          focusAdjacentHealthRow(
+                            event.currentTarget,
+                            'previous',
+                          )
+                        }
+                      }}
+                      className="rounded-[22px] border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 shadow-sm transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-[var(--theme-accent)] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3
+                            className="truncate text-sm font-semibold text-[var(--theme-text)]"
+                            title={row.name}
+                          >
+                            {compactOperationsLabel(row.name)}
+                          </h3>
+                          <p
+                            className="mt-1 truncate text-[11px] text-[var(--theme-muted)]"
+                            title={`${row.owner} · ${row.sourceOwner}`}
+                          >
                             {row.owner}
-                          </td>
-                          <td className="px-3 py-3">
-                            <span
-                              className={cn(
-                                'rounded-full border px-2 py-1 text-xs',
-                                statusTone(row.status),
-                              )}
-                            >
-                              {row.status}
-                            </span>
-                            <div className="mt-1 text-[11px] text-[var(--theme-muted)]">
-                              launchd/process: {row.launchdStatus} ·{' '}
-                              {row.processStatus}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-[var(--theme-muted)]">
-                            {row.lastAction}
-                          </td>
-                          <td className="px-3 py-3 text-[var(--theme-muted)]">
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize',
+                            statusTone(row.status),
+                          )}
+                        >
+                          {row.status}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2">
+                          <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+                            Queue
+                          </span>
+                          <span
+                            className="mt-1 block truncate text-[var(--theme-text)]"
+                            title={row.queue}
+                          >
                             {row.queue}
-                          </td>
-                          <td className="max-w-[18rem] px-3 py-3 text-[var(--theme-muted)]">
-                            <span className="line-clamp-2">
-                              {row.latestError}
+                          </span>
+                        </div>
+                        <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2">
+                          <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+                            Process
+                          </span>
+                          <span
+                            className="mt-1 block truncate text-[var(--theme-text)]"
+                            title={`${row.launchdStatus} · ${row.processStatus}`}
+                          >
+                            {row.launchdStatus === 'no launchd job' &&
+                            row.processStatus === 'no active process'
+                              ? 'offline'
+                              : row.processStatus}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="mt-3 line-clamp-2 min-h-10 text-xs leading-5 text-[var(--theme-muted)]">
+                        {row.latestError}
+                      </p>
+
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          <span
+                            className={cn(
+                              'rounded-full border px-2 py-1 text-[10px] font-semibold',
+                              statusTone(
+                                row.status,
+                                row.latestError.includes('Model missing'),
+                              ),
+                            )}
+                          >
+                            {row.staleLabel}
+                          </span>
+                          {row.needsTyler ? (
+                            <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-900">
+                              Tyler
                             </span>
-                          </td>
-                          <td className="px-3 py-3 text-[var(--theme-muted)]">
-                            {row.sourceOwner}
-                          </td>
-                          <td className="px-3 py-3">
-                            <a
-                              href={row.routeHref}
-                              className="text-[var(--theme-accent)] underline-offset-2 hover:underline"
-                            >
-                              Open chat
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          ) : null}
+                        </div>
+                        <a
+                          href={row.routeHref}
+                          className="inline-flex min-h-9 items-center rounded-full bg-[var(--theme-accent)] px-3 text-xs font-semibold text-primary-950 transition-transform active:scale-95"
+                        >
+                          Chat
+                        </a>
+                      </div>
+                    </article>
+                  ))}
                   {filteredHealthRows.length === 0 ? (
-                    <div className="border-t border-[var(--theme-border)] px-4 py-6 text-sm text-[var(--theme-muted)]">
-                      No agents match this filter.
+                    <div className="rounded-[22px] border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-8 text-center text-sm text-[var(--theme-muted)] md:col-span-2">
+                      No matches.
                     </div>
                   ) : null}
                 </div>
               </div>
 
-              <aside className="grid gap-3">
+              <aside className="grid min-w-0 gap-3">
                 <section className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm md:hidden">
                   <h2 className="text-base font-semibold text-[var(--theme-text)]">
                     Mobile Commander
@@ -690,14 +830,14 @@ export function OperationsScreen() {
                       onClick={() => setRestartTarget('workspace')}
                       className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-left"
                     >
-                      Restart preflight
+                      Preflight
                     </button>
                   </div>
                 </section>
 
                 <section className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm">
                   <h2 className="text-base font-semibold text-[var(--theme-text)]">
-                    Needs Tyler / Blocked By Me
+                    Tyler
                   </h2>
                   <div className="mt-3 space-y-2">
                     {blockedByMe.slice(0, 4).map((row) => (
@@ -711,15 +851,15 @@ export function OperationsScreen() {
                     ))}
                     {blockedByMe.length === 0 ? (
                       <p className="text-sm text-[var(--theme-muted)]">
-                        No Tyler-blocked agents right now.
+                        Clear.
                       </p>
                     ) : null}
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm">
+                <section className="hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm md:block">
                   <h2 className="text-base font-semibold text-[var(--theme-text)]">
-                    Waiting On Others
+                    Waiting
                   </h2>
                   <div className="mt-3 space-y-2">
                     {waitingOnOthers.slice(0, 4).map((row) => (
@@ -737,15 +877,15 @@ export function OperationsScreen() {
                     ))}
                     {waitingOnOthers.length === 0 ? (
                       <p className="text-sm text-[var(--theme-muted)]">
-                        No external waits detected.
+                        Clear.
                       </p>
                     ) : null}
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm">
+                <section className="hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm md:block">
                   <h2 className="text-base font-semibold text-[var(--theme-text)]">
-                    Safe Restart Controls
+                    Restart
                   </h2>
                   <div className="mt-3 grid gap-2">
                     {[
@@ -760,17 +900,15 @@ export function OperationsScreen() {
                         onClick={() => setRestartTarget(target)}
                         className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-left text-sm text-[var(--theme-text)]"
                       >
-                        {target} restart preflight
+                        {target}
                       </button>
                     ))}
                   </div>
                   <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-xs text-[var(--theme-muted)]">
-                    Safeguards: check active jobs, Graph-mutating scripts,
-                    launchd/process state, latest log tail, and backup freshness
-                    before any restart.
+                    Preflight checks.
                     {restartTarget ? (
                       <span className="mt-1 block font-medium text-[var(--theme-text)]">
-                        Selected: {restartTarget}
+                        {restartTarget}
                       </span>
                     ) : null}
                   </div>
@@ -778,15 +916,12 @@ export function OperationsScreen() {
               </aside>
             </section>
 
-            <section className="grid gap-4 lg:grid-cols-3">
+            <section className="hidden gap-4 md:grid lg:grid-cols-3">
               <details
-                open={healthRows.some(
-                  (row) => row.status === 'error' || row.needsTyler,
-                )}
                 className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm"
               >
                 <summary className="cursor-pointer text-base font-semibold text-[var(--theme-text)]">
-                  Incident History And Log Tails
+                  Incidents
                 </summary>
                 <div className="mt-3 space-y-2">
                   {healthRows.slice(0, 6).map((row) => (
@@ -798,7 +933,7 @@ export function OperationsScreen() {
                         {row.name}
                       </div>
                       <div className="mt-1 text-xs text-[var(--theme-muted)]">
-                        Log tail preview: {row.incidentHistory.join(' · ')}
+                        {row.incidentHistory.join(' · ')}
                       </div>
                     </div>
                   ))}
@@ -806,11 +941,10 @@ export function OperationsScreen() {
               </details>
 
               <details
-                open={agents.some((agent) => agent.jobs.length === 0)}
                 className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm"
               >
                 <summary className="cursor-pointer text-base font-semibold text-[var(--theme-text)]">
-                  Dependency Map And Assignments
+                  Dependencies
                 </summary>
                 <div className="mt-3 space-y-2">
                   {healthRows.slice(0, 6).map((row) => (
@@ -821,12 +955,17 @@ export function OperationsScreen() {
                       <div className="font-medium text-[var(--theme-text)]">
                         {row.name}
                       </div>
-                      <div className="mt-1 text-xs text-[var(--theme-muted)]">
-                        Agents → jobs/scripts: {row.queue} · current assignment:{' '}
-                        {row.assignment}
+                      <div
+                        className="mt-1 text-xs text-[var(--theme-muted)]"
+                        title={`Jobs/scripts: ${row.queue} · assignment: ${row.assignment}`}
+                      >
+                        {row.queue}
                       </div>
-                      <div className="mt-1 text-xs text-[var(--theme-muted)]">
-                        Capabilities: {row.capabilities.join(', ')}
+                      <div
+                        className="mt-1 text-xs text-[var(--theme-muted)]"
+                        title={`Tools: ${row.capabilities.join(', ')}`}
+                      >
+                        {row.capabilities.length} tools
                       </div>
                     </div>
                   ))}
@@ -834,13 +973,10 @@ export function OperationsScreen() {
               </details>
 
               <details
-                open={healthRows.some(
-                  (row) => row.modelHealth !== 'local or low-cost model',
-                )}
                 className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm"
               >
                 <summary className="cursor-pointer text-base font-semibold text-[var(--theme-text)]">
-                  Output Diff And Model Cost Health
+                  Output
                 </summary>
                 <div className="mt-3 space-y-2">
                   {healthRows.slice(0, 6).map((row) => (
@@ -852,8 +988,7 @@ export function OperationsScreen() {
                         {row.name}
                       </div>
                       <div className="mt-1 text-xs text-[var(--theme-muted)]">
-                        Output diff viewer: compare latest output against prior
-                        run in Outputs. Model/provider/cost: {row.modelHealth}.
+                        {row.modelHealth}
                       </div>
                     </div>
                   ))}
@@ -862,6 +997,7 @@ export function OperationsScreen() {
             </section>
 
             <motion.div
+              className="hidden md:block"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25 }}
@@ -869,15 +1005,14 @@ export function OperationsScreen() {
               <OrchestratorCard totalAgents={agents.length} />
             </motion.div>
 
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <section className="hidden grid-cols-1 gap-3 md:grid sm:grid-cols-2 xl:grid-cols-3">
               {agents.length === 0 ? (
                 <div className="rounded-3xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-5 py-8 text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)] sm:col-span-2 xl:col-span-3">
                   <p className="font-medium text-[var(--theme-text)]">
-                    No operations agents configured
+                    No agents
                   </p>
                   <p className="mt-1">
-                    Create a Hermes profile-backed agent before launching
-                    recurring work or routing sessions through Operations.
+                    Create one to route work.
                   </p>
                   <Button
                     className="mt-4 bg-[var(--theme-accent)] text-primary-950 hover:bg-[var(--theme-accent-strong)]"
@@ -888,7 +1023,7 @@ export function OperationsScreen() {
                       size={16}
                       strokeWidth={1.8}
                     />
-                    Create first agent
+                    Create
                   </Button>
                 </div>
               ) : (
@@ -912,7 +1047,7 @@ export function OperationsScreen() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: agents.length * 0.04, duration: 0.22 }}
                 onClick={() => setNewAgentOpen(true)}
-                className="flex min-h-[19rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] p-4 text-center shadow-[0_20px_60px_color-mix(in_srgb,var(--theme-shadow)_10%,transparent)] transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-soft)]"
+                className="flex min-h-[10rem] flex-col items-center justify-center rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] p-4 text-center shadow-sm transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-soft)]"
               >
                 <HugeiconsIcon
                   icon={PlusSignIcon}
@@ -921,20 +1056,17 @@ export function OperationsScreen() {
                   className="text-[var(--theme-muted)]"
                 />
                 <span className="mt-3 text-sm text-[var(--theme-muted)]">
-                  Add Agent
+                  Add
                 </span>
               </motion.button>
             </section>
 
-            <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5 shadow-[0_24px_80px_var(--theme-shadow)]">
+            <section className="hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm md:block">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-[var(--theme-text)]">
-                    Recent Activity
+                    Activity
                   </h2>
-                  <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                    Latest outputs across the team
-                  </p>
                 </div>
               </div>
               <div className="mt-4 space-y-3">
@@ -965,7 +1097,7 @@ export function OperationsScreen() {
                   })
                 ) : (
                   <div className="rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-sm text-[var(--theme-muted)]">
-                    No recent activity yet.
+                    Clear.
                   </div>
                 )}
               </div>

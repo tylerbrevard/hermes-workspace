@@ -7,11 +7,18 @@ import {
   useState,
 } from 'react'
 import {
+  Alert02Icon,
+  Clock01Icon,
+  File01Icon,
+  Folder01Icon,
+} from '@hugeicons/core-free-icons'
+import {
   FILE_BROWSER_MODE_LABEL,
   FILE_BROWSER_REMOTE_HELP,
   IGNORED_DIRS,
   buildFilesDiagnosticBundle,
   classifyFileOwnership,
+  countEntries,
   filterEntries,
   flattenRecentFiles,
   getAbsoluteFileReference,
@@ -26,8 +33,21 @@ import {
   isImageFile,
   isMarkdownFile,
   isOutsideWorkspaceBoundary,
+  isProtectedFile,
   summarizeFileHealth,
 } from './lib/file-workflow'
+import {
+  copyToClipboard,
+  formatBytes,
+  formatDate,
+  formatRelativeModified,
+  getFetchErrorMessage,
+  getFileIcon,
+  getParentPath,
+  getUnsafeFileNameMessage,
+  highlightCodeContent,
+} from './file-ui'
+import { DiffModal } from './file-diff-modal'
 import type { ReactNode } from 'react'
 import type {
   FileEntry,
@@ -53,6 +73,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Markdown } from '@/components/prompt-kit/markdown'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 
 type PromptState = {
   mode: 'rename' | 'new-folder'
@@ -66,501 +92,18 @@ type ContextMenuState = {
   entry: FileEntry
 }
 
-
-function getFileIcon(entry: FileEntry): string {
-  if (entry.type === 'folder') return '📁'
-  const ext = getExt(entry.name)
-  if (ext === 'md' || ext === 'mdx') return '📄'
-  if (ext === 'json') return '📋'
-  if (ext === 'ts' || ext === 'tsx' || ext === 'js' || ext === 'jsx')
-    return '📜'
-  if (isImageFile(entry.name)) return '🖼'
-  return '📃'
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-async function copyToClipboard(value: string) {
-  try {
-    await navigator.clipboard.writeText(value)
-    return
-  } catch {
-    const textarea = document.createElement('textarea')
-    textarea.value = value
-    textarea.style.position = 'fixed'
-    textarea.style.opacity = '0'
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-  }
-}
-
-function getParentPath(pathValue: string): string {
-  const parts = pathValue.replace(/\\/g, '/').split('/').filter(Boolean)
-  if (parts.length <= 1) return ''
-  return parts.slice(0, -1).join('/')
-}
-
-function getUnsafeFileNameMessage(name: string): string | null {
-  const trimmed = name.trim()
-  if (!trimmed) return 'Name is required.'
-  if (trimmed === '.' || trimmed === '..') return "Name cannot be '.' or '..'."
-  if (trimmed.includes('/') || trimmed.includes('\\')) {
-    return 'Use a name only, not a path.'
-  }
-  if (trimmed.includes('\0')) return 'Name cannot include null bytes.'
-  return null
-}
-
-async function getFetchErrorMessage(res: Response) {
-  try {
-    const data = (await res.json()) as { error?: unknown }
-    if (typeof data.error === 'string' && data.error.trim()) {
-      return data.error
-    }
-  } catch {
-    // Fall back to status text below.
-  }
-  return `HTTP ${res.status}`
-}
-
-function formatRelativeModified(iso: string): string {
-  const modifiedAt = Date.parse(iso)
-  if (!Number.isFinite(modifiedAt)) return formatDate(iso)
-
-  const diffMs = Date.now() - modifiedAt
-  if (diffMs < 60_000) return 'just now'
-  const minutes = Math.floor(diffMs / 60_000)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-  return formatDate(iso)
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Line-by-line diff (no external lib)
-// ──────────────────────────────────────────────────────────────────────────────
-
-type DiffLineKind = 'unchanged' | 'added' | 'removed'
-
-type DiffLine = {
-  kind: DiffLineKind
-  text: string
-  leftNum: number | null // original line number
-  rightNum: number | null // new line number
-}
-
-/**
- * Very simple LCS-based diff. Produces a list of DiffLine entries that can be
- * rendered in a split/unified view.
- */
-function computeDiff(original: string, updated: string): Array<DiffLine> {
-  const aLines = original.split('\n')
-  const bLines = updated.split('\n')
-  const m = aLines.length
-  const n = bLines.length
-
-  // Build LCS table
-  const dp: Array<Array<number>> = Array.from({ length: m + 1 }, () =>
-    new Array(n + 1).fill(0),
-  )
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (aLines[i - 1] === bLines[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1])
-      }
-    }
-  }
-
-  // Backtrack
-  const result: Array<DiffLine> = []
-  let i = m
-  let j = n
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && aLines[i - 1] === bLines[j - 1]) {
-      result.push({
-        kind: 'unchanged',
-        text: aLines[i - 1],
-        leftNum: i,
-        rightNum: j,
-      })
-      i--
-      j--
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      result.push({
-        kind: 'added',
-        text: bLines[j - 1],
-        leftNum: null,
-        rightNum: j,
-      })
-      j--
-    } else {
-      result.push({
-        kind: 'removed',
-        text: aLines[i - 1],
-        leftNum: i,
-        rightNum: null,
-      })
-      i--
-    }
-  }
-  return result.reverse()
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Basic syntax highlighting (CSS-class only, no library)
-// ──────────────────────────────────────────────────────────────────────────────
-
-const KEYWORDS = new Set([
-  'import',
-  'export',
-  'default',
-  'from',
-  'const',
-  'let',
-  'var',
-  'function',
-  'return',
-  'if',
-  'else',
-  'for',
-  'while',
-  'class',
-  'extends',
-  'new',
-  'this',
-  'type',
-  'interface',
-  'async',
-  'await',
-  'try',
-  'catch',
-  'throw',
-  'null',
-  'undefined',
-  'true',
-  'false',
-  'typeof',
-  'instanceof',
-  'void',
-  'in',
-  'of',
-  'break',
-  'continue',
-  'switch',
-  'case',
-  'delete',
-])
-
-type HighlightKind =
-  | 'plain'
-  | 'comment'
-  | 'jsonKey'
-  | 'keyword'
-  | 'number'
-  | 'string'
-  | 'type'
-
-type HighlightToken = {
-  text: string
-  kind: HighlightKind
-}
-
-const HIGHLIGHT_CLASS_BY_KIND: Record<
-  Exclude<HighlightKind, 'plain'>,
-  string
-> = {
-  comment: 'hl-comment',
-  jsonKey: 'hl-key',
-  keyword: 'hl-kw',
-  number: 'hl-num',
-  string: 'hl-str',
-  type: 'hl-type',
-}
-
-function pushHighlightToken(
-  tokens: Array<HighlightToken>,
-  text: string,
-  kind: HighlightKind = 'plain',
-) {
-  if (!text) return
-  tokens.push({ text, kind })
-}
-
-function tokenizeJson(code: string): Array<HighlightToken> {
-  const tokens: Array<HighlightToken> = []
-  const pattern =
-    /("(?:[^"\\]|\\.)*")(\s*:)?|-?\d+\.?\d*|\b(?:true|false|null)\b/g
-  let lastIndex = 0
-
-  for (const match of code.matchAll(pattern)) {
-    const index = match.index
-    pushHighlightToken(tokens, code.slice(lastIndex, index))
-
-    const [value, stringValue, colon] = match
-    if (stringValue) {
-      pushHighlightToken(tokens, stringValue, colon ? 'jsonKey' : 'string')
-      if (colon) pushHighlightToken(tokens, colon)
-    } else if (value === 'true' || value === 'false' || value === 'null') {
-      pushHighlightToken(tokens, value, 'keyword')
-    } else {
-      pushHighlightToken(tokens, value, 'number')
-    }
-
-    lastIndex = index + value.length
-  }
-
-  pushHighlightToken(tokens, code.slice(lastIndex))
-  return tokens
-}
-
-function tokenizeCode(code: string): Array<HighlightToken> {
-  const tokens: Array<HighlightToken> = []
-  const pattern =
-    /\/\/[^\n]*|\/\*[\s\S]*?\*\/|(["'`])(?:(?!\1)[^\\]|\\.)*?\1|(?<![a-zA-Z_$])\b\d+\.?\d*\b|\b[a-zA-Z_$][a-zA-Z0-9_$]*\b/g
-  let lastIndex = 0
-
-  for (const match of code.matchAll(pattern)) {
-    const index = match.index
-    const value = match[0]
-    pushHighlightToken(tokens, code.slice(lastIndex, index))
-
-    if (value.startsWith('//') || value.startsWith('/*')) {
-      pushHighlightToken(tokens, value, 'comment')
-    } else if (
-      value.startsWith('"') ||
-      value.startsWith("'") ||
-      value.startsWith('`')
-    ) {
-      pushHighlightToken(tokens, value, 'string')
-    } else if (/^-?\d+\.?\d*$/.test(value)) {
-      pushHighlightToken(tokens, value, 'number')
-    } else if (KEYWORDS.has(value)) {
-      pushHighlightToken(tokens, value, 'keyword')
-    } else if (/^[A-Z]/.test(value)) {
-      pushHighlightToken(tokens, value, 'type')
-    } else {
-      pushHighlightToken(tokens, value)
-    }
-
-    lastIndex = index + value.length
-  }
-
-  pushHighlightToken(tokens, code.slice(lastIndex))
-  return tokens
-}
-
-function highlightCode(code: string, ext: string): Array<ReactNode> {
-  const tokens = ext === 'json' ? tokenizeJson(code) : tokenizeCode(code)
-  return tokens.map((token, index) => {
-    if (token.kind === 'plain') {
-      return <Fragment key={index}>{token.text}</Fragment>
-    }
-
-    return (
-      <span key={index} className={HIGHLIGHT_CLASS_BY_KIND[token.kind]}>
-        {token.text}
-      </span>
-    )
-  })
-}
-
-function highlightCodeContent(code: string, ext: string): Array<ReactNode> {
-  if (ext === 'json') {
-    return highlightCode(code, 'json')
-  }
-  return highlightCode(code, ext)
+function compactFilePath(value: string, maxLength = 34): string {
+  const cleaned = value.replace(/\s+/g, ' ').trim()
+  if (cleaned.length <= maxLength) return cleaned
+  const parts = cleaned.split('/').filter(Boolean)
+  const leaf = parts.at(-1) || cleaned
+  if (leaf.length <= maxLength) return leaf
+  return `${leaf.slice(0, maxLength - 3).replace(/[._\-\s]+$/, '')}...`
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Diff Modal
 // ──────────────────────────────────────────────────────────────────────────────
-
-type DiffModalProps = {
-  open: boolean
-  fileName: string
-  original: string
-  updated: string
-  onSave: () => void
-  onCancel: () => void
-}
-
-function DiffModal({
-  open,
-  fileName,
-  original,
-  updated,
-  onSave,
-  onCancel,
-}: DiffModalProps) {
-  const diffLines = useMemo(
-    () => (open ? computeDiff(original, updated) : []),
-    [open, original, updated],
-  )
-
-  const addedCount = diffLines.filter((l) => l.kind === 'added').length
-  const removedCount = diffLines.filter((l) => l.kind === 'removed').length
-
-  // Separate left (original) and right (new) columns for split view
-  const leftLines = diffLines.filter((l) => l.kind !== 'added')
-  const rightLines = diffLines.filter((l) => l.kind !== 'removed')
-
-  if (!open) return null
-
-  return (
-    <DialogRoot
-      open={open}
-      onOpenChange={(isOpen) => {
-        if (!isOpen) onCancel()
-      }}
-    >
-      <DialogContent className="max-w-5xl w-full">
-        <div className="flex flex-col max-h-[85vh]">
-          {/* Header */}
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-primary-200 dark:border-neutral-800 px-5 py-3">
-            <div className="min-w-0">
-              <DialogTitle className="text-sm font-semibold text-primary-900 dark:text-neutral-100 truncate">
-                Review changes — {fileName}
-              </DialogTitle>
-              <DialogDescription className="mt-0.5 text-xs text-primary-500 dark:text-neutral-400">
-                <span className="text-emerald-600 font-medium">
-                  +{addedCount} added
-                </span>
-                {' · '}
-                <span className="text-red-600 font-medium">
-                  −{removedCount} removed
-                </span>
-              </DialogDescription>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button variant="outline" size="sm" onClick={onCancel}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={onSave}>
-                Save anyway
-              </Button>
-            </div>
-          </div>
-
-          {/* Split diff view */}
-          <div className="flex flex-1 min-h-0 overflow-hidden divide-x divide-primary-200 dark:divide-neutral-800">
-            {/* Left — original */}
-            <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-              <div className="shrink-0 px-3 py-1.5 text-[11px] font-semibold text-primary-500 dark:text-neutral-400 bg-primary-100/60 dark:bg-neutral-900/60 border-b border-primary-200 dark:border-neutral-800 uppercase tracking-wide">
-                Original
-              </div>
-              <div className="flex-1 overflow-auto">
-                <div className="font-mono text-[11px] leading-relaxed">
-                  {leftLines.map((line, idx) => (
-                    <div
-                      key={idx}
-                      className={cn(
-                        'flex items-start gap-0',
-                        line.kind === 'removed'
-                          ? 'bg-red-50 dark:bg-red-950/25'
-                          : '',
-                      )}
-                    >
-                      <span className="shrink-0 w-10 select-none px-2 text-right text-primary-300 dark:text-neutral-600 text-[10px] leading-relaxed border-r border-primary-200 dark:border-neutral-800">
-                        {line.leftNum ?? ''}
-                      </span>
-                      <span
-                        className={cn(
-                          'shrink-0 w-5 select-none text-center leading-relaxed',
-                          line.kind === 'removed'
-                            ? 'text-red-500'
-                            : 'text-transparent',
-                        )}
-                      >
-                        {line.kind === 'removed' ? '−' : ' '}
-                      </span>
-                      <span
-                        className={cn(
-                          'flex-1 whitespace-pre-wrap break-all px-1',
-                          line.kind === 'removed'
-                            ? 'text-red-800 dark:text-red-300'
-                            : 'text-primary-800 dark:text-neutral-300',
-                        )}
-                      >
-                        {line.text || ' '}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Right — new */}
-            <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-              <div className="shrink-0 px-3 py-1.5 text-[11px] font-semibold text-primary-500 dark:text-neutral-400 bg-primary-100/60 dark:bg-neutral-900/60 border-b border-primary-200 dark:border-neutral-800 uppercase tracking-wide">
-                New
-              </div>
-              <div className="flex-1 overflow-auto">
-                <div className="font-mono text-[11px] leading-relaxed">
-                  {rightLines.map((line, idx) => (
-                    <div
-                      key={idx}
-                      className={cn(
-                        'flex items-start gap-0',
-                        line.kind === 'added'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/25'
-                          : '',
-                      )}
-                    >
-                      <span className="shrink-0 w-10 select-none px-2 text-right text-primary-300 dark:text-neutral-600 text-[10px] leading-relaxed border-r border-primary-200 dark:border-neutral-800">
-                        {line.rightNum ?? ''}
-                      </span>
-                      <span
-                        className={cn(
-                          'shrink-0 w-5 select-none text-center leading-relaxed',
-                          line.kind === 'added'
-                            ? 'text-emerald-600'
-                            : 'text-transparent',
-                        )}
-                      >
-                        {line.kind === 'added' ? '+' : ' '}
-                      </span>
-                      <span
-                        className={cn(
-                          'flex-1 whitespace-pre-wrap break-all px-1',
-                          line.kind === 'added'
-                            ? 'text-emerald-800 dark:text-emerald-300'
-                            : 'text-primary-800 dark:text-neutral-300',
-                        )}
-                      >
-                        {line.text || ' '}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </DialogRoot>
-  )
-}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Directory tree node
@@ -627,7 +170,7 @@ function TreeNode({
           <span className="w-3 shrink-0" />
         )}
         <span className="shrink-0 text-base leading-none">{icon}</span>
-        <span className="truncate">
+        <span className="min-w-0 break-words [overflow-wrap:anywhere]">
           {getSearchHighlightParts(entry.name, searchQuery).map(
             (part, index) =>
               part.match ? (
@@ -949,7 +492,7 @@ function FilePanel({ selectedEntry, rootPath }: FilePanelProps) {
         onClick={() => void copyToClipboard(absoluteReference)}
         className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600 underline-offset-2 hover:underline dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-300"
       >
-        Copy absolute path:1
+        Copy absolute path
       </button>
       {dirty && (
         <span className="text-accent-500 font-medium">Unsaved changes</span>
@@ -1417,8 +960,88 @@ export function FilesScreen() {
   const fileHealth = useMemo(() => summarizeFileHealth(entries), [entries])
   const pinnedRoots = useMemo(() => getPinnedWorkspaceRoots(entries), [entries])
   const hasActiveFilter = treeSearch.trim().length > 0 || typeFilter !== 'all'
+  const healthAlerts =
+    fileHealth.hugeFiles +
+    fileHealth.staleGeneratedFiles +
+    fileHealth.missingTests +
+    fileHealth.protectedRuntimeFiles
+  const selectedOwnership = selectedEntry
+    ? classifyFileOwnership(selectedEntry)
+    : 'no file selected'
+  const selectedStatus = selectedEntry
+    ? getFileOperationStatus('save', selectedEntry)
+    : null
+  const copyDiagnosticsBundle = useCallback(() => {
+    void copyToClipboard(
+      JSON.stringify(
+        buildFilesDiagnosticBundle({
+          rootPath,
+          selectedEntry,
+          entries,
+          query: treeSearch,
+          typeFilter,
+          lastApiError,
+        }),
+        null,
+        2,
+      ),
+    )
+    setOperationStatus('Copied file diagnostics bundle.')
+  }, [entries, lastApiError, rootPath, selectedEntry, treeSearch, typeFilter])
+  const filesCockpitTiles = useMemo(
+    () => [
+      {
+        id: 'visible',
+        title: 'Visible',
+        value: String(filteredCounts.files),
+        detail: `${filteredCounts.folders} folders`,
+        icon: File01Icon,
+        tone: 'neutral' as const,
+        onClick: () => setTypeFilter('all'),
+      },
+      {
+        id: 'recent',
+        title: 'Recent',
+        value: String(recentChangedFiles.length),
+        detail: 'Changed files',
+        icon: Clock01Icon,
+        tone:
+          recentChangedFiles.length > 0
+            ? ('green' as const)
+            : ('neutral' as const),
+        onClick: () => setTypeFilter('recent'),
+      },
+      {
+        id: 'alerts',
+        title: 'Alerts',
+        value: String(healthAlerts),
+        detail: healthAlerts > 0 ? 'Review first' : 'Clear',
+        icon: Alert02Icon,
+        tone: healthAlerts > 0 ? ('amber' as const) : ('green' as const),
+        onClick: copyDiagnosticsBundle,
+      },
+      {
+        id: 'pins',
+        title: 'Pins',
+        value: String(pinnedRoots.length),
+        detail: pinnedRoots.length > 0 ? 'Root jumps' : 'None',
+        icon: Folder01Icon,
+        tone: pinnedRoots.length > 0 ? ('blue' as const) : ('neutral' as const),
+        onClick: () => setTreeSearch(''),
+      },
+    ],
+    [
+      copyDiagnosticsBundle,
+      filteredCounts.files,
+      filteredCounts.folders,
+      healthAlerts,
+      pinnedRoots.length,
+      recentChangedFiles.length,
+    ],
+  )
+
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-primary-50/95 dark:bg-neutral-950 md:flex-row">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-primary-50/95 dark:bg-neutral-950 md:flex-row md:overflow-hidden">
       {/* ── Left panel — directory tree ─────────────────────────────────── */}
       <aside
         className={cn(
@@ -1520,8 +1143,8 @@ export function FilesScreen() {
           {hasActiveFilter ? (
             <div className="flex items-center justify-between gap-2 text-[11px] text-primary-500 dark:text-neutral-400">
               <span>
-                Showing {filteredCounts.files + filteredCounts.folders} of{' '}
-                {entryCounts.files + entryCounts.folders} entries
+                {filteredCounts.files + filteredCounts.folders}/
+                {entryCounts.files + entryCounts.folders}
               </span>
               <button
                 type="button"
@@ -1540,12 +1163,12 @@ export function FilesScreen() {
         <div className="border-b border-primary-200 px-2 py-2 text-[11px] dark:border-neutral-800">
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="font-semibold uppercase tracking-[0.08em] text-primary-500 dark:text-neutral-400">
-              Pinned roots
+              Pins
             </span>
           </div>
           {pinnedRoots.length === 0 ? (
             <div className="rounded-md border border-dashed border-primary-200 px-2 py-1 text-primary-400 dark:border-neutral-800 dark:text-neutral-500">
-              Waiting for common roots.
+              No roots yet.
             </div>
           ) : (
             <div className="flex flex-wrap gap-1">
@@ -1588,23 +1211,28 @@ export function FilesScreen() {
               className="mx-2 mb-2 rounded-md border border-primary-200 bg-white/80 p-2 text-[11px] text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-400"
             >
               <div className="mb-1 font-semibold uppercase tracking-[0.08em] text-primary-500 dark:text-neutral-400">
-                File health
+                Health
               </div>
               <div className="grid grid-cols-2 gap-1">
-                <span>Huge files {fileHealth.hugeFiles}</span>
-                <span>Stale generated {fileHealth.staleGeneratedFiles}</span>
-                <span>Missing tests {fileHealth.missingTests}</span>
-                <span>
-                  Protected runtime {fileHealth.protectedRuntimeFiles}
-                </span>
+                <span>Huge {fileHealth.hugeFiles}</span>
+                <span>Stale {fileHealth.staleGeneratedFiles}</span>
+                <span>Tests {fileHealth.missingTests}</span>
+                <span>Runtime {fileHealth.protectedRuntimeFiles}</span>
               </div>
               <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
-                Dirty git awareness: preview diffs before saving and avoid
-                overwriting unrelated workspace changes.
+                Diff first.
               </div>
-              <div className="mt-1.5">
-                Pinned areas: routes, screens, server, scripts, docs. Search
-                scopes are saved by workflow mode in this panel.
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {['routes', 'screens', 'server', 'scripts', 'docs'].map(
+                  (root) => (
+                    <span
+                      key={root}
+                      className="rounded-full border border-primary-200 px-1.5 py-0.5 dark:border-neutral-800"
+                    >
+                      {root}
+                    </span>
+                  ),
+                )}
               </div>
             </section>
             <section
@@ -1636,6 +1264,7 @@ export function FilesScreen() {
                       key={entry.path}
                       type="button"
                       onClick={() => handleSelect(entry)}
+                      title={entry.path}
                       className={cn(
                         'flex w-full min-w-0 items-start gap-2 rounded-md border px-2 py-1.5 text-left transition',
                         selectedPath === entry.path
@@ -1647,11 +1276,11 @@ export function FilesScreen() {
                         {getFileIcon(entry)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-medium">
-                          {entry.name}
+                        <span className="block break-words text-xs font-medium [overflow-wrap:anywhere]">
+                          {compactFilePath(entry.name, 30)}
                         </span>
-                        <span className="block truncate text-[10px] text-primary-500 dark:text-neutral-500">
-                          {entry.path}
+                        <span className="block break-words text-[10px] text-primary-500 [overflow-wrap:anywhere] dark:text-neutral-500">
+                          {compactFilePath(getParentPath(entry.path), 28)}
                         </span>
                       </span>
                       <span className="shrink-0 text-[10px] text-primary-400 dark:text-neutral-500">
@@ -1670,15 +1299,12 @@ export function FilesScreen() {
               <div className="space-y-1 px-3 py-2 text-xs text-red-500">
                 <div>{treeError}</div>
                 <div className="text-primary-400 dark:text-neutral-500">
-                  Check the server workspace catalog or HERMES_WORKSPACE_DIR;
-                  this browser no longer needs local folder access.
+                  Check workspace catalog or HERMES_WORKSPACE_DIR.
                 </div>
               </div>
             ) : entries.length === 0 ? (
               <div className="px-3 py-2 text-xs text-primary-400 dark:text-neutral-500">
-                Server workspace is empty. Create a folder from the toolbar.
-                Agent-created files will appear here in the configured workspace
-                path.
+                Empty workspace. Create a folder from the toolbar.
               </div>
             ) : filteredEntries.length === 0 ? (
               <div className="space-y-2 px-3 py-2 text-xs text-primary-400 dark:text-neutral-500">
@@ -1720,56 +1346,84 @@ export function FilesScreen() {
       {/* ── Right panel — file viewer / editor ─────────────────────────── */}
       <main
         className={cn(
-          'flex min-h-[260px] flex-1 flex-col overflow-hidden md:h-full md:min-w-0 md:min-h-0',
+          'flex min-h-[260px] flex-1 flex-col overflow-visible md:h-full md:min-w-0 md:min-h-0 md:overflow-hidden',
           'rounded-xl border border-primary-200 bg-primary-50/95 shadow-sm',
           'dark:border-neutral-800 dark:bg-neutral-900/80',
           'm-2',
         )}
       >
-        <section className="shrink-0 border-b border-primary-200 bg-white/70 px-3 py-2 text-xs text-primary-600 dark:border-neutral-800 dark:bg-neutral-950/30 dark:text-neutral-400">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
-              Recent changed files default
-            </span>
-            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
-              Ownership/source chips
-            </span>
-            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
-              Safe preview/edit distinction
-            </span>
-            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
-              Diff preview before write
-            </span>
-            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
-              Breadcrumbs match ownership boundaries
-            </span>
-            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
-              Image/document preview quality controls
-            </span>
-            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
-              Route smoke links: routes, screens, server, scripts, docs
-            </span>
+        <section className="shrink-0 border-b border-primary-200 bg-white/70 px-3 py-3 text-xs text-primary-600 dark:border-neutral-800 dark:bg-neutral-950/30 dark:text-neutral-400">
+          <AppSurface className="border-primary-200 bg-primary-50/80 p-3 dark:border-neutral-800 dark:bg-neutral-900/70">
+            <AppSectionHeader
+              title={
+                selectedEntry
+                  ? selectedEntry.name
+                  : treeLoading
+                    ? 'Loading workspace'
+                    : 'File cockpit'
+              }
+              meta={
+                selectedEntry
+                  ? selectedOwnership
+                  : `${recentChangedFiles.length} recent · ${filteredCounts.files} files`
+              }
+              action={
+                <AppStatusPill tone={healthAlerts > 0 ? 'amber' : 'green'}>
+                  {healthAlerts > 0 ? `${healthAlerts} alerts` : 'Clear'}
+                </AppStatusPill>
+              }
+            />
+            <p className="mb-3 line-clamp-2 text-[11px] text-primary-500 dark:text-neutral-500">
+              {selectedEntry
+                ? selectedStatus?.reason ||
+                  getPathSafetyMessage(selectedEntry) ||
+                  'Preview, copy, edit.'
+                : 'Browse, filter, inspect.'}
+            </p>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+              {filesCockpitTiles.map((tile) => (
+                <AppTile
+                  key={tile.id}
+                  title={tile.title}
+                  value={tile.value}
+                  detail={tile.detail}
+                  icon={tile.icon}
+                  tone={tile.tone}
+                  className="min-h-[92px] rounded-[18px] p-2 md:min-h-[112px] md:rounded-[22px] md:p-3"
+                  onClick={tile.onClick}
+                />
+              ))}
+            </div>
+          </AppSurface>
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() =>
-                void copyToClipboard(
-                  [
-                    'file review roots',
-                    'src/routes',
-                    'src/screens',
-                    'src/server',
-                    'scripts',
-                    'docs',
-                  ].join('\n'),
-                )
-              }
-              className="rounded-md border border-primary-200 px-2 py-1 font-medium text-primary-700 hover:bg-primary-100 dark:border-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-800"
+              onClick={() => void loadTree()}
+              className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-left text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-200 dark:hover:bg-neutral-800"
             >
-              Copy review roots
+              Refresh tree
             </button>
-            <span className="rounded-md border border-primary-200 px-2 py-1 dark:border-neutral-800">
-              Shortcuts: search, refresh, new file, copy path
-            </span>
+            <button
+              type="button"
+              onClick={() => setTypeFilter('recent')}
+              className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-left text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-200 dark:hover:bg-neutral-800"
+            >
+              Recent changes
+            </button>
+            <button
+              type="button"
+              onClick={() => setTypeFilter('editable')}
+              className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-left text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-200 dark:hover:bg-neutral-800"
+            >
+              Editable files
+            </button>
+            <button
+              type="button"
+              onClick={copyDiagnosticsBundle}
+              className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-left text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-200 dark:hover:bg-neutral-800"
+            >
+              Copy diagnostics
+            </button>
           </div>
         </section>
         <FilePanel selectedEntry={selectedEntry} rootPath={rootPath} />

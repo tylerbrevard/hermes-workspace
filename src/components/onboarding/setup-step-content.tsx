@@ -213,8 +213,8 @@ export function ModelConfigurationStep({
       </h2>
 
       <p className="mb-6 max-w-md text-base leading-relaxed text-primary-600">
-        Core chat works with any OpenAI-compatible backend. Hermes Agent gateway APIs
-        make provider and model setup editable from the workspace.
+        Core chat works with any OpenAI-compatible backend. Hermes Agent gateway
+        APIs make provider and model setup editable from the workspace.
       </p>
 
       <div className="mb-6 w-full rounded-2xl border border-primary-200 bg-primary-100/70 p-4 text-left">
@@ -231,9 +231,8 @@ export function ModelConfigurationStep({
               className="mt-0.5 size-5 shrink-0"
             />
             <p className="text-sm">
-              Could not load editable backend configuration right now. You can
-              still continue if chat works and update settings where your
-              backend manages them.
+              Backend config unavailable. Continue if chat works; update Model
+              later.
             </p>
           </div>
         )}
@@ -261,11 +260,12 @@ export function ModelConfigurationStep({
       </div>
 
       <Link
-        to="/settings/providers"
+        to="/settings"
+        search={{ section: 'claude' }}
         className={buttonVariants({ variant: 'outline', className: 'gap-2' })}
       >
         <HugeiconsIcon icon={Settings01Icon} className="size-4" />
-        Open Provider Settings
+        Model
       </Link>
     </div>
   )

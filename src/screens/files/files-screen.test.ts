@@ -14,6 +14,13 @@ import {
   isOutsideWorkspaceBoundary,
   summarizeFileHealth,
 } from './lib/file-workflow'
+import {
+  computeDiff,
+  formatBytes,
+  getFileIcon,
+  getParentPath,
+  getUnsafeFileNameMessage,
+} from './file-ui'
 
 const filesScreenPath = path.resolve(__dirname, 'files-screen.tsx')
 
@@ -21,11 +28,9 @@ describe('FilesScreen remote workspace mode', () => {
   it('defaults to server-side file access copy instead of local folder picker copy', () => {
     const source = fs.readFileSync(filesScreenPath, 'utf8')
 
-    expect(FILE_BROWSER_MODE_LABEL).toBe('Server workspace')
-    expect(FILE_BROWSER_REMOTE_HELP).toContain(
-      'Files are loaded from the Workspace server via /api/files',
-    )
-    expect(source).toContain('Agent-created files will appear here')
+    expect(FILE_BROWSER_MODE_LABEL).toBe('Server')
+    expect(FILE_BROWSER_REMOTE_HELP).toBe('/api/files live workspace')
+    expect(source).toContain('Empty workspace. Create a folder')
     expect(source).not.toContain('showDirectoryPicker')
     expect(source).not.toContain('No workspace selected')
   })
@@ -225,6 +230,31 @@ describe('FilesScreen remote workspace mode', () => {
       'src',
       'src/screens',
       'docs',
+    ])
+  })
+
+  it('keeps file UI helpers deterministic for diff and action surfaces', () => {
+    expect(formatBytes(1536)).toBe('1.5 KB')
+    expect(getParentPath('src/screens/files/files-screen.tsx')).toBe(
+      'src/screens/files',
+    )
+    expect(getUnsafeFileNameMessage('../secret')).toBe(
+      'Use a name only, not a path.',
+    )
+    expect(
+      getFileIcon({
+        name: 'files-screen.tsx',
+        path: 'files-screen.tsx',
+        type: 'file',
+      }),
+    ).toBe('📜')
+
+    const diff = computeDiff('a\nb\nc', 'a\nB\nc')
+    expect(diff.map((line) => line.kind)).toEqual([
+      'unchanged',
+      'removed',
+      'added',
+      'unchanged',
     ])
   })
 })

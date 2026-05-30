@@ -44,7 +44,6 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import {
-  CHAT_OPEN_SETTINGS_EVENT,
   CHAT_PENDING_COMMAND_STORAGE_KEY,
   CHAT_RUN_COMMAND_EVENT,
 } from '@/screens/chat/chat-events'
@@ -163,17 +162,7 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
 
     if (command === '/model' || command === '/skin') {
       const section = command === '/skin' ? 'appearance' : 'claude'
-      if (pathname.startsWith('/chat') || pathname === '/') {
-        window.dispatchEvent(
-          new CustomEvent(CHAT_OPEN_SETTINGS_EVENT, {
-            detail: { section },
-          }),
-        )
-        return
-      }
-
-      window.sessionStorage.setItem(CHAT_PENDING_COMMAND_STORAGE_KEY, command)
-      void navigate({ to: '/chat' })
+      void navigate({ to: '/settings', search: { section } })
       return
     }
 
@@ -294,6 +283,16 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         onSelect: () => void navigate({ to: '/pto-tracker' }),
       },
       {
+        id: 'screen-chief-of-staff-mailbox',
+        group: 'Screens',
+        label: 'Chief of Staff Mailbox',
+        keywords:
+          'mailbox email inbox approvals action waiting direct reports chief of staff digest',
+        shortcut: 'Go',
+        icon: MessageMultiple01Icon,
+        onSelect: () => void navigate({ to: '/chief-of-staff-mailbox' }),
+      },
+      {
         id: 'screen-wegovy',
         group: 'Screens',
         label: 'Wegovy Shots',
@@ -358,6 +357,15 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         shortcut: 'Go',
         icon: UserGroupIcon,
         onSelect: () => void navigate({ to: '/swarm' }),
+      },
+      {
+        id: 'screen-swarm2',
+        group: 'Screens',
+        label: 'Swarm Control Plane',
+        keywords: 'swarm2 workers kanban runtime router reports control plane',
+        shortcut: 'Go',
+        icon: UserGroupIcon,
+        onSelect: () => void navigate({ to: '/swarm2' }),
       },
       {
         id: 'screen-memory',
@@ -599,6 +607,97 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         onSelect: () => void navigate({ to: '/conductor' }),
       },
       {
+        id: 'action-open-meeting-prep',
+        group: 'Actions',
+        label: 'Open meeting prep',
+        keywords:
+          'meeting prep agenda today decisions follow ups transcript review',
+        shortcut: isMacPlatform ? '⌘⇧M' : 'Ctrl ⇧M',
+        icon: Calendar01Icon,
+        onSelect: () => void navigate({ to: '/meetings' }),
+      },
+      {
+        id: 'action-open-barry-checkins',
+        group: 'Actions',
+        label: 'Open Barry check-ins',
+        keywords:
+          'barry one on one direct report manager prep actions checkins',
+        shortcut: isMacPlatform ? '⌘⇧B' : 'Ctrl ⇧B',
+        icon: Chat01Icon,
+        onSelect: () => void navigate({ to: '/barry' }),
+      },
+      {
+        id: 'action-open-waiting-tasks',
+        group: 'Actions',
+        label: 'Review waiting tasks',
+        keywords:
+          'tasks waiting blocked follow up promises dependencies handoff',
+        shortcut: 'Tasks',
+        icon: CheckListIcon,
+        onSelect: () =>
+          void navigate({ to: '/tasks', search: { filter: 'waiting' } }),
+      },
+      {
+        id: 'action-open-delegated-tasks',
+        group: 'Actions',
+        label: 'Review delegated handoffs',
+        keywords:
+          'tasks delegated handoffs assigned follow ups promises owners',
+        shortcut: 'Tasks',
+        icon: CheckListIcon,
+        onSelect: () =>
+          void navigate({ to: '/tasks', search: { filter: 'delegated' } }),
+      },
+      {
+        id: 'action-open-blocked-tasks',
+        group: 'Actions',
+        label: 'Review blocked tasks',
+        keywords: 'tasks blocked stuck risk waiting dependencies triage',
+        shortcut: 'Tasks',
+        icon: CheckListIcon,
+        onSelect: () =>
+          void navigate({ to: '/tasks', search: { filter: 'blocked' } }),
+      },
+      {
+        id: 'action-open-mcp-guided-setup',
+        group: 'Actions',
+        label: 'Open MCP guided setup',
+        keywords:
+          'mcp guided setup servers tools config fallback discover test',
+        shortcut: 'MCP',
+        icon: McpServerIcon,
+        onSelect: () => void navigate({ to: '/mcp' }),
+      },
+      {
+        id: 'action-open-profile-routing',
+        group: 'Actions',
+        label: 'Open profile routing',
+        keywords: 'profiles switch active default persona routing compare diff',
+        shortcut: 'Profiles',
+        icon: UserMultipleIcon,
+        onSelect: () => void navigate({ to: '/profiles' }),
+      },
+      {
+        id: 'action-open-connectwise-queue',
+        group: 'Actions',
+        label: 'Open ConnectWise queue',
+        keywords:
+          'connectwise tickets psa service board client update internal brief',
+        shortcut: 'Ops',
+        icon: Building01Icon,
+        onSelect: () => void navigate({ to: '/it-ops' }),
+      },
+      {
+        id: 'action-open-swarm-control',
+        group: 'Actions',
+        label: 'Open swarm controls',
+        keywords:
+          'swarm2 workers control plane runtime kanban stop restart artifact',
+        shortcut: isMacPlatform ? '⌘⇧S' : 'Ctrl ⇧S',
+        icon: UserGroupIcon,
+        onSelect: () => void navigate({ to: '/swarm2' }),
+      },
+      {
         id: 'action-open-model-settings',
         group: 'Actions',
         label: 'Open model settings',
@@ -744,6 +843,9 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         n: 'action-capture-note',
         d: 'action-draft-email',
         j: 'action-start-agent-job',
+        m: 'action-open-meeting-prep',
+        b: 'action-open-barry-checkins',
+        s: 'action-open-swarm-control',
       }
       const actionId = actionByKey[key]
       if (!actionId) return

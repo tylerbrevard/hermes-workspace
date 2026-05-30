@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeWorkspaceHealth } from './workspace-health-screen'
+import {
+  calculateWorkspaceHealthScore,
+  getWorkspaceHealthAction,
+  summarizeWorkspaceHealth,
+} from './workspace-health-screen'
 
 describe('summarizeWorkspaceHealth', () => {
   it('promotes failures over warnings and counts passed probes', () => {
@@ -42,5 +46,35 @@ describe('summarizeWorkspaceHealth', () => {
     expect(summary.failed).toBe(1)
     expect(summary.warnings).toBe(1)
     expect(summary.passed).toBe(1)
+  })
+
+  it('scores and routes unhealthy probes to useful repair surfaces', () => {
+    const results = [
+      {
+        id: 'auth',
+        label: 'Auth',
+        endpoint: '/api/auth-check',
+        group: 'Core',
+        required: true,
+        severity: 'fail' as const,
+        status: 401,
+        latencyMs: 10,
+        evidence: 'auth missing',
+      },
+      {
+        id: 'lily',
+        label: 'LILY',
+        endpoint: '/api/lily/config',
+        group: 'Daily flow',
+        severity: 'warn' as const,
+        status: 200,
+        latencyMs: 20,
+        evidence: 'worker offline',
+      },
+    ]
+
+    expect(calculateWorkspaceHealthScore(results)).toBe(69)
+    expect(getWorkspaceHealthAction(results[0])).toBe('/settings')
+    expect(getWorkspaceHealthAction(results[1])).toBe('/lily')
   })
 })

@@ -60,8 +60,10 @@ export function DashboardCommandStrip({
             type="button"
             onClick={onEditHiddenWidgets}
             className="min-h-10 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted transition hover:border-[var(--theme-accent-border)] hover:text-ink"
+            aria-label={`${hiddenCount} hidden widgets`}
+            title={`${hiddenCount} hidden widgets`}
           >
-            Hidden widgets {hiddenCount}
+            Hidden {hiddenCount}
           </button>
         </div>
       </div>

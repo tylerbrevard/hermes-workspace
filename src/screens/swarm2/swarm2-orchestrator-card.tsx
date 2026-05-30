@@ -6,16 +6,16 @@ import {
   Cancel01Icon,
   ComputerTerminal01Icon,
   MessageMultiple01Icon,
-  Settings01Icon,
+  SlidersHorizontalIcon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import type { AgentWorkingRow } from '@/screens/gateway/components/agents-working-panel'
 import type { CrewMember } from '@/hooks/use-crew-status'
-import type {DispatchResponse} from '@/components/swarm/router-chat';
+import type { DispatchResponse } from '@/components/swarm/router-chat'
 import { AgentProgress } from '@/components/agent-view/agent-progress'
 import { PixelAvatar } from '@/components/agent-swarm/pixel-avatar'
 import { Button } from '@/components/ui/button'
-import {  RouterChat } from '@/components/swarm/router-chat'
+import { RouterChat } from '@/components/swarm/router-chat'
 import { OfficeView } from '@/screens/gateway/components/office-view'
 import { cn } from '@/lib/utils'
 
@@ -45,14 +45,38 @@ export type Swarm2OrchestratorCardProps = {
   viewMode: 'cards' | 'kanban' | 'runtime' | 'reports'
   onViewModeChange: (mode: 'cards' | 'kanban' | 'runtime' | 'reports') => void
   lanes?: Array<{ role: string; count: number; active: number }>
-  activeAgents?: Array<{ workerId: string; workerName: string; role: string; task: string; progress: number; state: 'working' | 'reviewing' | 'blocked' | 'ready'; age: string }>
+  activeAgents?: Array<{
+    workerId: string
+    workerName: string
+    role: string
+    task: string
+    progress: number
+    state: 'working' | 'reviewing' | 'blocked' | 'ready'
+    age: string
+  }>
   members: Array<CrewMember>
   roomIds: Array<string>
   selectedId: string | null
-  recentUpdates?: Array<{ workerId: string; workerName: string; text: string; age: string; tone: 'idle' | 'active' | 'warning' }>
-  latestMission?: { id: string; title: string; state: string; assignmentCount: number; checkpointedCount: number } | null
+  recentUpdates?: Array<{
+    workerId: string
+    workerName: string
+    text: string
+    age: string
+    tone: 'idle' | 'active' | 'warning'
+  }>
+  latestMission?: {
+    id: string
+    title: string
+    state: string
+    assignmentCount: number
+    checkpointedCount: number
+  } | null
   inboxCounts?: { needsReview: number; blocked: number; ready: number }
-  routerSeed?: { key: number; prompt: string; mode: 'auto' | 'manual' | 'broadcast' } | null
+  routerSeed?: {
+    key: number
+    prompt: string
+    mode: 'auto' | 'manual' | 'broadcast'
+  } | null
   onOpenRouter: () => void
   onRouterResults?: (response: DispatchResponse) => void
   /**
@@ -124,28 +148,52 @@ export function Swarm2OrchestratorCard({
   const isActive = activeRuntimeCount > 0
   const lensIndex = AGENT_LENSES.findIndex((lens) => lens.id === agentLens)
   const filteredAgents = useMemo(
-    () => activeAgents.filter((agent) => agentLens === 'all' || agent.state === agentLens),
+    () =>
+      activeAgents.filter(
+        (agent) => agentLens === 'all' || agent.state === agentLens,
+      ),
     [activeAgents, agentLens],
   )
   const agentCounts = useMemo(() => {
-    const counts: Record<AgentLens, number> = { all: activeAgents.length, working: 0, reviewing: 0, blocked: 0, ready: 0 }
+    const counts: Record<AgentLens, number> = {
+      all: activeAgents.length,
+      working: 0,
+      reviewing: 0,
+      blocked: 0,
+      ready: 0,
+    }
     for (const agent of activeAgents) counts[agent.state] += 1
     return counts
   }, [activeAgents])
 
-  const agentPageCount = Math.max(1, Math.ceil(filteredAgents.length / AGENT_PAGE_SIZE))
-  const visibleAgents = filteredAgents.slice(agentPage * AGENT_PAGE_SIZE, agentPage * AGENT_PAGE_SIZE + AGENT_PAGE_SIZE)
-  const officeAgents = useMemo<Array<AgentWorkingRow>>(() => activeAgents.map((agent) => ({
-    id: agent.workerId,
-    name: agent.workerName,
-    modelId: agent.role,
-    status: agent.state === 'blocked' ? 'error' : agent.state === 'ready' ? 'ready' : 'active',
-    lastLine: agent.task,
-    lastAt: Date.now(),
-    taskCount: agent.state === 'ready' ? 0 : 1,
-    currentTask: agent.task,
-    roleDescription: agent.role,
-  })), [activeAgents])
+  const agentPageCount = Math.max(
+    1,
+    Math.ceil(filteredAgents.length / AGENT_PAGE_SIZE),
+  )
+  const visibleAgents = filteredAgents.slice(
+    agentPage * AGENT_PAGE_SIZE,
+    agentPage * AGENT_PAGE_SIZE + AGENT_PAGE_SIZE,
+  )
+  const officeAgents = useMemo<Array<AgentWorkingRow>>(
+    () =>
+      activeAgents.map((agent) => ({
+        id: agent.workerId,
+        name: agent.workerName,
+        modelId: agent.role,
+        status:
+          agent.state === 'blocked'
+            ? 'error'
+            : agent.state === 'ready'
+              ? 'ready'
+              : 'active',
+        lastLine: agent.task,
+        lastAt: Date.now(),
+        taskCount: agent.state === 'ready' ? 0 : 1,
+        currentTask: agent.task,
+        roleDescription: agent.role,
+      })),
+    [activeAgents],
+  )
 
   function cycleAgentPage(delta: -1 | 1) {
     setAgentPage((page) => (page + delta + agentPageCount) % agentPageCount)
@@ -166,12 +214,14 @@ export function Swarm2OrchestratorCard({
       >
         <div className="relative flex flex-col items-center gap-3 text-center">
           <div className="absolute left-0 top-0 flex shrink-0 items-center gap-1 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-1 shadow-sm">
-            {([
-              ['cards', 'Control'],
-              ['kanban', 'Board'],
-              ['reports', 'Inbox'],
-              ['runtime', 'Runtime'],
-            ] as const).map(([mode, label]) => (
+            {(
+              [
+                ['cards', 'Control'],
+                ['kanban', 'Board'],
+                ['reports', 'Inbox'],
+                ['runtime', 'Runtime'],
+              ] as const
+            ).map(([mode, label]) => (
               <button
                 key={mode}
                 type="button"
@@ -205,11 +255,11 @@ export function Swarm2OrchestratorCard({
               type="button"
               onClick={openSettings}
               className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)]"
-              aria-label="Orchestrator settings"
-              title="Orchestrator settings"
+              aria-label="Edit orchestrator"
+              title="Edit orchestrator"
             >
               <HugeiconsIcon
-                icon={Settings01Icon}
+                icon={SlidersHorizontalIcon}
                 size={16}
                 strokeWidth={1.8}
               />
@@ -292,7 +342,10 @@ export function Swarm2OrchestratorCard({
                         : 'border-transparent bg-transparent text-[var(--theme-muted)] hover:border-[var(--theme-border)] hover:bg-[var(--theme-card)] hover:text-[var(--theme-text)]',
                     )}
                   >
-                    {lens.label}{lens.id !== 'all' && agentCounts[lens.id] ? ` ${agentCounts[lens.id]}` : ''}
+                    {lens.label}
+                    {lens.id !== 'all' && agentCounts[lens.id]
+                      ? ` ${agentCounts[lens.id]}`
+                      : ''}
                   </button>
                 ))}
               </div>
@@ -300,19 +353,34 @@ export function Swarm2OrchestratorCard({
                 <button
                   type="button"
                   onClick={() => setSwarmCardMode('cards')}
-                  className={cn('rounded-lg px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]', swarmCardMode === 'cards' ? 'bg-[var(--theme-accent)] text-primary-950' : 'text-[var(--theme-muted)] hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)]')}
+                  className={cn(
+                    'rounded-lg px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]',
+                    swarmCardMode === 'cards'
+                      ? 'bg-[var(--theme-accent)] text-primary-950'
+                      : 'text-[var(--theme-muted)] hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)]',
+                  )}
                 >
                   Active Swarm
                 </button>
                 <button
                   type="button"
                   onClick={() => setSwarmCardMode('office')}
-                  className={cn('rounded-lg px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]', swarmCardMode === 'office' ? 'bg-[var(--theme-accent)] text-primary-950' : 'text-[var(--theme-muted)] hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)]')}
+                  className={cn(
+                    'rounded-lg px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em]',
+                    swarmCardMode === 'office'
+                      ? 'bg-[var(--theme-accent)] text-primary-950'
+                      : 'text-[var(--theme-muted)] hover:bg-[var(--theme-bg)] hover:text-[var(--theme-text)]',
+                  )}
                 >
                   Office
                 </button>
               </div>
-              <div className={cn('flex items-center justify-center gap-1 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-1 justify-self-center md:justify-self-end', swarmCardMode === 'office' && 'opacity-40')}>
+              <div
+                className={cn(
+                  'flex items-center justify-center gap-1 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-1 justify-self-center md:justify-self-end',
+                  swarmCardMode === 'office' && 'opacity-40',
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => cycleAgentPage(-1)}
@@ -322,16 +390,23 @@ export function Swarm2OrchestratorCard({
                 >
                   ←
                 </button>
-                <div className="flex items-center gap-1 px-1" aria-label={`Agent page ${Math.min(agentPage + 1, agentPageCount)} of ${agentPageCount}`}>
-                  {Array.from({ length: Math.min(agentPageCount, 5) }).map((_, index) => (
-                    <span
-                      key={index}
-                      className={cn(
-                        'size-1.5 rounded-full',
-                        index === agentPage % 5 ? 'bg-[var(--theme-accent)]' : 'bg-[var(--theme-muted)]/30',
-                      )}
-                    />
-                  ))}
+                <div
+                  className="flex items-center gap-1 px-1"
+                  aria-label={`Agent page ${Math.min(agentPage + 1, agentPageCount)} of ${agentPageCount}`}
+                >
+                  {Array.from({ length: Math.min(agentPageCount, 5) }).map(
+                    (_, index) => (
+                      <span
+                        key={index}
+                        className={cn(
+                          'size-1.5 rounded-full',
+                          index === agentPage % 5
+                            ? 'bg-[var(--theme-accent)]'
+                            : 'bg-[var(--theme-muted)]/30',
+                        )}
+                      />
+                    ),
+                  )}
                 </div>
                 <button
                   type="button"
@@ -349,7 +424,10 @@ export function Swarm2OrchestratorCard({
               <div className="h-[360px] overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)]">
                 <OfficeView
                   agentRows={officeAgents}
-                  missionRunning={activeAgents.some((agent) => agent.state === 'working' || agent.state === 'reviewing')}
+                  missionRunning={activeAgents.some(
+                    (agent) =>
+                      agent.state === 'working' || agent.state === 'reviewing',
+                  )}
                   onViewOutput={() => undefined}
                   containerHeight={360}
                   processType="parallel"
@@ -362,28 +440,79 @@ export function Swarm2OrchestratorCard({
                   const isBlocked = agent.state === 'blocked'
                   const isReview = agent.state === 'reviewing'
                   return (
-                    <div key={agent.workerId} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2.5">
+                    <div
+                      key={agent.workerId}
+                      className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2.5"
+                    >
                       <div className="flex items-start gap-2.5">
                         <div className="relative shrink-0">
                           <PixelAvatar
                             size={30}
-                            color={isBlocked ? '#ef4444' : isReview ? '#f59e0b' : '#34d399'}
-                            accentColor={isBlocked ? '#fecaca' : isReview ? '#fde68a' : '#bbf7d0'}
-                            status={isBlocked ? 'failed' : isReview ? 'thinking' : 'running'}
+                            color={
+                              isBlocked
+                                ? '#ef4444'
+                                : isReview
+                                  ? '#f59e0b'
+                                  : '#34d399'
+                            }
+                            accentColor={
+                              isBlocked
+                                ? '#fecaca'
+                                : isReview
+                                  ? '#fde68a'
+                                  : '#bbf7d0'
+                            }
+                            status={
+                              isBlocked
+                                ? 'failed'
+                                : isReview
+                                  ? 'thinking'
+                                  : 'running'
+                            }
                           />
-                          <span className={cn('absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-[var(--theme-card)]', isBlocked ? 'bg-red-500' : isReview ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse')} />
+                          <span
+                            className={cn(
+                              'absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-[var(--theme-card)]',
+                              isBlocked
+                                ? 'bg-red-500'
+                                : isReview
+                                  ? 'bg-amber-500'
+                                  : 'bg-emerald-500 animate-pulse',
+                            )}
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <div className="truncate text-[11px] font-semibold text-[var(--theme-text)]">{agent.workerName}</div>
-                            <div className="shrink-0 text-[9px] text-[var(--theme-muted)]">{agent.age}</div>
+                            <div className="truncate text-[11px] font-semibold text-[var(--theme-text)]">
+                              {agent.workerName}
+                            </div>
+                            <div className="shrink-0 text-[9px] text-[var(--theme-muted)]">
+                              {agent.age}
+                            </div>
                           </div>
-                          <div className="mt-0.5 truncate text-[9px] uppercase tracking-[0.12em] text-[var(--theme-muted)]">{agent.state}</div>
+                          <div className="mt-0.5 truncate text-[9px] uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+                            {agent.state}
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-2 line-clamp-3 text-[10px] leading-snug text-[var(--theme-muted-2)]" title={agent.task}>{agent.task}</div>
+                      <div
+                        className="mt-2 line-clamp-3 text-[10px] leading-snug text-[var(--theme-muted-2)]"
+                        title={agent.task}
+                      >
+                        {agent.task}
+                      </div>
                       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--theme-bg)]">
-                        <div className={cn('h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]', isBlocked ? 'bg-red-500' : isReview ? 'bg-amber-500' : 'bg-[var(--theme-accent)]')} style={{ width: `${agent.progress}%` }} />
+                        <div
+                          className={cn(
+                            'h-full rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
+                            isBlocked
+                              ? 'bg-red-500'
+                              : isReview
+                                ? 'bg-amber-500'
+                                : 'bg-[var(--theme-accent)]',
+                          )}
+                          style={{ width: `${agent.progress}%` }}
+                        />
                       </div>
                     </div>
                   )
@@ -391,7 +520,9 @@ export function Swarm2OrchestratorCard({
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-[11px] text-[var(--theme-muted)]">
-                {activeAgents.length ? `No ${AGENT_LENSES[lensIndex]?.label.toLowerCase() ?? 'matching'} agents right now.` : 'Dispatch a mission to see each worker appear here with progress.'}
+                {activeAgents.length
+                  ? `No ${AGENT_LENSES[lensIndex]?.label.toLowerCase() ?? 'matching'} agents right now.`
+                  : 'Dispatch a mission to see each worker appear here with progress.'}
               </div>
             )}
           </div>
@@ -418,25 +549,22 @@ export function Swarm2OrchestratorCard({
               <div className="flex items-start gap-3">
                 <div className="flex size-11 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)]">
                   <HugeiconsIcon
-                    icon={Settings01Icon}
+                    icon={SlidersHorizontalIcon}
                     size={20}
                     strokeWidth={1.8}
                   />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-[var(--theme-text)]">
-                    Orchestrator Settings
+                    Orchestrator
                   </h2>
-                  <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                    Update the display name for the hub.
-                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
                 className="inline-flex size-10 items-center justify-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card2)] text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent-strong)]"
-                aria-label="Close orchestrator settings"
+                aria-label="Close orchestrator editor"
               >
                 <HugeiconsIcon
                   icon={Cancel01Icon}

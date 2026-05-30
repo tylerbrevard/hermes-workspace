@@ -1,4 +1,17 @@
 import { Link } from '@tanstack/react-router'
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  Chat01Icon,
+  Database01Icon,
+  InternetIcon,
+  Notification03Icon,
+  PaintBoardIcon,
+  Route01Icon,
+  Settings02Icon,
+  SlidersHorizontalIcon,
+  TranslateIcon,
+  VoiceIcon,
+} from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 
 export type SettingsNavId =
@@ -13,19 +26,23 @@ export type SettingsNavId =
   | 'notifications'
   | 'language'
 
-type NavItem = { id: SettingsNavId; label: string }
+type NavItem = {
+  id: SettingsNavId
+  label: string
+  icon: React.ComponentProps<typeof HugeiconsIcon>['icon']
+}
 
 export const SETTINGS_NAV_ITEMS: Array<NavItem> = [
-  { id: 'connection', label: 'Connection' },
-  { id: 'claude', label: 'Model & Provider' },
-  { id: 'agent', label: 'Agent Behavior' },
-  { id: 'routing', label: 'Smart Routing' },
-  { id: 'voice', label: 'Voice' },
-  { id: 'display', label: 'Display' },
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'language', label: 'Language' },
+  { id: 'connection', label: 'Connection', icon: InternetIcon },
+  { id: 'claude', label: 'Model', icon: Database01Icon },
+  { id: 'agent', label: 'Agent', icon: Settings02Icon },
+  { id: 'routing', label: 'Routing', icon: Route01Icon },
+  { id: 'voice', label: 'Voice', icon: VoiceIcon },
+  { id: 'display', label: 'Display', icon: SlidersHorizontalIcon },
+  { id: 'appearance', label: 'Look', icon: PaintBoardIcon },
+  { id: 'chat', label: 'Chat', icon: Chat01Icon },
+  { id: 'notifications', label: 'Alerts', icon: Notification03Icon },
+  { id: 'language', label: 'Language', icon: TranslateIcon },
 ]
 
 const DEFAULT_MOBILE_NAV_IDS = new Set<SettingsNavId>([
@@ -52,12 +69,13 @@ function renderItem({
   indicator,
 }: ItemRendererArgs) {
   const className = cn(
-    'relative rounded-lg px-3 py-2 text-left text-sm transition-colors',
+    'relative flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
     isActive ? activeClass : inactiveClass,
   )
   const content = (
     <>
       {isActive ? indicator : null}
+      <HugeiconsIcon icon={item.icon} size={16} strokeWidth={1.6} />
       {item.label}
     </>
   )
@@ -110,8 +128,7 @@ export function SettingsSidebar({ activeId }: { activeId: SettingsNavId }) {
 export function SettingsMobilePills({ activeId }: { activeId: SettingsNavId }) {
   const activeClass =
     'bg-[var(--theme-accent)] text-[var(--theme-bg)] font-semibold'
-  const inactiveClass =
-    'bg-primary-100 text-primary-600 hover:bg-primary-200'
+  const inactiveClass = 'bg-primary-100 text-primary-600 hover:bg-primary-200'
   const visibleItems = SETTINGS_NAV_ITEMS.filter(
     (item) => DEFAULT_MOBILE_NAV_IDS.has(item.id) || item.id === activeId,
   )
@@ -129,7 +146,9 @@ export function SettingsMobilePills({ activeId }: { activeId: SettingsNavId }) {
             to="/settings"
             search={{ section: item.id }}
             className={className}
+            aria-label={item.label}
           >
+            <HugeiconsIcon icon={item.icon} size={14} strokeWidth={1.7} />
             {item.label}
           </Link>
         )

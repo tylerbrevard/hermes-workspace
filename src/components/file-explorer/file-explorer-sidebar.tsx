@@ -368,13 +368,23 @@ export function FileExplorerSidebar({
 
   if (hidden) return null
 
+  if (collapsed) {
+    return (
+      <aside
+        aria-hidden="true"
+        className={cn(
+          'h-full w-0 shrink-0 overflow-hidden border-r border-primary-200 bg-primary-100 opacity-0 pointer-events-none',
+          className,
+        )}
+      />
+    )
+  }
+
   return (
     <aside
       className={cn(
         'border-r border-primary-200 bg-primary-100 h-full flex flex-col transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 ease-out',
-        collapsed
-          ? 'w-0 opacity-0 pointer-events-none'
-          : 'w-full opacity-100 md:w-[260px]',
+        'w-full opacity-100 md:w-[260px]',
         className,
       )}
     >

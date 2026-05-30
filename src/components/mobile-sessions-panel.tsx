@@ -2,6 +2,10 @@ import { useEffect } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Add01Icon, Chat01Icon } from '@hugeicons/core-free-icons'
 import type { SessionMeta } from '@/screens/chat/types'
+import {
+  getFriendlyIdLabel,
+  getSessionDisplayTitle,
+} from '@/screens/chat/session-display'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -11,22 +15,6 @@ type Props = {
   activeFriendlyId: string
   onSelectSession: (key: string) => void
   onNewChat: () => void
-}
-
-function normalizeLabel(value: string | undefined): string {
-  if (typeof value !== 'string') return ''
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : ''
-}
-
-function getSessionTitle(session: SessionMeta): string {
-  const label = normalizeLabel(session.label)
-  if (label) return label
-  const derivedTitle = normalizeLabel(session.derivedTitle)
-  if (derivedTitle) return derivedTitle
-  const title = normalizeLabel(session.title)
-  if (title) return title
-  return `Session ${session.friendlyId.slice(0, 8)}`
 }
 
 const dayFormatter = new Intl.DateTimeFormat(undefined, {
@@ -134,10 +122,12 @@ export function MobileSessionsPanel({
                       )}
                     >
                       <div className="truncate text-sm font-medium text-ink">
-                        {getSessionTitle(session)}
+                        {getSessionDisplayTitle(session)}
                       </div>
                       <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-primary-500">
-                        <span className="truncate">{session.friendlyId}</span>
+                        <span className="truncate">
+                          {getFriendlyIdLabel(session.friendlyId)}
+                        </span>
                         {timestamp ? <span>{timestamp}</span> : null}
                       </div>
                     </button>

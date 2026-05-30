@@ -128,12 +128,15 @@ describe('CommandPalette', () => {
     expect(document.body.textContent).toContain('Actions')
     expect(document.body.textContent).toContain('Create task')
     expect(document.body.textContent).toContain('Capture note')
+    expect(document.body.textContent).toContain('Open meeting prep')
+    expect(document.body.textContent).toContain('Open Barry check-ins')
+    expect(document.body.textContent).toContain('Open swarm controls')
     expect(document.body.textContent).toContain('Open model settings')
     expect(document.body.textContent).toContain('Open voice settings')
     expect(document.body.textContent).toContain('Screens')
-    expect(
-      (document.body.textContent ?? '').indexOf('Actions'),
-    ).toBeLessThan((document.body.textContent ?? '').indexOf('Screens'))
+    expect((document.body.textContent ?? '').indexOf('Actions')).toBeLessThan(
+      (document.body.textContent ?? '').indexOf('Screens'),
+    )
 
     await unmount()
   })
@@ -181,6 +184,64 @@ describe('CommandPalette', () => {
       to: '/settings',
       search: { section: 'voice' },
     })
+
+    await unmount()
+  })
+
+  it('routes workflow actions to their owning pages and filters', async () => {
+    const { unmount } = await renderPalette()
+
+    await React.act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'k', metaKey: true }),
+      )
+    })
+
+    const waitingTasksAction = Array.from(
+      document.querySelectorAll('button'),
+    ).find((button) => button.textContent?.includes('Review waiting tasks'))
+    expect(waitingTasksAction).toBeTruthy()
+
+    await React.act(() => {
+      waitingTasksAction?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: '/tasks',
+      search: { filter: 'waiting' },
+    })
+
+    await unmount()
+  })
+
+  it('routes expanded operator shortcuts without opening the palette', async () => {
+    const { unmount } = await renderPalette()
+
+    await React.act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'm',
+          metaKey: true,
+          shiftKey: true,
+        }),
+      )
+    })
+
+    expect(navigateMock).toHaveBeenCalledWith({ to: '/meetings' })
+
+    await React.act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 's',
+          metaKey: true,
+          shiftKey: true,
+        }),
+      )
+    })
+
+    expect(navigateMock).toHaveBeenCalledWith({ to: '/swarm2' })
 
     await unmount()
   })

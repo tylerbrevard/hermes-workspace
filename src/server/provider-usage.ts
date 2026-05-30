@@ -203,7 +203,7 @@ async function refreshClaudeToken(
   if (body.refresh_token)
     creds.oauth.refreshToken = body.refresh_token as string
   if (typeof body.expires_in === 'number') {
-    creds.oauth.expiresAt = Date.now() + (body.expires_in) * 1000
+    creds.oauth.expiresAt = Date.now() + body.expires_in * 1000
   }
   creds.fullData.claudeAiOauth = creds.oauth
   saveClaudeCredentials(creds)
@@ -521,9 +521,7 @@ function getResetsAtIso(
   if (typeof window.reset_at === 'number')
     return new Date(window.reset_at * 1000).toISOString()
   if (typeof window.reset_after_seconds === 'number')
-    return new Date(
-      (nowSec + (window.reset_after_seconds)) * 1000,
-    ).toISOString()
+    return new Date((nowSec + window.reset_after_seconds) * 1000).toISOString()
   return undefined
 }
 

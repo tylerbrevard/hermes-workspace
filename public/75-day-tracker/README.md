@@ -41,4 +41,3 @@ This is intentionally local-first:
 - No push notifications.
 - No proprietary screenshots, layout, branding, or assets.
 - Photos are stored as local path/URL references only unless the browser later adds explicit file persistence.
-

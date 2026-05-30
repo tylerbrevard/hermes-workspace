@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildMcpDiagnosticsExport,
+  buildMcpGuidedSetupSteps,
   getMcpCapabilityMatrixRows,
   getMcpConfigPaths,
   getMcpEmptyStateCopy,
@@ -108,7 +109,7 @@ describe('McpScreen helpers', () => {
       lastTestedAt: new Date().toISOString(),
     })
 
-    expect(getMcpPrimaryAction(github)).toBe('Test and inspect logs')
+    expect(getMcpPrimaryAction(github)).toBe('Logs')
     expect(getMcpSkillRoute(github)).toBe('/skills?search=github')
     expect(getMcpSkillRoute(browser)).toBe('/skills?search=browser')
     expect(getMcpCapabilityMatrixRows([browser, github])[0]).toMatchObject({
@@ -116,7 +117,35 @@ describe('McpScreen helpers', () => {
       tools: 2,
       prompts: 'yes',
       auth: 'bearer',
-      action: 'Test and inspect logs',
+      action: 'Logs',
     })
+  })
+
+  it('builds guided setup steps from config mode, health, discovery, and auth state', () => {
+    const github = server({
+      name: 'github',
+      status: 'failed',
+      transportType: 'http',
+      authType: 'bearer',
+      hasBearerToken: true,
+      discoveredToolsCount: 0,
+      lastError: '401 unauthorized',
+    })
+
+    const steps = buildMcpGuidedSetupSteps([github], 'fallback')
+
+    expect(steps.map((step) => step.id)).toEqual([
+      'config-source',
+      'connection-test',
+      'tool-discovery',
+      'security-review',
+    ])
+    expect(steps[0]).toMatchObject({ status: 'needs review' })
+    expect(steps[1]).toMatchObject({
+      status: '1 failing',
+      action: 'Open logs',
+    })
+    expect(steps[2]).toMatchObject({ status: '1 missing' })
+    expect(steps[3]).toMatchObject({ status: '1 credentialed' })
   })
 })

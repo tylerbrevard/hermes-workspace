@@ -5,13 +5,26 @@ import { join } from 'node:path'
 const HOME = process.env.HOME || '/Users/tylerlyon'
 const HERMES_WORKSPACE =
   process.env.HERMES_WORKSPACE || join(HOME, '.hermes', 'workspace')
-const HERMES_PYTHON = join(HERMES_WORKSPACE, 'scripts', 'run_hermes_venv_python.sh')
+const HERMES_PYTHON = join(
+  HERMES_WORKSPACE,
+  'scripts',
+  'run_hermes_venv_python.sh',
+)
 const GRAPH_BRIDGE = join(HERMES_WORKSPACE, 'scripts', 'graph_bridge.py')
-const MEETING_PIPELINE = join(HERMES_WORKSPACE, 'scripts', 'meeting_pipeline.py')
+const MEETING_PIPELINE = join(
+  HERMES_WORKSPACE,
+  'scripts',
+  'meeting_pipeline.py',
+)
 const PROCESS_MEETING = join(HERMES_WORKSPACE, 'scripts', 'process_meeting.py')
-const MEETING_TODO_SYNC = join(HERMES_WORKSPACE, 'scripts', 'sync_meeting_actions_todo.py')
+const MEETING_TODO_SYNC = join(
+  HERMES_WORKSPACE,
+  'scripts',
+  'sync_meeting_actions_todo.py',
+)
 const TODO_LIST_NAME = 'Meeting Action Items'
-const TODO_USER_UPN = process.env.HERMES_TODO_USER_UPN || 'tyler.lyon@gecurrent.com'
+const TODO_USER_UPN =
+  process.env.HERMES_TODO_USER_UPN || 'tyler.lyon@gecurrent.com'
 const TODO_BASE = `/users/${TODO_USER_UPN}/todo`
 
 type TodoItemInput = {
@@ -31,7 +44,11 @@ function assertHermesScript(path: string) {
   }
 }
 
-function runHermesScript(scriptPath: string, args: Array<string>, timeout = 120_000) {
+function runHermesScript(
+  scriptPath: string,
+  args: Array<string>,
+  timeout = 120_000,
+) {
   assertHermesScript(HERMES_PYTHON)
   assertHermesScript(scriptPath)
   const output = execFileSync(HERMES_PYTHON, [scriptPath, ...args], {
@@ -82,7 +99,9 @@ function formatDueDate(value: unknown) {
 
 function todoBody(item: TodoItemInput) {
   const parts = [
-    readString(item.meetingTitle) ? `Meeting: ${readString(item.meetingTitle)}` : '',
+    readString(item.meetingTitle)
+      ? `Meeting: ${readString(item.meetingTitle)}`
+      : '',
     readString(item.assignee) ? `Assignee: ${readString(item.assignee)}` : '',
     readString(item.sourceType) ? `Source: ${readString(item.sourceType)}` : '',
     readString(item.details),
@@ -91,19 +110,21 @@ function todoBody(item: TodoItemInput) {
 }
 
 function getOrCreateMeetingTodoList() {
-  const payload = graphJson<{ value?: Array<{ id?: string; displayName?: string }> }>(
-    'GET',
-    `${TODO_BASE}/lists`,
-  )
+  const payload = graphJson<{
+    value?: Array<{ id?: string; displayName?: string }>
+  }>('GET', `${TODO_BASE}/lists`)
   const existing = (payload?.value || []).find(
-    (list) => readString(list.displayName).toLowerCase() === TODO_LIST_NAME.toLowerCase(),
+    (list) =>
+      readString(list.displayName).toLowerCase() ===
+      TODO_LIST_NAME.toLowerCase(),
   )
   if (existing?.id) return existing.id
 
   const created = graphJson<{ id?: string }>('POST', `${TODO_BASE}/lists`, {
     displayName: TODO_LIST_NAME,
   })
-  if (!created?.id) throw new Error('Failed to create Meeting Action Items To Do list')
+  if (!created?.id)
+    throw new Error('Failed to create Meeting Action Items To Do list')
   return created.id
 }
 
@@ -114,7 +135,11 @@ export function runMeetingPipeline() {
 
 export function runMeetingExtraction(meetingId: string) {
   if (!meetingId) throw new Error('meetingId is required')
-  const output = runHermesScript(PROCESS_MEETING, ['--meeting-id', meetingId, '--force'], 180_000)
+  const output = runHermesScript(
+    PROCESS_MEETING,
+    ['--meeting-id', meetingId, '--force'],
+    180_000,
+  )
   return { success: true, output }
 }
 

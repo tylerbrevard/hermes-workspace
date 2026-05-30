@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-
-
-
-
-
-  DEFAULT_WORLD
+import { DEFAULT_WORLD } from '../lib/agora-types'
+import type {
+  AgoraFacing,
+  AgoraMessage,
+  AgoraProfile,
+  AgoraUser,
+  AgoraWorld,
 } from '../lib/agora-types'
-import type {AgoraFacing, AgoraMessage, AgoraProfile, AgoraUser, AgoraWorld} from '../lib/agora-types';
 
 const MOVE_SPEED_PX = 6
 const BUBBLE_TTL_MS = 7000

@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
 import {
   RouteErrorFallback,
   RouteLoadingState,
@@ -6,8 +7,13 @@ import {
 import { usePageTitle } from '@/hooks/use-page-title'
 import { OperationsScreen } from '@/screens/agents/operations-screen'
 
+const searchSchema = z.object({
+  create: z.enum(['agent']).optional(),
+})
+
 export const Route = createFileRoute('/operations')({
   ssr: false,
+  validateSearch: searchSchema,
   component: function OperationsRoute() {
     usePageTitle('Operations')
     return <OperationsScreen />

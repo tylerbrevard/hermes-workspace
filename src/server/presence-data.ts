@@ -36,6 +36,7 @@ type TeamsPresence = {
   activity?: string
   displayName?: string
   color?: string
+  outOfOffice?: OutOfOfficeStatus
   inferred?: boolean
   stale?: boolean
   authRequired?: boolean
@@ -43,6 +44,17 @@ type TeamsPresence = {
   timestamp?: string
   error?: string
   source?: string
+}
+
+type OutOfOfficeStatus = {
+  enabled: boolean
+  mode?: string
+  active?: boolean
+  startsAt?: string | null
+  endsAt?: string | null
+  message?: string
+  source?: string
+  error?: string
 }
 
 type M5WeatherWidget = {
@@ -128,7 +140,10 @@ async function getM5WeatherWidget(): Promise<M5WeatherWidget> {
   try {
     const response = await fetch(
       'https://api.open-meteo.com/v1/forecast?latitude=34.80&longitude=-82.31&current=temperature_2m,apparent_temperature,weather_code&temperature_unit=fahrenheit&timezone=America%2FNew_York',
-      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000) },
+      {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      },
     )
     if (!response.ok) throw new Error(`weather returned ${response.status}`)
     const payload = (await response.json()) as {
@@ -307,6 +322,77 @@ function graphJson<T>(method: string, endpoint: string, body?: unknown): T {
   return output ? (JSON.parse(output) as T) : (null as T)
 }
 
+function parseGraphDateTime(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as { dateTime?: unknown; timeZone?: unknown }
+  if (typeof candidate.dateTime !== 'string' || !candidate.dateTime) return null
+  const hasOffset = /(?:z|[+-]\d\d:\d\d)$/i.test(candidate.dateTime)
+  return hasOffset ? candidate.dateTime : `${candidate.dateTime}Z`
+}
+
+function stripHtml(value: unknown): string {
+  return typeof value === 'string'
+    ? value
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 120)
+    : ''
+}
+
+function isScheduledAutomaticReplyActive(startsAt: string | null, endsAt: string | null) {
+  const now = Date.now()
+  const startMs = startsAt ? Date.parse(startsAt) : Number.NaN
+  const endMs = endsAt ? Date.parse(endsAt) : Number.NaN
+  const afterStart = !Number.isFinite(startMs) || now >= startMs
+  const beforeEnd = !Number.isFinite(endMs) || now <= endMs
+  return afterStart && beforeEnd
+}
+
+function getOutOfOfficeStatus(): OutOfOfficeStatus {
+  try {
+    const settings = graphJson<{
+      automaticRepliesSetting?: {
+        status?: string
+        scheduledStartDateTime?: unknown
+        scheduledEndDateTime?: unknown
+        internalReplyMessage?: string
+        externalReplyMessage?: string
+      }
+    }>('GET', `/users/${TYLER_GUID}/mailboxSettings`)
+    const automaticReplies = settings?.automaticRepliesSetting || {}
+    const mode = automaticReplies.status || 'disabled'
+    const startsAt = parseGraphDateTime(automaticReplies.scheduledStartDateTime)
+    const endsAt = parseGraphDateTime(automaticReplies.scheduledEndDateTime)
+    const active =
+      mode === 'alwaysEnabled' ||
+      (mode === 'scheduled' && isScheduledAutomaticReplyActive(startsAt, endsAt))
+    return {
+      enabled: mode !== 'disabled',
+      mode,
+      active,
+      startsAt,
+      endsAt,
+      message: stripHtml(
+        automaticReplies.internalReplyMessage ||
+          automaticReplies.externalReplyMessage,
+      ),
+      source: 'graph-mailboxSettings',
+    }
+  } catch (error) {
+    return {
+      enabled: false,
+      active: false,
+      source: 'graph-mailboxSettings',
+      error: concisePresenceError(error),
+    }
+  }
+}
+
 function concisePresenceError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   if (
@@ -320,6 +406,7 @@ function concisePresenceError(error: unknown): string {
 }
 
 export async function getTeamsPresence(): Promise<TeamsPresence> {
+  const outOfOffice = getOutOfOfficeStatus()
   try {
     const presence = await fetchLegacyPresenceJson<TeamsPresence>(
       '/api/teams-presence',
@@ -332,6 +419,7 @@ export async function getTeamsPresence(): Promise<TeamsPresence> {
       displayName:
         presence.displayName || DISPLAY_NAMES[availability] || availability,
       color: presence.color || PRESENCE_COLORS[availability] || 'gray',
+      outOfOffice: presence.outOfOffice || outOfOffice,
       timestamp: presence.timestamp || new Date().toISOString(),
       source: presence.source || 'legacy-presence',
     }
@@ -348,24 +436,31 @@ export async function getTeamsPresence(): Promise<TeamsPresence> {
     if (availability === 'PresenceUnknown') {
       const inferred = inferPresenceFromLocal()
       if (inferred)
-        return { ...inferred, fallback: true, source: 'local-presence' }
+        return {
+          ...inferred,
+          outOfOffice,
+          fallback: true,
+          source: 'local-presence',
+        }
     }
     return {
       availability,
       activity: presence.activity || availability,
       displayName: DISPLAY_NAMES[availability] || availability,
       color: PRESENCE_COLORS[availability] || 'gray',
+      outOfOffice,
       timestamp: new Date().toISOString(),
       source: 'graph',
     }
   } catch (error) {
     const inferred = inferPresenceFromLocal()
     const message = concisePresenceError(error)
-    if (inferred) return { ...inferred, fallback: true, error: message }
+    if (inferred) return { ...inferred, outOfOffice, fallback: true, error: message }
     return {
       availability: 'PresenceUnknown',
       activity: 'PresenceUnknown',
       color: 'gray',
+      outOfOffice,
       error: message,
       authRequired: message.includes('401'),
     }
@@ -631,17 +726,23 @@ export function getLegacyIotConfig(searchParams: URLSearchParams) {
   }
 }
 
-export async function getLegacyIotConfigWithWeather(searchParams: URLSearchParams) {
+export async function getLegacyIotConfigWithWeather(
+  searchParams: URLSearchParams,
+) {
   const config = getLegacyIotConfig(searchParams)
   const weather = await getM5WeatherWidget()
+  const presence = await getLegacyTeamsPresence()
+  const outOfOffice = presence.outOfOffice || { enabled: false, active: false }
   return {
     ...config,
     weather,
+    outOfOffice,
     config: {
       ...(typeof config.config === 'object' && config.config !== null
         ? config.config
         : {}),
       weather,
+      outOfOffice,
     },
   }
 }

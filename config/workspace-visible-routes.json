@@ -2,42 +2,49 @@
   {
     "route": "/dashboard",
     "smokeText": "Hermes Workspace",
-    "mobileSmokeText": "Phone Cockpit",
+    "mobileSmokeText": "Quick Actions",
     "screenshotName": "dashboard"
   },
   {
     "route": "/phone",
-    "smokeText": "Phone Cockpit",
+    "smokeText": "Phone",
     "screenshotName": "phone-cockpit",
     "mobileOnly": true
   },
   {
     "route": "/lily",
-    "smokeText": "Start LILY",
+    "smokeText": "LILY",
     "screenshotName": "lily",
     "mobileVisibleSelector": "[data-testid=\"lily-mic-control\"]"
   },
   {
     "route": "/chat/main",
-    "smokeText": "SESSIONS",
-    "mobileSmokeText": "Compact mobile composer mode ready",
-    "visualText": "Ready for the next turn",
+    "smokeText": "CHAT COCKPIT",
+    "mobileSmokeText": "Mobile",
+    "visualText": "Chat cockpit",
     "screenshotName": "chat-main"
   },
   {
     "route": "/playground",
-    "smokeText": "OPEN FULL",
+    "smokeText": "FULL",
     "screenshotName": "hermesworld"
   },
-  { "route": "/files", "smokeText": "Files", "screenshotName": "files" },
+  {
+    "route": "/files",
+    "smokeText": "Files",
+    "visualText": "File command center",
+    "screenshotName": "files"
+  },
   {
     "route": "/terminal",
     "smokeText": "Terminal",
+    "visualText": "TERMINAL COCKPIT",
     "screenshotName": "terminal"
   },
   {
     "route": "/jobs",
     "smokeText": "Jobs",
+    "visualText": "Jobs cockpit",
     "screenshotName": "jobs",
     "routeSmokeFixtures": [
       {
@@ -50,18 +57,20 @@
   {
     "route": "/tasks",
     "smokeText": "Tasks",
+    "visualText": "Open work",
     "screenshotName": "tasks",
     "routeSmokeFixtures": [
       {
         "route": "/tasks?create=task",
-        "smokeText": "Create Task",
-        "mobileSmokeText": "Create Task"
+        "smokeText": "Tasks",
+        "mobileSmokeText": "Tasks"
       }
     ]
   },
   {
     "route": "/75-tracker",
     "smokeText": "75 Hard/Soft",
+    "visualText": "CHALLENGE COCKPIT",
     "screenshotName": "75-tracker",
     "routeSmokeFixtures": [
       {
@@ -72,79 +81,127 @@
     ]
   },
   {
+    "route": "/pto-tracker",
+    "smokeText": "PTO Tracker",
+    "mobileSmokeText": "People coverage",
+    "visualText": "PEOPLE COVERAGE",
+    "screenshotName": "pto-tracker"
+  },
+  {
+    "route": "/chief-of-staff-mailbox",
+    "smokeText": "Mailbox CoS",
+    "mobileSmokeText": "Chief of Staff Mailbox",
+    "visualText": "MAILBOX COS",
+    "screenshotName": "chief-of-staff-mailbox"
+  },
+  {
+    "route": "/apple-health",
+    "smokeText": "Health",
+    "mobileSmokeText": "Health",
+    "visualText": "TODAY RISK",
+    "screenshotName": "apple-health"
+  },
+  {
     "route": "/wegovy",
-    "smokeText": "Wegovy Shots",
+    "smokeText": "Wegovy",
+    "visualText": "SHOT RUNWAY",
     "screenshotName": "wegovy"
   },
   {
     "route": "/zyn-tracker",
-    "smokeText": "Zyn Tracker",
+    "smokeText": "Zyn",
+    "visualText": "TODAY PACE",
     "screenshotName": "zyn-tracker"
   },
   {
     "route": "/food-log",
-    "smokeText": "Food Log",
+    "smokeText": "Food",
+    "visualText": "CALORIE RUNWAY",
     "screenshotName": "food-log"
   },
   {
     "route": "/conductor",
-    "smokeText": "Launch a mission",
+    "smokeText": "Plan, assign, verify.",
+    "visualText": "LAUNCH READINESS",
     "screenshotName": "conductor"
   },
   {
     "route": "/operations",
     "smokeText": "Operations",
+    "visualText": "Operations",
     "screenshotName": "operations",
     "routeSmokeFixtures": [
       {
         "route": "/operations?create=agent",
-        "smokeText": "New Agent",
-        "mobileSmokeText": "New Agent"
+        "smokeText": "Agent",
+        "mobileSmokeText": "Agent"
       }
     ]
   },
   {
     "route": "/ops-intelligence",
     "smokeText": "Ops Intelligence",
+    "visualText": "OPS COCKPIT",
     "screenshotName": "ops-intelligence"
   },
-  { "route": "/swarm", "smokeText": "Swarm", "screenshotName": "swarm" },
+  {
+    "route": "/swarm",
+    "smokeText": "Swarm",
+    "visualText": "WORKER MAP",
+    "screenshotName": "swarm"
+  },
   {
     "route": "/memory",
-    "smokeText": "MEMORY FILES",
+    "smokeText": "Memory",
+    "visualText": "Memory command center",
     "screenshotName": "memory"
   },
   {
     "route": "/skills",
     "smokeText": "Skills Browser",
+    "visualText": "Skill command center",
     "screenshotName": "skills"
   },
-  { "route": "/mcp", "smokeText": "MCP Servers", "screenshotName": "mcp" },
+  {
+    "route": "/mcp",
+    "smokeText": "MCP Servers",
+    "visualText": "TOOL ROUTING COCKPIT",
+    "screenshotName": "mcp"
+  },
   {
     "route": "/profiles",
     "smokeText": "Profiles",
-    "visualText": "Browse and manage Hermes profiles",
+    "visualText": "Profile control center",
     "screenshotName": "profiles"
   },
   {
     "route": "/meetings",
     "smokeText": "Meetings",
+    "visualText": "REVIEW QUEUE",
     "screenshotName": "meetings"
   },
   {
     "route": "/presence",
     "smokeText": "Presence",
+    "visualText": "AVAILABILITY",
     "screenshotName": "presence"
   },
   {
     "route": "/it-ops",
     "smokeText": "ConnectWise",
+    "visualText": "EXECUTIVE DASHBOARD",
     "screenshotName": "connectwise"
   },
-  { "route": "/barry", "smokeText": "Barry", "screenshotName": "barry" },
+  {
+    "route": "/barry",
+    "smokeText": "Barry",
+    "visualText": "NEXT 1-ON-1",
+    "screenshotName": "barry"
+  },
   {
     "route": "/settings",
     "smokeText": "Settings",
+    "visualText": "Settings cockpit",
     "screenshotName": "settings"
   }
 ]

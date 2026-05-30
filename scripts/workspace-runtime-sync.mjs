@@ -103,9 +103,13 @@ async function inspectRuntime() {
 
 function restartLaunchAgent() {
   const uid = execFileSync('id', ['-u'], { encoding: 'utf8' }).trim()
-  execFileSync('launchctl', ['kickstart', '-k', `gui/${uid}/${launchAgentLabel}`], {
-    stdio: 'ignore',
-  })
+  execFileSync(
+    'launchctl',
+    ['kickstart', '-k', `gui/${uid}/${launchAgentLabel}`],
+    {
+      stdio: 'ignore',
+    },
+  )
 }
 
 let firstInspection
@@ -120,12 +124,16 @@ try {
 }
 
 if (firstInspection.ok) {
-  console.log(`ok workspace runtime assets synced (${firstInspection.assetPaths.length} assets)`)
+  console.log(
+    `ok workspace runtime assets synced (${firstInspection.assetPaths.length} assets)`,
+  )
   process.exit(0)
 }
 
 if (!isLocalWorkspaceBase(baseUrl)) {
-  throw new Error(`workspace runtime assets out of sync: ${firstInspection.reason}`)
+  throw new Error(
+    `workspace runtime assets out of sync: ${firstInspection.reason}`,
+  )
 }
 
 console.warn(`warn workspace runtime out of sync: ${firstInspection.reason}`)
@@ -139,10 +147,14 @@ for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     assetPaths: [],
   }))
   if (inspection.ok) {
-    console.log(`ok workspace runtime assets synced after restart (${inspection.assetPaths.length} assets)`)
+    console.log(
+      `ok workspace runtime assets synced after restart (${inspection.assetPaths.length} assets)`,
+    )
     process.exit(0)
   }
   if (attempt === maxAttempts) {
-    throw new Error(`workspace runtime assets still out of sync: ${inspection.reason}`)
+    throw new Error(
+      `workspace runtime assets still out of sync: ${inspection.reason}`,
+    )
   }
 }

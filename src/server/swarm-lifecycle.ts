@@ -360,9 +360,7 @@ function tmuxStart(workerId: string): Promise<{ ok: boolean; error?: string }> {
   })
 }
 
-export async function renewWorker(
-  workerId: string,
-): Promise<{
+export async function renewWorker(workerId: string): Promise<{
   ok: boolean
   restarted: boolean
   resumeSent: boolean
@@ -419,9 +417,7 @@ export async function renewWorker(
   }
 }
 
-export async function autoSweepLifecycle(
-  workerIds: Array<string>,
-): Promise<
+export async function autoSweepLifecycle(workerIds: Array<string>): Promise<
   Array<{
     workerId: string
     action: 'none' | 'request-handoff' | 'renew'

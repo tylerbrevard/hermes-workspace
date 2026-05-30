@@ -28,7 +28,7 @@ const STATUS_COLORS: Record<McpServer['status'], string> = {
 }
 
 function formatDateTime(value?: string): string {
-  if (!value) return 'Never tested'
+  if (!value) return 'Never'
   const parsed = Date.parse(value)
   if (Number.isNaN(parsed)) return value
   return new Intl.DateTimeFormat(undefined, {
@@ -51,28 +51,54 @@ function serverLaunchText(server: McpServer): string {
   return [server.command, ...server.args].filter(Boolean).join(' ')
 }
 
+function compactLaunchTarget(value?: string): string {
+  if (!value) return 'No target'
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value)
+      return url.hostname.replace(/^www\./, '')
+    } catch {
+      return value
+    }
+  }
+
+  const normalized = value.replace(/\\/g, '/')
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length === 0) return value
+  const leaf = parts.at(-1) ?? value
+  const parent = parts.at(-2)
+
+  if (parent === 'bin') return leaf
+  if (leaf === 'node_modules' && parent) return `${parent}/node_modules`
+  if (parts.length > 3 && parent) return `${parent}/${leaf}`
+  return leaf
+}
+
 function securityText(server: McpServer): string {
   const labels: Array<string> = []
-  if (server.transportType === 'http') labels.push('remote tools')
+  if (server.transportType === 'http') labels.push('remote')
   if (
     server.command ||
     server.args.some((arg) => /file|fs|path|dir/i.test(arg))
   ) {
-    labels.push('file access')
+    labels.push('files')
   }
   if (server.authType !== 'none' || server.hasBearerToken)
-    labels.push('credentials')
-  return labels.join(' · ') || 'local low-risk'
+    labels.push('auth')
+  return labels.join(' · ') || 'local'
 }
 
 function ownerText(server: McpServer): string {
   const name = server.name.toLowerCase()
-  if (name.includes('github')) return 'GitHub workflows'
-  if (name.includes('outlook') || name.includes('email')) return 'mailbox jobs'
-  if (name.includes('browser') || name.includes('chrome'))
-    return 'browser QA jobs'
-  if (name.includes('memory') || name.includes('agentdb')) return 'memory jobs'
-  return 'Hermes/Codex jobs'
+  if (name.includes('github')) return 'GitHub'
+  if (name.includes('outlook') || name.includes('email')) return 'Mailbox'
+  if (name.includes('browser') || name.includes('chrome')) return 'Browser'
+  if (name.includes('memory') || name.includes('agentdb')) return 'Memory'
+  return 'Hermes/Codex'
+}
+
+function ownerLaneText(server: McpServer): string {
+  return ownerText(server).replace(/^Hermes\/Codex jobs$/, 'Hermes + Codex')
 }
 
 function Badge({
@@ -107,12 +133,14 @@ export function McpServerCard({ server, onEdit }: Props) {
   const qc = useQueryClient()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [testResult, setTestResult] = useState<McpTestResult | null>(null)
+  const launchTarget =
+    server.transportType === 'http' ? server.url : server.command
   const lastTestAge = daysSince(server.lastTestedAt)
   const staleTest =
-    !server.lastTestedAt || (lastTestAge != null && lastTestAge > 7)
+    server.lastTestedAt != null && lastTestAge != null && lastTestAge > 7
 
   return (
-    <article className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/85 p-4">
+    <article className="flex flex-col gap-2.5 rounded-xl border border-primary-200 bg-primary-50/85 p-3">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -126,8 +154,11 @@ export function McpServerCard({ server, onEdit }: Props) {
               {server.transportType}
             </Badge>
           </div>
-          <p className="truncate font-mono text-xs text-primary-500">
-            {server.transportType === 'http' ? server.url : server.command}
+          <p
+            className="max-w-[18rem] truncate font-mono text-xs text-primary-500"
+            title={launchTarget || undefined}
+          >
+            {compactLaunchTarget(launchTarget)}
           </p>
         </div>
         <Switch
@@ -142,21 +173,21 @@ export function McpServerCard({ server, onEdit }: Props) {
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-primary-500">
         <div className="flex items-center gap-1.5">
-          <dt>Tools:</dt>
+          <dt>Tools</dt>
           <dd className="font-medium text-ink tabular-nums">
             {server.discoveredToolsCount}
           </dd>
         </div>
         <div className="flex items-center gap-1.5">
-          <dt>Auth:</dt>
+          <dt>Auth</dt>
           <dd className="font-medium text-ink">{server.authType}</dd>
         </div>
         <div className="flex items-center gap-1.5">
-          <dt>Source:</dt>
+          <dt>Src</dt>
           <dd className="font-medium text-ink">{server.source}</dd>
         </div>
         <div className="flex items-center gap-1.5">
-          <dt>Last test:</dt>
+          <dt>Test</dt>
           <dd
             className={
               staleTest
@@ -175,27 +206,38 @@ export function McpServerCard({ server, onEdit }: Props) {
       </dl>
 
       {staleTest ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-          Last health check is stale. Run Test before relying on this server.
+        <p
+          className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          title="Stale check. Test before use."
+        >
+          Stale
         </p>
       ) : null}
 
       {server.lastError ? (
         <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200">
-          Log snippet: {server.lastError}
+          {server.lastError}
         </p>
       ) : null}
 
       <div className="flex flex-wrap gap-1.5 text-[11px] text-primary-500">
-        <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-          Security: {securityText(server)}
+        <span
+          className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5"
+          title={`Risk: ${securityText(server)}`}
+        >
+          {securityText(server)}
         </span>
-        <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-          Owner: {ownerText(server)}
+        <span
+          className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5"
+          title={`Lane ${ownerLaneText(server)}`}
+        >
+          {ownerLaneText(server)}
         </span>
-        <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-          Tool catalog cache:{' '}
-          {staleTest ? 'stale cache indicator' : 'fresh enough'}
+        <span
+          className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5"
+          title={`Cache: ${staleTest ? 'stale' : 'fresh'}`}
+        >
+          {staleTest ? 'stale' : 'fresh'}
         </span>
       </div>
 
@@ -237,7 +279,7 @@ export function McpServerCard({ server, onEdit }: Props) {
           size="sm"
           onClick={() => {
             void writeTextToClipboard(serverLaunchText(server)).then(
-              () => toast('Copied MCP launch target', { type: 'success' }),
+              () => toast('Copied', { type: 'success' }),
               () =>
                 toast(serverLaunchText(server), {
                   type: 'warning',
@@ -256,7 +298,7 @@ export function McpServerCard({ server, onEdit }: Props) {
               disabled={remove.isPending}
               onClick={() => remove.mutate({ name: server.name })}
             >
-              Confirm Delete
+              Confirm
             </Button>
             <Button
               variant="ghost"
@@ -281,8 +323,8 @@ export function McpServerCard({ server, onEdit }: Props) {
       {testResult ? (
         <p className="text-xs text-primary-500">
           {testResult.ok
-            ? `Connected (${testResult.latencyMs ?? '?'}ms, ${testResult.discoveredTools.length} tools)`
-            : `Failed: ${testResult.error || 'unknown error'}`}
+            ? `OK ${testResult.latencyMs ?? '?'}ms · ${testResult.discoveredTools.length} tools`
+            : `Fail: ${testResult.error || 'unknown'}`}
         </p>
       ) : null}
       {testResult && !testResult.ok && testResult.error
@@ -302,8 +344,7 @@ export function McpServerCard({ server, onEdit }: Props) {
             if (!showHint) return null
             return (
               <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-                Edit server args/url — looks like a placeholder. Click Edit to
-                fix.
+                Placeholder. Edit args/url.
               </p>
             )
           })()
@@ -315,7 +356,7 @@ export function McpServerCard({ server, onEdit }: Props) {
       ) : null}
       {oauth.data?.status === 'connected' ? (
         <p className="text-xs text-emerald-700 dark:text-emerald-300">
-          Reauth succeeded.
+          Reauth OK.
         </p>
       ) : null}
     </article>

@@ -23,7 +23,12 @@ describe('MCP nav registration', () => {
       const matchesTabId =
         relPath.endsWith('inspector-panel.tsx') &&
         /id:\s*['"`]mcp['"`]/.test(source)
-      expect(matchesRoute || matchesTabId).toBe(true)
+      const mobileTabDelegatesToMoreMenu =
+        relPath.endsWith('mobile-tab-bar.tsx') &&
+        /openHamburgerMenu/.test(source)
+      expect(matchesRoute || matchesTabId || mobileTabDelegatesToMoreMenu).toBe(
+        true,
+      )
     })
   }
 })

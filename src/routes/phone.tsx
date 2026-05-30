@@ -15,6 +15,6 @@ export const Route = createFileRoute('/phone')({
 })
 
 function PhoneRoute() {
-  usePageTitle('Phone Cockpit')
+  usePageTitle('Phone')
   return <PhoneCockpitScreen />
 }

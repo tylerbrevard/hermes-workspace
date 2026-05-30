@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Folder01Icon } from '@hugeicons/core-free-icons'
+import { compactSessionText } from '../session-display'
 import { Button } from '@/components/ui/button'
 import {
   TooltipContent,
@@ -163,6 +164,7 @@ function ChatHeaderComponent({
 
   const isStale = dataUpdatedAt > 0 && Date.now() - dataUpdatedAt > 15000
   const mobileTitle = formatMobileSessionTitle(activeTitle)
+  const compactActiveTitle = compactSessionText(activeTitle)
   void isFocusMode
   void onToggleFocusMode // kept for prop compat
   const showThinkingIndicator = thinkingLevel === 'high'
@@ -400,7 +402,7 @@ function ChatHeaderComponent({
                 className="min-w-0 truncate text-sm font-medium text-balance hover:text-accent-600 transition-colors rounded-sm text-left"
                 title="Click to switch session"
               >
-                {activeTitle}
+                {compactActiveTitle}
               </button>
               {canRenameTitle && !renamingTitle && (
                 <button

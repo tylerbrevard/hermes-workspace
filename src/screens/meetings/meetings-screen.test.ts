@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildMeetingActionTodoItems,
   buildMeetingBriefMarkdown,
+  buildMeetingCockpitTiles,
   buildMeetingExtractionSummary,
   classifyTylerRole,
   formatMeetingTitle,
@@ -13,6 +14,14 @@ import {
   meetingMatchesReviewFilter,
   meetingMatchesSearch,
 } from './lib/meeting-workflow'
+import {
+  formatFreshness,
+  formatWhen,
+  participantLabel,
+  shellClassName,
+  stripTone,
+  toneForType,
+} from './meeting-ui'
 
 const meeting = {
   id: 'm1',
@@ -30,6 +39,29 @@ const meeting = {
 }
 
 describe('MeetingsScreen helpers', () => {
+  it('builds cockpit tiles for agenda, prep, follow-up, review, and sync state', () => {
+    const tiles = buildMeetingCockpitTiles({
+      data: {
+        meetings: [meeting],
+        todayMeetings: [meeting],
+        total: 4,
+        graphSource: 'graph',
+      },
+      nextMeeting: meeting,
+      nextNeedsPrep: true,
+      unresolvedCommitmentCount: 2,
+      unreviewedCount: 1,
+    })
+
+    expect(tiles).toMatchObject([
+      { id: 'agenda', value: '1', action: 'agenda', tone: 'ok' },
+      { id: 'next', value: 'Ops Review', action: 'prep', tone: 'warn' },
+      { id: 'follow-up', value: '2', action: 'follow-up', tone: 'warn' },
+      { id: 'review', value: '1', action: 'review', tone: 'warn' },
+      { id: 'sync', value: 'Live', action: 'sync', tone: 'ok' },
+    ])
+  })
+
   it('summarizes extraction confidence and review state', () => {
     expect(buildMeetingExtractionSummary(meeting)).toMatchObject({
       actionCount: 1,
@@ -144,5 +176,16 @@ describe('MeetingsScreen helpers', () => {
         },
       ]),
     ).toContain('3 heavy meeting days')
+  })
+
+  it('keeps meeting UI formatting helpers deterministic', () => {
+    expect(shellClassName()).toContain('rounded-xl')
+    expect(toneForType('client')).toContain('cyan')
+    expect(toneForType('unknown')).toContain('primary')
+    expect(stripTone('bad')).toContain('red')
+    expect(formatWhen('2026-05-26T12:00:00.000Z')).toContain('May')
+    expect(formatFreshness(null)).toBe('Unknown')
+    expect(formatFreshness('bad-date')).toBe('Unknown')
+    expect(participantLabel(meeting)).toBe('Tyler, Ava')
   })
 })

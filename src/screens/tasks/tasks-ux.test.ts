@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { formatTaskAssigneeLabel } from './task-card'
 import {
   TASKS_BOARD_HELP_TEXT,
+  buildCompactTaskGlance,
   getInitialTasksSearchState,
   getOwnerWorkload,
+  getTaskCockpitTiles,
   getTaskColumnEmptyState,
   getTaskDiagnostics,
   getTaskDueLane,
@@ -27,15 +29,15 @@ import type { ClaudeTask } from '@/lib/tasks-api'
 describe('tasks UX copy', () => {
   it('exposes concise helper copy for the board scope', () => {
     expect(TASKS_BOARD_HELP_TEXT).toBe(
-      'Active work, blockers, follow-ups, and review handoffs in one board.',
+      'Active work, blockers, follow-ups, and review in one board.',
     )
   })
 
   it('formats assignee labels explicitly for assigned and unassigned tasks', () => {
     expect(formatTaskAssigneeLabel('jarvis', { jarvis: 'Jarvis' })).toBe(
-      'Assignee: Jarvis',
+      'Jarvis',
     )
-    expect(formatTaskAssigneeLabel(null, {})).toBe('Assignee: Unassigned')
+    expect(formatTaskAssigneeLabel(null, {})).toBe('Unassigned')
   })
 
   it('serializes visible tasks as escaped CSV for exports', () => {
@@ -63,7 +65,12 @@ describe('tasks UX copy', () => {
   })
 
   it('classifies today, waiting, and delegated task filters', () => {
-    const today = new Date().toISOString().slice(0, 10)
+    const now = new Date()
+    const today = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-')
 
     expect(isDueToday({ due_date: today, column: 'todo' })).toBe(true)
     expect(isDueToday({ due_date: today, column: 'done' })).toBe(false)
@@ -216,7 +223,12 @@ describe('tasks UX copy', () => {
   })
 
   it('builds due lanes, provenance, workload, follow-up, and diagnostics metadata', () => {
-    const today = new Date().toISOString().slice(0, 10)
+    const now = new Date()
+    const today = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-')
     const task: ClaudeTask = {
       id: 'task-chat',
       title: 'Waiting on Alex for chat follow-up',
@@ -240,10 +252,22 @@ describe('tasks UX copy', () => {
     expect(getOwnerWorkload([task])).toEqual([
       { owner: 'alex', count: 1, blocked: 1 },
     ])
+
+    const compact = buildCompactTaskGlance([task])
+    expect(compact.todayPromise?.id).toBe('task-chat')
+    expect(compact.urgent).toBe(1)
+    expect(compact.waiting).toBe(1)
+    expect(compact.delegated).toBe(1)
+    expect(compact.nextTasks.map((entry) => entry.id)).toEqual(['task-chat'])
   })
 
   it('groups tasks by source and selects a today promise', () => {
-    const today = new Date().toISOString().slice(0, 10)
+    const now = new Date()
+    const today = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-')
     const tasks: Array<ClaudeTask> = [
       {
         id: 'phone-1',
@@ -285,5 +309,64 @@ describe('tasks UX copy', () => {
       label: 'Due today',
       severity: 'warning',
     })
+  })
+
+  it('builds task cockpit tiles for the first-viewport dashboard', () => {
+    const now = new Date()
+    const today = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-')
+    const tasks: Array<ClaudeTask> = [
+      {
+        id: 'blocked',
+        title: 'Needs Tyler approval',
+        description: '',
+        column: 'blocked',
+        priority: 'high',
+        assignee: 'tyler',
+        tags: [],
+        due_date: today,
+        position: 1,
+        created_by: 'user',
+        created_at: '2026-05-26T12:00:00Z',
+        updated_at: '2026-05-26T12:00:00Z',
+      },
+      {
+        id: 'waiting',
+        title: 'Waiting on vendor',
+        description: '',
+        column: 'todo',
+        priority: 'medium',
+        assignee: null,
+        tags: [],
+        due_date: null,
+        position: 2,
+        created_by: 'user',
+        created_at: '2026-05-26T12:00:00Z',
+        updated_at: '2026-05-26T12:00:00Z',
+      },
+    ]
+
+    expect(getTaskCockpitTiles(tasks)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'open',
+          value: 2,
+          filter: 'active',
+        }),
+        expect.objectContaining({
+          id: 'blocked',
+          value: 1,
+          tone: 'danger',
+        }),
+        expect.objectContaining({
+          id: 'waiting',
+          value: 1,
+          filter: 'waiting',
+        }),
+      ]),
+    )
   })
 })

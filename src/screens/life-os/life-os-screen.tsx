@@ -1,9 +1,63 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import type { LifeOsSnapshot } from '@/server/life-os-snapshot'
 import { apiPath } from '@/lib/base-path'
 
 type TabKey = 'state' | 'pai' | 'workspace' | 'logs'
+type LifeOsSnapshot = {
+  host: {
+    location: string
+    time: string
+    name: string
+    uptime: string
+    load: string
+  }
+  state: Record<string, number> & {
+    health: number
+    creative: number
+    freedom: number
+    relations: number
+    finance: number
+  }
+  versions: {
+    hermes: string
+    pai: string
+    algorithm: string
+    codex: string
+  }
+  context: { percent: number; files: Array<string> }
+  learning: { recent: Array<number>; signals: number; note: string }
+  pai: {
+    userFiles: number
+    memoryFiles: number
+    tools: number
+    packs: number
+    workflows: number
+    hooks: number
+    toolCounts: {
+      skills: number
+      workflows: number
+      hooks: number
+      files: number
+    }
+    pulse: { status: string; pid?: number | string | null }
+    terminalDocs: Array<string>
+    healthSnapshot: { pending: number; count: number; latest?: string }
+    cost: {
+      bypass?: number | string
+      legit?: number | string
+      alerts: Array<string>
+    }
+    telosSummary: string
+  }
+  services: Array<{ label: string; status: string; detail: string }>
+  workspace: {
+    chatRoute: string
+    terminalRoute: string
+    voice: string
+    tailscale: Array<string>
+  }
+  logs: Array<{ label: string; state: string; lines: Array<string> }>
+}
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'state', label: 'STATE' },

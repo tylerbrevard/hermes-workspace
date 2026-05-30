@@ -25,8 +25,8 @@ function classifyConnectionError(
   if (!normalizedError && !status) {
     return {
       title: 'Not connected',
-      description: "Hermes Workspace can't reach Hermes Agent.",
-      action: 'Check that Hermes is running, then try again.',
+      description: "Can't reach Hermes Agent.",
+      action: 'Start Hermes, then retry.',
     }
   }
 
@@ -37,9 +37,9 @@ function classifyConnectionError(
     lower.includes('unauthorized')
   ) {
     return {
-      title: 'Authentication required',
-      description: 'Hermes Agent rejected the connection token.',
-      action: 'Go to Settings -> Advanced -> Hermes Agent to update your token.',
+      title: 'Auth required',
+      description: 'Token rejected.',
+      action: 'Settings -> Hermes token.',
     }
   }
 
@@ -50,16 +50,20 @@ function classifyConnectionError(
   ) {
     return {
       title: 'Pairing required',
-      description: "This device isn't paired with Hermes Agent yet.",
-      action: 'Check Hermes Agent connection.',
+      description: 'Device not paired.',
+      action: 'Check Hermes pairing.',
     }
   }
 
-  if (lower.includes('econnrefused') && (lower.includes('18789') || lower.includes('8642'))) {
+  if (
+    lower.includes('econnrefused') &&
+    (lower.includes('18789') || lower.includes('8642'))
+  ) {
     return {
-      title: 'Hermes Agent gateway not running',
-      description: 'Hermes Workspace cannot reach the configured Hermes Agent gateway.',
-      action: 'Check launchd/health for ai.hermes.gateway, then retry the workspace connection.',
+      title: 'Gateway down',
+      description:
+        'Hermes Agent gateway unreachable.',
+      action: 'Check launchd/health, then retry.',
     }
   }
 
@@ -71,16 +75,16 @@ function classifyConnectionError(
     lower.includes('timeout')
   ) {
     return {
-      title: 'Hermes Agent unreachable',
-      description: "Can't connect to Hermes Agent at the configured URL.",
-      action: 'Make sure Hermes is running and the URL is correct.',
+      title: 'Agent unreachable',
+      description: "Can't connect to URL.",
+      action: 'Check Hermes + URL.',
     }
   }
 
   return {
     title: 'Connection error',
-    description: normalizedError || 'Something went wrong.',
-    action: 'Try refreshing or check Settings -> Advanced -> Hermes.',
+    description: normalizedError || 'Unknown failure.',
+    action: 'Refresh or check Settings -> Hermes.',
   }
 }
 
@@ -133,7 +137,7 @@ export function ConnectionStatusMessage({
         />
         <div className="flex-1 text-xs">
           <p className="font-medium">
-            {isChecking ? 'Connecting to Hermes Agent...' : errorInfo.title}
+            {isChecking ? 'Connecting...' : errorInfo.title}
           </p>
           {!isChecking ? (
             <>

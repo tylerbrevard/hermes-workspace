@@ -1,5 +1,10 @@
 import { createFileRoute, useSearch } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
+import type { ToolsStatusRailItem } from '@/components/tools-action-dock'
+import {
+  ToolsActionDock,
+  ToolsStatusRail,
+} from '@/components/tools-action-dock'
 import { usePageTitle } from '@/hooks/use-page-title'
 import {
   isBooleanRecord,
@@ -12,6 +17,15 @@ import { withBasePath } from '@/lib/base-path'
 
 export const Route = createFileRoute('/75-tracker')({
   ssr: false,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { mode?: 'hard' | 'soft'; quick?: string } => ({
+    mode:
+      search.mode === 'hard' || search.mode === 'soft'
+        ? search.mode
+        : undefined,
+    quick: typeof search.quick === 'string' ? search.quick : undefined,
+  }),
   component: SeventyFiveTrackerRoute,
 })
 
@@ -51,11 +65,42 @@ function SeventyFiveTrackerRoute() {
   )
   const trend = getSeventyFiveWeeklyTrend(summary.percent)
   const streakRisk = getSeventyFiveStreakRisk(summary, new Date().getHours())
+  const fallbackHabit = remainingHabits[remainingHabits.length - 1] ?? null
   const report = getSeventyFiveShareReport({
     mode,
     todayKey,
     summary,
     trend,
+  })
+  const commandCards = getSeventyFiveCommandCards({
+    summary,
+    trend,
+    streakRisk,
+    nextHabit: remainingHabits[0] ?? null,
+  })
+  const statusItems: Array<ToolsStatusRailItem> = commandCards.map((card) => {
+    const tone =
+      card.tone === 'warn'
+        ? 'warning'
+        : card.tone === 'danger'
+          ? 'danger'
+          : card.tone
+    return {
+      id: card.label.toLowerCase(),
+      label: card.label,
+      value: card.value,
+      progress:
+        card.label === 'Progress'
+          ? summary.percent
+          : card.label === 'Risk'
+            ? streakRisk.severity === 'danger'
+              ? 95
+              : streakRisk.severity === 'warning'
+                ? 62
+                : 18
+            : undefined,
+      tone,
+    }
   })
 
   useEffect(() => {
@@ -151,16 +196,15 @@ function SeventyFiveTrackerRoute() {
   }
 
   return (
-    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--theme-bg)]">
-      <header className="shrink-0 border-b border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3">
+    <main className="flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--theme-bg)]">
+      <header className="shrink-0 border-b border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-3 sm:px-4">
         <div className="mx-auto grid max-w-[1200px] gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold text-[var(--theme-text)]">
               75 Hard/Soft
             </h1>
-            <p className="mt-1 text-xs text-[var(--theme-muted)]">
-              Daily tracker for water, workouts, reading, diet, progress photo,
-              and custom habits.
+            <p className="mt-1 hidden text-xs text-[var(--theme-muted)] sm:block">
+              Water, workouts, reading, diet, photo, habits.
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {(['hard', 'soft'] as const).map((nextMode) => (
@@ -192,41 +236,101 @@ function SeventyFiveTrackerRoute() {
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-              Today {summary.completed}/{summary.total}
-            </span>
-            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-              {summary.percent}% done
-            </span>
-            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-              {summary.remaining} left
-            </span>
-          </div>
         </div>
-        <section className="mx-auto mt-3 grid max-w-[1200px] gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3 text-xs text-[var(--theme-muted)] sm:grid-cols-3">
-          <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2">
-            Compact: {summary.completed}/{summary.total} complete
-          </span>
-          <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2">
-            Next:{' '}
-            {remainingHabits[0]
-              ? `${remainingHabits[0].label} (${remainingHabits[0].rule})`
-              : 'streak clean'}
-          </span>
-          <span
-            className={cn(
-              'rounded-lg border px-3 py-2',
-              streakRisk.severity === 'danger' &&
-                'border-red-300/40 bg-red-500/10 text-red-400',
-              streakRisk.severity === 'warning' &&
-                'border-amber-300/40 bg-amber-500/10 text-amber-400',
-              streakRisk.severity === 'success' &&
-                'border-emerald-300/40 bg-emerald-500/10 text-emerald-400',
-            )}
-          >
-            {streakRisk.message}
-          </span>
+        <section className="mx-auto mt-3 hidden max-w-[1200px] gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 sm:grid xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="min-w-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+                  Challenge cockpit
+                </h2>
+                <p className="mt-1 text-lg font-semibold text-[var(--theme-text)]">
+                  {remainingHabits[0]
+                    ? `${remainingHabits[0].label}: ${remainingHabits[0].rule}`
+                    : 'Daily streak is clean.'}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  'inline-flex min-h-8 shrink-0 items-center rounded-lg border px-3 text-xs font-semibold',
+                  streakRisk.severity === 'danger' &&
+                    'border-red-300/40 bg-red-500/10 text-red-400',
+                  streakRisk.severity === 'warning' &&
+                    'border-amber-300/40 bg-amber-500/10 text-amber-400',
+                  streakRisk.severity === 'success' &&
+                    'border-emerald-300/40 bg-emerald-500/10 text-emerald-400',
+                )}
+              >
+                {streakRisk.message}
+              </span>
+            </div>
+            <ToolsStatusRail
+              className="mt-3"
+              label="75 status"
+              items={statusItems}
+            />
+          </div>
+          <ToolsActionDock
+            className="content-start sm:grid-cols-2"
+            label="75 actions"
+            items={[
+              {
+                id: 'next',
+                label: remainingHabits[0] ? 'Mark next' : 'Done',
+                icon: 'check',
+                tone: 'primary',
+                disabled: !remainingHabits[0],
+                meta: remainingHabits[0]?.label ?? 'Today',
+                onClick: () => {
+                  const nextHabit = remainingHabits[0]
+                  if (nextHabit) toggleHabit(nextHabit, true)
+                },
+              },
+              {
+                id: 'copy',
+                label: 'Copy',
+                icon: 'file',
+                meta: 'Status',
+                onClick: () => void copyShareReport(),
+              },
+              {
+                id: 'health',
+                label: 'Health',
+                icon: 'apple',
+                href: withBasePath('/apple-health?tracker=75-hard'),
+                meta: 'Apple',
+              },
+              {
+                id: 'task',
+                label: 'Task',
+                icon: 'task',
+                href: withBasePath('/tasks?create=task&source=75-tracker'),
+                meta: 'Create',
+              },
+              {
+                id: 'lily',
+                label: 'LILY',
+                icon: 'arrow',
+                href: withBasePath('/lily?readout=75-tracker'),
+                meta: 'Readout',
+              },
+              {
+                id: 'loops',
+                label: 'Loops',
+                icon: 'calendar',
+                href: withBasePath('/dashboard?focus=daily-loops'),
+                meta: 'Daily',
+              },
+              {
+                id: 'reset',
+                label: 'Reset',
+                icon: 'refresh',
+                tone: 'danger',
+                meta: 'Today',
+                onClick: resetToday,
+              },
+            ]}
+          />
         </section>
         <div className="mx-auto mt-3 grid max-w-[1200px] gap-3 lg:grid-cols-[auto_minmax(0,1fr)]">
           <div
@@ -283,67 +387,9 @@ function SeventyFiveTrackerRoute() {
             ))}
           </div>
         </div>
-        <p className="mx-auto mt-2 max-w-[1200px] text-xs text-[var(--theme-muted)]">
-          {summary.remaining === 0
-            ? 'Today is complete. Keep the streak clean.'
-            : `${summary.remaining} item${summary.remaining === 1 ? '' : 's'} remain today. Recovery plan: finish the smallest unchecked item first, then open the full tracker for details.`}
-          <span
-            className={cn(
-              'ml-2 font-semibold',
-              streakRisk.severity === 'danger' && 'text-red-400',
-              streakRisk.severity === 'warning' && 'text-amber-400',
-              streakRisk.severity === 'success' && 'text-emerald-400',
-            )}
-          >
-            {streakRisk.message}
-          </span>
-        </p>
-        <section className="mx-auto mt-3 grid max-w-[1200px] gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="min-w-0">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-              What remains today
-            </h2>
-            <p className="mt-1 text-sm font-semibold text-[var(--theme-text)]">
-              {remainingHabits.length
-                ? remainingHabits.map((habit) => habit.label).join(', ')
-                : 'All daily items are complete.'}
-            </p>
-            <p className="mt-1 text-xs text-[var(--theme-muted)]">
-              Source warning: local quick checks are available; full tracker
-              sync is embedded below when deeper evidence is needed.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <a
-              href={withBasePath('/tasks?create=task&source=75-tracker')}
-              className="min-h-9 rounded-lg border border-[var(--theme-border)] px-3 py-2 text-xs font-semibold text-[var(--theme-text)]"
-            >
-              Create task
-            </a>
-            <a
-              href={withBasePath('/lily?readout=75-tracker')}
-              className="min-h-9 rounded-lg border border-[var(--theme-border)] px-3 py-2 text-xs font-semibold text-[var(--theme-text)]"
-            >
-              LILY readout
-            </a>
-            <a
-              href={withBasePath('/dashboard?focus=daily-loops')}
-              className="min-h-9 rounded-lg border border-[var(--theme-border)] px-3 py-2 text-xs font-semibold text-[var(--theme-text)]"
-            >
-              Daily Loops
-            </a>
-            <button
-              type="button"
-              onClick={resetToday}
-              className="min-h-9 rounded-lg border border-red-300/40 px-3 py-2 text-xs font-semibold text-red-400"
-            >
-              Reset today
-            </button>
-          </div>
-        </section>
         <div
           className={cn(
-            'mx-auto mt-3 grid max-w-[1200px] gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]',
+            'mx-auto mt-3 hidden max-w-[1200px] gap-3 sm:grid lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]',
             quickMode && 'hidden',
           )}
         >
@@ -351,10 +397,10 @@ function SeventyFiveTrackerRoute() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-                  Challenge heatmap
+                  Heatmap
                 </h2>
                 <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                  Local quick-check source · synced just now from this browser.
+                  Synced locally.
                 </p>
               </div>
               <button
@@ -362,7 +408,7 @@ function SeventyFiveTrackerRoute() {
                 onClick={() => void copyShareReport()}
                 className="min-h-9 shrink-0 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-[var(--theme-text)]"
               >
-                Copy report
+                Copy
               </button>
             </div>
             <div
@@ -388,10 +434,47 @@ function SeventyFiveTrackerRoute() {
                 />
               ))}
             </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2">
+                <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+                  Proof strip
+                </span>
+                <div className="mt-2 grid grid-cols-7 gap-1">
+                  {Array.from({ length: 7 }, (_, index) => {
+                    const proofComplete =
+                      index < 6
+                        ? index < summary.completed
+                        : summary.remaining === 0
+                    return (
+                      <span
+                        key={index}
+                        className={cn(
+                          'aspect-square rounded-[4px] border',
+                          proofComplete
+                            ? 'border-emerald-400/40 bg-emerald-500/60'
+                            : 'border-[var(--theme-border)] bg-[var(--theme-bg)]',
+                        )}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-xs">
+                <span className="block font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+                  Fallback
+                </span>
+                <p className="mt-2 font-semibold text-[var(--theme-text)]">
+                  {fallbackHabit?.label ?? 'Streak protected'}
+                </p>
+                <p className="mt-1 text-[var(--theme-muted)]">
+                  {fallbackHabit?.rule ?? 'Keep tomorrow simple.'}
+                </p>
+              </div>
+            </div>
           </section>
           <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
             <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-              Weekly trend
+              Trend
             </h2>
             <p className="mt-1 text-sm font-semibold text-[var(--theme-text)]">
               {trend.label}
@@ -413,11 +496,10 @@ function SeventyFiveTrackerRoute() {
               <label className="flex items-center justify-between gap-3 rounded-lg border border-[var(--theme-border)] px-3 py-2">
                 <span>
                   <span className="block font-semibold text-[var(--theme-text)]">
-                    Modified / travel day
+                    Modified
                   </span>
                   <span className="block text-[10px]">
-                    Keeps the habit active with realistic movement and water
-                    rules.
+                    Adjust water + movement.
                   </span>
                 </span>
                 <input
@@ -431,7 +513,7 @@ function SeventyFiveTrackerRoute() {
               </label>
               <label className="grid gap-1 rounded-lg border border-[var(--theme-border)] px-3 py-2">
                 <span className="font-semibold text-[var(--theme-text)]">
-                  Custom habit template
+                  Custom
                 </span>
                 <select
                   value={customTemplate}
@@ -467,32 +549,32 @@ function SeventyFiveTrackerRoute() {
               </div>
               <div className="rounded-lg border border-[var(--theme-border)] px-3 py-2">
                 <span className="font-semibold text-[var(--theme-text)]">
-                  Edit history
+                  Edits
                 </span>
                 <div className="mt-1 grid gap-1">
                   {history.length ? (
                     history.map((item) => <span key={item}>{item}</span>)
                   ) : (
-                    <span>No habit toggles yet today.</span>
+                    <span>No edits today.</span>
                   )}
                 </div>
               </div>
               <div className="rounded-lg border border-[var(--theme-border)] px-3 py-2">
-                Morning nudge: finish water and reading before work starts.
+                Morning: water + reading.
                 <a
                   href={withBasePath('/phone?capture=75-morning')}
                   className="mt-2 block min-h-8 rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-center text-[11px] font-semibold text-[var(--theme-text)]"
                 >
-                  Open Phone Cockpit
+                  Phone
                 </a>
               </div>
               <div className="rounded-lg border border-[var(--theme-border)] px-3 py-2">
-                Evening nudge: photo, diet check, and custom habit closeout.
+                Evening: photo + diet + closeout.
                 <a
                   href={withBasePath('/phone?capture=75-evening')}
                   className="mt-2 block min-h-8 rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-center text-[11px] font-semibold text-[var(--theme-text)]"
                 >
-                  Open Phone Cockpit
+                  Phone
                 </a>
               </div>
             </div>
@@ -500,11 +582,18 @@ function SeventyFiveTrackerRoute() {
         </div>
       </header>
       {!quickMode ? (
-        <iframe
-          title="75 Hard and 75 Soft Tracker"
-          src={withBasePath('/75-day-tracker/index.html')}
-          className="h-full w-full flex-1 border-0 bg-[#f6f4ef]"
-        />
+        <section className="mx-auto hidden w-full max-w-[1200px] shrink-0 px-4 py-4 sm:block">
+          <details className="overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)]">
+            <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[var(--theme-text)]">
+              Legacy full tracker
+            </summary>
+            <iframe
+              title="75 Hard and 75 Soft Tracker"
+              src={withBasePath('/75-day-tracker/index.html')}
+              className="h-[560px] w-full border-0 bg-[#f6f4ef]"
+            />
+          </details>
+        </section>
       ) : null}
     </main>
   )
@@ -515,7 +604,9 @@ function isStringRecord(value: unknown): value is Record<string, string> {
     Boolean(value) &&
     typeof value === 'object' &&
     !Array.isArray(value) &&
-    Object.values(value).every((entry) => typeof entry === 'string')
+    Object.values(value as Record<string, unknown>).every(
+      (entry) => typeof entry === 'string',
+    )
   )
 }
 
@@ -606,18 +697,18 @@ export function getSeventyFiveWeeklyTrend(percent: number): {
   if (percent === 100) {
     return {
       label: 'On track',
-      detail: 'Today is complete; preserve the streak and avoid late edits.',
+      detail: 'Today complete; avoid late edits.',
     }
   }
   if (percent >= 50) {
     return {
       label: 'Recoverable',
-      detail: 'Momentum is good; finish the smallest remaining item next.',
+      detail: 'Finish smallest next.',
     }
   }
   return {
     label: 'Needs push',
-    detail: 'Front-load the required items before the day gets noisy.',
+    detail: 'Front-load required items.',
   }
 }
 
@@ -627,8 +718,72 @@ export function getSeventyFiveTrendLegend(): Array<{
 }> {
   return [
     { label: 'On track', detail: '100% complete today.' },
-    { label: 'Recoverable', detail: '50-99% complete; finish smallest next.' },
-    { label: 'Needs push', detail: 'Below 50%; front-load required items.' },
+    { label: 'Recoverable', detail: '50-99%; finish smallest next.' },
+    { label: 'Needs push', detail: 'Below 50%; front-load.' },
+  ]
+}
+
+export function getSeventyFiveCommandCards({
+  summary,
+  trend,
+  streakRisk,
+  nextHabit,
+}: {
+  summary: {
+    completed: number
+    total: number
+    remaining: number
+    percent: number
+  }
+  trend: { label: string; detail: string }
+  streakRisk: { severity: 'success' | 'warning' | 'danger'; message: string }
+  nextHabit: HabitItem | null
+}): Array<{
+  label: string
+  value: string
+  detail: string
+  tone: 'good' | 'warn' | 'danger' | 'neutral'
+}> {
+  return [
+    {
+      label: 'Progress',
+      value: `${summary.completed}/${summary.total}`,
+      detail: `${summary.percent}% complete`,
+      tone:
+        summary.remaining === 0
+          ? 'good'
+          : summary.percent < 50
+            ? 'warn'
+            : 'neutral',
+    },
+    {
+      label: 'Next',
+      value: nextHabit?.label ?? 'Clear',
+      detail: nextHabit?.rule ?? 'No remaining habit',
+      tone: nextHabit ? 'warn' : 'good',
+    },
+    {
+      label: 'Risk',
+      value:
+        streakRisk.severity === 'danger'
+          ? 'High'
+          : streakRisk.severity === 'warning'
+            ? 'Watch'
+            : 'Safe',
+      detail: streakRisk.message,
+      tone:
+        streakRisk.severity === 'danger'
+          ? 'danger'
+          : streakRisk.severity === 'warning'
+            ? 'warn'
+            : 'good',
+    },
+    {
+      label: 'Trend',
+      value: trend.label,
+      detail: trend.detail,
+      tone: trend.label === 'On track' ? 'good' : 'neutral',
+    },
   ]
 }
 
@@ -642,18 +797,18 @@ export function getSeventyFiveStreakRisk(
   if (hour >= 20 && summary.remaining > 1) {
     return {
       severity: 'danger',
-      message: 'Streak at risk: more than one item remains after 8 PM.',
+      message: 'Risk: >1 item after 8 PM.',
     }
   }
   if (hour >= 17 || summary.percent < 50) {
     return {
       severity: 'warning',
-      message: 'Streak watch: pick the smallest remaining item now.',
+      message: 'Watch: do smallest now.',
     }
   }
   return {
     severity: 'success',
-    message: 'Streak on track if the next item gets done early.',
+    message: 'On track: do next early.',
   }
 }
 

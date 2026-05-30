@@ -39,11 +39,9 @@ export function buildPhoneWidgetSummary(
     snapshot.attention[0]?.title ||
     (nextMeeting
       ? `${nextMeeting.title} in ${relativeMinutes(nextMeeting.minutesUntil)}`
-      : snapshot.tasks.today
-        ? `${snapshot.tasks.today} due today`
-        : snapshot.inbox.unread !== null
-          ? `${snapshot.inbox.unread} unread mail`
-          : snapshot.presence.activity || 'Clear')
+      : snapshot.inbox.unread !== null
+        ? `${snapshot.inbox.unread} unread mail`
+        : snapshot.presence.activity || 'Clear')
 
   return {
     ok: true,

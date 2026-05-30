@@ -15,7 +15,10 @@ export const Route = createFileRoute('/api/iot/config')({
         } catch (error) {
           return json(
             {
-              error: error instanceof Error ? error.message : 'Failed to fetch config',
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to fetch config',
             },
             { status: 500 },
           )
@@ -23,13 +26,17 @@ export const Route = createFileRoute('/api/iot/config')({
       },
       POST: async ({ request }) => {
         try {
-          const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
+          const body = (await request.json().catch(() => null)) as Record<
+            string,
+            unknown
+          > | null
           if (!body || typeof body !== 'object') {
             return json({ error: 'Invalid JSON body' }, { status: 400 })
           }
           return json(updateLegacyIotConfig(body))
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to update config'
+          const message =
+            error instanceof Error ? error.message : 'Failed to update config'
           return json(
             {
               error: message,

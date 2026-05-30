@@ -10,7 +10,7 @@ export const Route = createFileRoute('/terminal')({
       <RouteErrorFallback
         error={error}
         title="Terminal error"
-        description="Retry terminal initialization first. If the PTY transport is unavailable, reload after checking the workspace service."
+        description="Retry terminal. If PTY is down, reload after workspace health."
       />
     )
   },

@@ -1,9 +1,13 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
+  Archive01Icon,
   ArrowDown01Icon,
   ArrowUp01Icon,
   BrainIcon,
+  Clock01Icon,
   Copy01Icon,
+  Database01Icon,
+  FileSearchIcon,
   PencilEdit02Icon,
   Search01Icon,
 } from '@hugeicons/core-free-icons'
@@ -12,6 +16,12 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '@/components/ui/toast'
 import { writeTextToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 
 type MemoryFileMeta = {
   path: string
@@ -279,7 +289,7 @@ export function buildUseMemoryContext(input: {
 }): string {
   const excerpt = input.content.trim().slice(0, 1200)
   return [
-    'Use this memory in the current task after verifying drift-prone facts.',
+    'Use memory after verifying drift-prone facts.',
     `Path: ${input.path}`,
     `Provenance: ${input.provenance}`,
     `Freshness: ${input.freshness}`,
@@ -455,6 +465,44 @@ export function MemoryBrowserScreen() {
     () => detectMemoryConflicts(fileItems),
     [fileItems],
   )
+  const searchResults = searchQuery.data?.results ?? []
+  const sourceCounts = useMemo(
+    () =>
+      fileItems.reduce(
+        (counts, file) => {
+          const source = classifyMemorySource(file.path)
+          counts[source] = (counts[source] ?? 0) + 1
+          return counts
+        },
+        {} as Record<MemorySourceFilter, number>,
+      ),
+    [fileItems],
+  )
+  const memoryCommandPosture = useMemo(() => {
+    if (memoryStats.brokenLinks > 0) {
+      return `${memoryStats.brokenLinks} memory files need repair`
+    }
+    if (memoryConflicts.length > 0) {
+      return `${memoryConflicts.length} duplicate memory names`
+    }
+    if (memoryStats.staleCount > 0) {
+      return `${memoryStats.staleCount} stale memories to review`
+    }
+    if (searchResults.length > 0) {
+      return `${searchResults.length} recall matches`
+    }
+    return 'Memory ready for recall'
+  }, [
+    memoryConflicts.length,
+    memoryStats.brokenLinks,
+    memoryStats.staleCount,
+    searchResults.length,
+  ])
+  const memoryApiStatus = filesQuery.isLoading
+    ? 'loading'
+    : filesQuery.isError
+      ? 'error'
+      : 'ready'
   const recallCommand = buildRecallCommand(
     selectedPath || 'MEMORY.md',
     searchTerm,
@@ -469,8 +517,6 @@ export function MemoryBrowserScreen() {
       changed: Math.abs(afterLines.length - beforeLines.length),
     }
   }, [content, draftContent, hasUnsavedChanges])
-
-  const searchResults = searchQuery.data?.results ?? []
 
   function trySelectFile(nextPath: string, nextFocusLine?: number): boolean {
     if (nextPath !== selectedPath && isEditing && hasUnsavedChanges) {
@@ -620,7 +666,7 @@ export function MemoryBrowserScreen() {
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Search memory files"
+                placeholder="Search memory"
                 className="w-full rounded-xl py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent-500"
                 style={{
                   border: '1px solid var(--theme-border)',
@@ -631,55 +677,174 @@ export function MemoryBrowserScreen() {
             </div>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-primary-500 dark:text-neutral-400">
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Source: local memory registry
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Owner: Hermes Knowledge
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Last indexed: {formatDateTime(memoryStats.newest?.modified)}
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Memory health: {memoryStats.count} files · {memoryStats.staleCount}{' '}
-            stale · {memoryStats.brokenLinks} broken links
-          </span>
-          {memoryStats.staleCount > 0 ? (
-            <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-              {memoryStats.staleCount} stale over 30d
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 text-xs [-webkit-overflow-scrolling:touch]">
+          {[
+            ['Local', `${memoryStats.count} files`],
+            ['Indexed', formatDateTime(memoryStats.newest?.modified)],
+            ['Stale', String(memoryStats.staleCount)],
+            ['Broken', String(memoryStats.brokenLinks)],
+          ].map(([label, value]) => (
+            <span
+              key={label}
+              className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border border-primary-200 bg-primary-100/60 px-3 font-medium text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
+            >
+              <span className="text-primary-400 dark:text-neutral-500">
+                {label}
+              </span>
+              <span className="text-primary-800 dark:text-neutral-100">
+                {value}
+              </span>
             </span>
-          ) : null}
+          ))}
           <button
             type="button"
             onClick={handleCopyRecallCommand}
-            className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-200 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+            className="inline-flex min-h-8 shrink-0 items-center rounded-full border border-primary-200 bg-primary-100/60 px-3 font-semibold text-primary-700 transition-colors hover:bg-primary-200 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
-            Copy recall command
+            Recall
           </button>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Mobile quick recall ready
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Ops Intelligence evidence linked
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            LILY readout/writeback status visible
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Preview diff required before writeback
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Provenance lanes: source session · automation · manual note ·
-            imported doc
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Scope lanes: machine-wide · workspace · Hermes · Codex · mailbox
-          </span>
         </div>
+        <AppSurface className="mt-3">
+          <AppSectionHeader
+            title="Memory command center"
+            meta={
+              selectedPath
+                ? `${memoryCommandPosture} · ${selectedFreshness}`
+                : memoryCommandPosture
+            }
+            action={
+              <AppStatusPill
+                tone={
+                  memoryApiStatus === 'ready'
+                    ? memoryStats.brokenLinks > 0 ||
+                      memoryStats.staleCount > 0
+                      ? 'amber'
+                      : 'green'
+                    : memoryApiStatus === 'error'
+                      ? 'red'
+                      : 'amber'
+                }
+              >
+                {memoryApiStatus}
+              </AppStatusPill>
+            }
+          />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <AppTile
+              title="Files"
+              value={String(memoryStats.count)}
+              detail="Memory index"
+              icon={Database01Icon}
+              tone="blue"
+              actionLabel="Browse"
+              className="min-h-[118px]"
+              onClick={() => setMemoryTab('all')}
+            />
+            <AppTile
+              title="Stale"
+              value={String(memoryStats.staleCount)}
+              detail="Verify first"
+              icon={Clock01Icon}
+              tone={memoryStats.staleCount > 0 ? 'amber' : 'green'}
+              actionLabel="Review"
+              className="min-h-[118px]"
+              onClick={() => setMemoryTab('stale')}
+            />
+            <AppTile
+              title="Conflicts"
+              value={String(memoryConflicts.length)}
+              detail="Duplicate names"
+              icon={FileSearchIcon}
+              tone={memoryConflicts.length > 0 ? 'red' : 'green'}
+              actionLabel="Check"
+              className="min-h-[118px]"
+              onClick={() => setMemoryTab('all')}
+            />
+            <AppTile
+              title="Size"
+              value={formatBytes(memoryStats.totalBytes)}
+              detail="Indexed text"
+              icon={Archive01Icon}
+              tone="purple"
+              actionLabel="Export"
+              className="min-h-[118px]"
+              onClick={handleExportSelected}
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {(
+              [
+                ['Codex', sourceCounts.codex ?? 0, 'codex'],
+                ['Hermes', sourceCounts.hermes ?? 0, 'hermes'],
+                ['Rollouts', sourceCounts.rollouts ?? 0, 'rollouts'],
+                ['Workspace', sourceCounts.workspace ?? 0, 'workspace'],
+              ] satisfies Array<[string, number, MemorySourceFilter]>
+            ).map(([label, value, filter]) => (
+              <button
+                key={String(label)}
+              type="button"
+              onClick={() => setSourceFilter(filter)}
+                className="rounded-xl border border-primary-200 bg-primary-100/60 px-3 py-2 text-left text-xs transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/70 dark:hover:bg-neutral-900"
+              >
+                <span className="block font-semibold text-primary-800 dark:text-neutral-100">
+                  {label}
+                </span>
+                <span className="mt-0.5 block text-primary-500 dark:text-neutral-400">
+                  {String(value)} memories
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleCopyRecallCommand}
+              className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/70 dark:text-neutral-200 dark:hover:bg-neutral-900"
+            >
+              Copy recall
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyUseInTask()}
+              disabled={!selectedPath}
+              className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-900/70 dark:text-neutral-200 dark:hover:bg-neutral-900"
+            >
+              Use in task
+            </button>
+            <button
+              type="button"
+              onClick={() => setMemoryTab('stale')}
+              className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/70 dark:text-neutral-200 dark:hover:bg-neutral-900"
+            >
+              Stale queue
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void handleCopyWorkflow(
+                  'memory diagnostics',
+                  buildMemoryDiagnostics({
+                    query: searchInput,
+                    sourceFilter,
+                    selectedPath,
+                    files: fileItems,
+                    apiStatus: filesQuery.isLoading
+                      ? 'loading'
+                      : filesQuery.isError
+                        ? 'error'
+                        : 'ready',
+                  }),
+                )
+              }
+              className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/70 dark:text-neutral-200 dark:hover:bg-neutral-900"
+            >
+              Copy diagnostics
+            </button>
+          </div>
+        </AppSurface>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 md:grid-cols-3 md:p-4">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 pb-[calc(var(--tabbar-h,80px)+1rem)] md:grid-cols-3 md:p-4">
         <aside className="flex min-h-0 flex-col rounded-2xl border border-primary-200 bg-primary-50 dark:border-neutral-800 dark:bg-neutral-950 md:col-span-1">
           <button
             type="button"
@@ -687,7 +852,7 @@ export function MemoryBrowserScreen() {
             onClick={() => setMobileFilesOpen((value) => !value)}
           >
             <span className="text-xs font-semibold uppercase tracking-wide text-primary-500 dark:text-neutral-400">
-              Memory Files ({fileItems.length})
+              Memory ({fileItems.length})
             </span>
             <span className="md:hidden text-primary-500 dark:text-neutral-400">
               <HugeiconsIcon
@@ -700,10 +865,10 @@ export function MemoryBrowserScreen() {
 
           <div className="grid grid-cols-2 gap-1 px-2 pb-2 text-[11px] font-semibold">
             {[
-              ['active', 'Active regression'] as const,
-              ['recent', 'Recent memories'] as const,
-              ['stale', 'Stale memories'] as const,
-              ['all', 'All files'] as const,
+              ['active', 'Active'] as const,
+              ['recent', 'Recent'] as const,
+              ['stale', 'Stale'] as const,
+              ['all', 'All'] as const,
             ].map(([tab, label]) => (
               <button
                 key={tab}
@@ -736,13 +901,13 @@ export function MemoryBrowserScreen() {
                     : 'border-primary-200 bg-primary-50/80 text-primary-500 hover:bg-primary-100 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400 dark:hover:bg-neutral-900',
                 )}
               >
-                {label} filter
+                {label}
               </button>
             ))}
           </div>
           <div className="grid grid-cols-2 gap-1 px-2 pb-2 text-[11px] font-semibold">
             {[
-              ['all', 'All sources'] as const,
+              ['all', 'All'] as const,
               ['codex', 'Codex'] as const,
               ['hermes', 'Hermes'] as const,
               ['rollouts', 'Rollouts'] as const,
@@ -768,7 +933,7 @@ export function MemoryBrowserScreen() {
           {searchEnabled ? (
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
               <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-primary-400 dark:text-neutral-500">
-                Search Results
+                Results
               </div>
               <div className="space-y-1">
                 {searchQuery.isLoading ? (
@@ -825,16 +990,16 @@ export function MemoryBrowserScreen() {
               <div className="max-h-72 space-y-1 overflow-y-auto pr-1 md:h-full md:max-h-none">
                 <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-primary-400 dark:text-neutral-500">
                   {memoryTab === 'active'
-                    ? 'Active regression/watch files'
+                    ? 'Active'
                     : memoryTab === 'recent'
-                      ? 'Recent memories'
+                      ? 'Recent'
                       : memoryTab === 'stale'
-                        ? 'Stale memories'
-                        : 'All files'}
+                        ? 'Stale'
+                        : 'All'}
                 </div>
                 {filteredFileItems.length === 0 ? (
                   <div className="rounded-lg border border-primary-200 bg-primary-50/80 px-3 py-2 text-xs text-primary-400 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-500">
-                    No files in this memory view
+                    No files
                   </div>
                 ) : (
                   filteredFileItems.map((file) => (
@@ -949,25 +1114,25 @@ export function MemoryBrowserScreen() {
             <div className="border-b border-primary-200 px-3 py-2 text-xs dark:border-neutral-800">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                  Provenance: {selectedProvenance}
+                  Prov {selectedProvenance}
                 </span>
                 <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                  Scope: {selectedScope}
+                  Scope {selectedScope}
                 </span>
                 <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                  Freshness: {selectedFreshness}
+                  Fresh {selectedFreshness}
                 </span>
                 <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                  Last-used badge: {selectedFreshness}
+                  Used {selectedFreshness}
                 </span>
                 {selectedAgeDays != null &&
                 selectedAgeDays > STALE_MEMORY_DAYS ? (
                   <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-                    Stale warning: review before using in agent decisions
+                    Stale: verify first
                   </span>
                 ) : null}
                 <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                  Duplicate/conflict check: {memoryConflicts.length}
+                  Conflicts {memoryConflicts.length}
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -976,38 +1141,38 @@ export function MemoryBrowserScreen() {
                   onClick={handleCopyRecallCommand}
                   className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
-                  Recall command
+                  Recall
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleCopyUseInTask()}
                   className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
-                  Use in current task
+                  Use
                 </button>
                 <button
                   type="button"
                   onClick={() =>
                     void handleCopyWorkflow(
                       'promote to durable memory',
-                      `Promote to durable memory from chat/tasks/LILY:\n${selectedPath}`,
+                      `Promote durable memory from chat/tasks/LILY:\n${selectedPath}`,
                     )
                   }
                   className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
-                  Promote to durable memory
+                  Promote
                 </button>
                 <button
                   type="button"
                   onClick={() =>
                     void handleCopyWorkflow(
                       'review task',
-                      `Review this memory and verify current truth:\n${selectedPath}`,
+                      `Review memory and verify current truth:\n${selectedPath}`,
                     )
                   }
                   className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
-                  Review this memory
+                  Review
                 </button>
                 <button
                   type="button"
@@ -1019,14 +1184,13 @@ export function MemoryBrowserScreen() {
                   }
                   className="rounded-md border border-primary-200 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
-                  Safe delete/archive
+                  Archive
                 </button>
                 <span className="rounded-md border border-primary-200 px-2 py-1 text-primary-500 dark:border-neutral-800 dark:text-neutral-400">
-                  Graph/backlinks:{' '}
-                  {selectedPath.split('/').slice(0, 2).join(' / ')}
+                  Links {selectedPath.split('/').slice(0, 2).join(' / ')}
                 </span>
                 <span className="rounded-md border border-primary-200 px-2 py-1 text-primary-500 dark:border-neutral-800 dark:text-neutral-400">
-                  Route links: Chat · Tasks · LILY · Ops Intelligence
+                  Routes Chat · Tasks · LILY · Ops
                 </span>
               </div>
             </div>
@@ -1039,11 +1203,11 @@ export function MemoryBrowserScreen() {
             )}
           >
             {filesQuery.isLoading ? (
-              <StateBox label="Loading memory files..." />
+              <StateBox label="Loading memory..." />
             ) : filesQuery.error instanceof Error ? (
               <StateBox label={filesQuery.error.message} error />
             ) : !selectedPath ? (
-              <StateBox label="No memory files found" />
+              <StateBox label="No memory" />
             ) : contentQuery.isLoading ? (
               <StateBox label="Loading file..." />
             ) : contentQuery.error instanceof Error ? (
@@ -1159,7 +1323,7 @@ function FileRow({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <div className="truncate font-mono text-xs text-primary-900 dark:text-neutral-100">
+        <div className="min-w-0 break-words font-mono text-xs text-primary-900 [overflow-wrap:anywhere] dark:text-neutral-100">
           {file.path}
         </div>
         {badge ? (

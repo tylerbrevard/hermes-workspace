@@ -12,28 +12,32 @@ import { useQuery } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   AlarmClockIcon,
-  CpuIcon,
   MessageMultiple01Icon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
-import { OperationalWorkerCard } from './operational-worker-card'
-import { Swarm2OrchestratorCard } from './swarm2-orchestrator-card'
-import { Swarm2Wires } from './swarm2-wires'
+import { Swarm2AddAgentModal } from './swarm2-add-agent-modal'
+import { ControlPlaneStage } from './swarm2-control-plane-stage'
 import { Swarm2ActivityFeed } from './swarm2-activity-feed'
-import { Swarm2KanbanBoard } from './swarm2-kanban-board'
-import { Swarm2ReportsView, buildSwarm2InboxLanes } from './swarm2-reports-view'
+import { buildSwarm2InboxLanes } from './swarm2-reports-view'
 import {
-  buildActiveMissionQueue,
+  ROLE_PRESETS,
+  buildSwarm2CockpitTiles,
   buildWorkerOperatorStates,
   chooseRecommendedWorker,
   cleanSwarmLabel,
+  commandForRuntime,
   compactText,
+  displayTaskTitle,
+  formatAssignedModel,
   getSwarmSurfaceDistinction,
+  isRuntimeActive,
+  progressForRuntime,
+  recentRuntimeLines,
   relativeTime,
+  sortSwarmMembers,
 } from './lib/swarm2-workflow'
 import type { Swarm2InboxItem } from './swarm2-reports-view'
 import type { CSSProperties } from 'react'
-import type { CrewMember } from '@/hooks/use-crew-status'
 import type {
   HealthData,
   RuntimeEntry,
@@ -42,13 +46,11 @@ import type {
   SwarmRosterResponse,
   SwarmRosterWorker,
   SwarmWorkerOperatorState,
-  TerminalKind,
+  ViewMode,
 } from './lib/swarm2-workflow'
 import { toast } from '@/components/ui/toast'
-import { getOnlineStatus, useCrewStatus } from '@/hooks/use-crew-status'
+import { useCrewStatus } from '@/hooks/use-crew-status'
 import { RouterChat } from '@/components/swarm/router-chat'
-import { SwarmTerminal } from '@/components/swarm/swarm-terminal'
-import { SetupEmptyState } from '@/components/setup-empty-state'
 import { WorkflowHelpModal } from '@/components/workflow-help-modal'
 import { cn } from '@/lib/utils'
 
@@ -82,144 +84,6 @@ const SWARM2_OPERATION_THEME: CSSProperties = {
   ['--theme-warning-border' as string]:
     'color-mix(in srgb, var(--theme-warning) 35%, white)',
 }
-
-type ViewMode = 'cards' | 'kanban' | 'runtime' | 'reports'
-
-type RolePreset = {
-  role: string
-  specialty: string
-  mission: string
-  systemPrompt: string
-  skills: Array<string>
-  defaultModel?: string
-}
-
-const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
-  {
-    role: 'Orchestrator',
-    specialty: 'control-plane state, dispatch, drift detection, escalation',
-    mission:
-      'Run the swarm. Read /swarm-specs/ at start. Dispatch workers per their standing missions. Detect drift, re-prompt, escalate to main agent when stuck.',
-    systemPrompt:
-      'You are the Hermes Agent orchestrator for the swarm. Read /swarm-specs/SWARM_SPEC.md and /swarm-specs/projects/swarmN.md for every worker before dispatching. Apply the swarm-orchestrator skill: assign work, request proof-bearing checkpoints, detect drift, re-prompt with stronger framing, escalate when blocked. Never make irreversible external actions without main-agent ack.',
-    skills: [
-      'swarm-orchestrator',
-      'swarm-worker-core',
-      'swarm-review-learning-loop',
-      'self-improvement',
-    ],
-    defaultModel: 'GPT-5.4',
-  },
-  {
-    role: 'Builder',
-    specialty: 'full-stack implementation, fast ship cycles',
-    mission:
-      'Implement features per dispatched briefs. Smallest landed artifact first. Tests + build + smoke before checkpoint.',
-    systemPrompt:
-      'You are a senior builder. Ship working code. Always read the brief, plan smallest landed artifact, implement, run tests + build + smoke, commit (not push), checkpoint with proof.',
-    skills: ['swarm-worker-core', 'byte-verified-code-review'],
-    defaultModel: 'GPT-5.5',
-  },
-  {
-    role: 'Reviewer',
-    specialty: 'byte-verified code review, naming + tests + build gate',
-    mission:
-      'No PR ships without you. Verify diff, byte-check naming, run tests/build/smoke, verdict APPROVED/CHANGES_REQUESTED/BLOCKED.',
-    systemPrompt:
-      'You are the merge gate. For every PR: pull branch, read diff, xxd byte-check naming-sensitive areas, run tests, run build, smoke test. Verdict APPROVED routes to main agent for merge ack. Never merge yourself.',
-    skills: [
-      'swarm-worker-core',
-      'byte-verified-code-review',
-      'swarm-review-learning-loop',
-    ],
-    defaultModel: 'GPT-5.4',
-  },
-  {
-    role: 'Triage',
-    specialty: 'autonomous PR/issues processor',
-    mission:
-      'Score open issues every 4h, repro top-1, fix branch + tests + PR, request review. Never merge or close.',
-    systemPrompt:
-      'You are the issues/PRs autopilot. Every 4h: gh issue list per repo, score by Impact x Tractability x (1 + locally-tested), pick top-1 unassigned, repro, fix branch, push, gh pr create, request reviewer. Never merge, never close, always escalate to main agent for greenlight.',
-    skills: [
-      'swarm-worker-core',
-      'byte-verified-code-review',
-      'swarm-review-learning-loop',
-    ],
-    defaultModel: 'GPT-5.5',
-  },
-  {
-    role: 'Lab',
-    specialty: 'local-model R&D, spec-dec, benchmarking',
-    mission:
-      'Run autonomous lab loop. Test new model pulls. Wire spec-dec/DFlash/TurboQuant. Push tk/s + quality. Document every experiment.',
-    systemPrompt:
-      'You are the local-model lab. Read /swarm-specs/projects/lane-c-lab.md. Iterate experiments from open hypothesis space. Log to lab-loop-runs.jsonl. Escalate breakthroughs (>=10% tk/s) and install requests to main agent.',
-    skills: [
-      'swarm-worker-core',
-      'pc1-ollama-gguf-bench',
-      'swarm-bench-worker',
-    ],
-    defaultModel: 'GPT-5.4',
-  },
-  {
-    role: 'Sage',
-    specialty: 'research + scripts + X content + creative briefs',
-    mission:
-      'Research what matters. Draft scripts, X content, briefs. Cite sources. Never post externally without ack.',
-    systemPrompt:
-      'You are the research/content scout. Find angles, write scripts and drafts, always cite sources. Never post X/Discord/blog without main-agent ack — always draft + escalate.',
-    skills: ['swarm-worker-core', 'last30days', 'pdf-and-paper-deep-reading'],
-    defaultModel: 'GPT-5.5',
-  },
-  {
-    role: 'Scribe',
-    specialty: 'docs, skills hygiene, memory curation',
-    mission:
-      'Keep docs current. Hygiene the skills folder. Curate memory. Write submission/release copy.',
-    systemPrompt:
-      'You are the source-of-truth keeper. Audit /skills/ every 12h, flag stale/unused/poorly-documented. Maintain SWARM_SPEC and worker specs as system evolves. Draft READMEs and changelogs.',
-    skills: ['swarm-worker-core', 'last30days', 'creative-writing'],
-    defaultModel: 'GPT-5.5',
-  },
-  {
-    role: 'Foundation',
-    specialty: 'infra, repair playbook, autopilot wiring',
-    mission:
-      'Keep the swarm running. Apply repair playbook. Wire autopilot. Maintain loop infra.',
-    systemPrompt:
-      'You are infrastructure. Maintain /swarm-specs/playbooks/auto-repair.yaml. Health-check tmux sessions, autopilot tick, dev server. Apply known fixes; escalate novel failures.',
-    skills: ['swarm-worker-core'],
-    defaultModel: 'GPT-5.4',
-  },
-  {
-    role: 'QA',
-    specialty: 'regression QA, render verification',
-    mission: 'Run regression suite on every commit + render. Block bad ships.',
-    systemPrompt:
-      'You are QA. On commit: full test suite. On render: ffprobe + tone consistency + pacing. Verdict PASS/FAIL/FLAKY with evidence.',
-    skills: ['swarm-worker-core', 'byte-verified-code-review'],
-    defaultModel: 'GPT-5.4',
-  },
-  {
-    role: 'Mirror Integrations',
-    specialty: 'asset packs, upstream sync',
-    mission: 'Generate assets. Watch upstream. Pack integrations.',
-    systemPrompt:
-      'You produce assets and watch upstream. Generate art/audio per Lane A. Every 12h diff upstream Hermes Agent main, surface portable items. Never cross-org PR without ack.',
-    skills: ['swarm-worker-core', 'claude-promo', 'songwriting-and-ai-music'],
-    defaultModel: 'GPT-5.4',
-  },
-  {
-    role: 'Custom',
-    specialty: '',
-    mission: '',
-    systemPrompt: '',
-    skills: [],
-  },
-] as const
-
-const ROLE_NAMES = ROLE_PRESETS.map((p) => p.role)
 
 async function fetchAvailableModels(): Promise<
   Array<{ id: string; name: string; provider: string }>
@@ -288,101 +152,6 @@ function useUpdatedAgo(fetchedAt: number | null): string {
   }, [fetchedAt])
 
   return label
-}
-
-export type RuntimeCommand = {
-  command: Array<string>
-  kind: TerminalKind
-  label: string
-}
-
-export type RuntimeCommandMode = 'auto' | 'logs' | 'shell'
-
-// Pick the live command for a worker pane.
-//
-// Priority for `mode='auto'` (the default):
-//   1. tmux attach when an attachable session exists (interactive TUI, ideal)
-//   2. shell at worker cwd (real PTY, chat-able, no extra deps)
-//   3. tail -F on agent.log (read-only stream, only when no shell context)
-//
-// `mode='logs'` forces tail -F (when a logPath exists).
-// `mode='shell'` forces a workspace shell even if tmux is available.
-export function commandForRuntime(
-  runtime: RuntimeEntry | undefined,
-  mode: RuntimeCommandMode = 'auto',
-): RuntimeCommand {
-  const cwd = runtime?.cwd?.replace(/"/g, '\\"')
-  const shellCommand = (): RuntimeCommand => ({
-    command: ['zsh', '-lc', cwd ? `cd "${cwd}" && exec zsh -l` : 'exec zsh -l'],
-    kind: 'shell',
-    label: cwd ? 'shell @ cwd' : 'shell',
-  })
-  const logCommand = (): RuntimeCommand | null =>
-    runtime?.logPath
-      ? {
-          command: ['tail', '-n', '200', '-F', runtime.logPath],
-          kind: 'log-tail',
-          label: 'tail -F agent.log',
-        }
-      : null
-
-  if (mode === 'logs') {
-    return logCommand() ?? shellCommand()
-  }
-  if (mode === 'shell') {
-    return shellCommand()
-  }
-  // auto
-  if (runtime?.tmuxAttachable && runtime.tmuxSession) {
-    return {
-      command: ['tmux', 'attach', '-t', runtime.tmuxSession],
-      kind: 'tmux',
-      label: `tmux:${runtime.tmuxSession}`,
-    }
-  }
-  if (runtime?.cwd) {
-    return shellCommand()
-  }
-  return logCommand() ?? shellCommand()
-}
-
-function recentLines(entry: RuntimeEntry | undefined): Array<string> {
-  return (entry?.recentLogTail ?? '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(-4)
-}
-
-function rankMember(roomIds: Array<string>) {
-  return (member: CrewMember) => {
-    if (roomIds.includes(member.id)) return 0
-    const status = getOnlineStatus(member)
-    if (status === 'online') return 1
-    if (status === 'offline') return 2
-    return 3
-  }
-}
-
-function sortSwarmMembers(members: Array<CrewMember>, roomIds: Array<string>) {
-  const rank = rankMember(roomIds)
-  return [...members]
-    .filter((member) => member.id && member.id.trim().length > 0)
-    .sort((a, b) => {
-      const r = rank(a) - rank(b)
-      if (r !== 0) return r
-      const numA = parseInt(a.id.replace(/\D/g, ''), 10) || 0
-      const numB = parseInt(b.id.replace(/\D/g, ''), 10) || 0
-      return numA - numB
-    })
-}
-
-function isRuntimeActive(entry: RuntimeEntry | undefined): boolean {
-  if (!entry) return false
-  if (entry.tmuxAttachable) return true
-  if (entry.currentTask?.trim()) return true
-  const last = entry.lastOutputAt ?? entry.lastSessionStartedAt
-  return typeof last === 'number' && Date.now() - last < 12 * 60 * 60 * 1000
 }
 
 function scrollNodeToTop(node: HTMLElement | null) {
@@ -488,644 +257,6 @@ function scheduleScrollContextToTop(anchor: HTMLElement | null) {
     for (const id of timers) window.clearTimeout(id)
     for (const id of frames) window.cancelAnimationFrame(id)
   }
-}
-
-function progressForRuntime(runtime: RuntimeEntry | undefined): number {
-  if (!runtime) return 0
-  if (
-    runtime.checkpointStatus === 'done' ||
-    runtime.checkpointStatus === 'handoff'
-  )
-    return 100
-  if (
-    runtime.checkpointStatus === 'blocked' ||
-    runtime.checkpointStatus === 'needs_input'
-  )
-    return 100
-  if (!runtime.currentTask?.trim()) return 0
-  const text =
-    `${runtime.phase ?? ''} ${runtime.currentTask ?? ''}`.toLowerCase()
-  if (text.includes('review')) return 72
-  if (text.includes('test') || text.includes('qa')) return 78
-  if (
-    text.includes('implement') ||
-    text.includes('build') ||
-    text.includes('patch')
-  )
-    return 64
-  if (
-    text.includes('plan') ||
-    text.includes('research') ||
-    text.includes('design')
-  )
-    return 48
-  return 58
-}
-
-function displayTaskTitle(
-  runtime: RuntimeEntry | undefined,
-  fallback: string,
-): string {
-  const realSummary = runtime?.lastRealSummary ?? null
-  const realResult = runtime?.lastRealResult ?? null
-  return cleanSwarmLabel(
-    runtime?.blockedReason ||
-      runtime?.currentTask ||
-      realSummary ||
-      runtime?.lastSummary ||
-      realResult ||
-      runtime?.lastResult ||
-      fallback ||
-      '',
-    'Ready for task',
-    64,
-  )
-}
-
-function formatAssignedModel(
-  model?: string | null,
-  provider?: string | null,
-): string {
-  const value = `${model || ''} ${provider || ''}`.toLowerCase()
-  if (value.includes('claude-opus-4-7') || value.includes('opus-4-7'))
-    return 'Opus 4.7'
-  if (value.includes('claude-opus-4-6') || value.includes('opus-4-6'))
-    return 'Opus 4.6'
-  if (value.includes('gpt-5.5')) return 'GPT-5.5'
-  if (value.includes('gpt-5.4')) return 'GPT-5.4'
-  if (value.includes('gpt-5.3')) return 'GPT-5.3'
-  if (model && model !== 'unknown') return model
-  if (provider && provider !== 'unknown')
-    return provider.replace(/^custom:/, '').replace(/[-_]/g, ' ')
-  return 'Worker'
-}
-
-type ControlPlaneStageProps = {
-  members: Array<CrewMember>
-  selectedId: string | null
-  roomIds: Array<string>
-  activeRuntimeCount: number
-  authErrors: number
-  selectedLabel: string
-  workspaceModel: string | null
-  lanes: Array<{ role: string; count: number; active: number }>
-  activeAgents: Array<{
-    workerId: string
-    workerName: string
-    role: string
-    task: string
-    progress: number
-    state: 'working' | 'reviewing' | 'blocked' | 'ready'
-    age: string
-  }>
-  recentUpdates: Array<{
-    workerId: string
-    workerName: string
-    text: string
-    age: string
-    tone: 'idle' | 'active' | 'warning'
-  }>
-  latestMission: {
-    id: string
-    title: string
-    state: string
-    assignmentCount: number
-    checkpointedCount: number
-  } | null
-  missions: Array<SwarmMissionSummary>
-  runtimeEntries: Array<RuntimeEntry>
-  inboxCounts: { needsReview: number; blocked: number; ready: number }
-  routerSeed: {
-    key: number
-    prompt: string
-    mode: 'auto' | 'manual' | 'broadcast'
-  } | null
-  onOpenInboxItem: (item: Swarm2InboxItem) => void
-  onRouteToReviewer: (item: Swarm2InboxItem) => void
-  viewMode: ViewMode
-  onViewModeChange: (mode: ViewMode) => void
-  onOpenRouter: () => void
-  onRouterResults: () => void
-  onSelect: (workerId: string) => void
-  onToggleRoom: (workerId: string) => void
-  onOpenTui: (workerId: string) => void
-  onOpenTasks: (workerId: string) => void
-  runtimeByWorker: Map<string, RuntimeEntry>
-  terminalTargets: Array<CrewMember>
-  tmuxAvailable: boolean
-  pendingTmux: Set<string>
-  focusedRuntimeWorkerId: string | null
-  onToggleFocusedRuntimeWorker: (workerId: string) => void
-  onClearFocusedRuntimeWorker: () => void
-  onStartAgentSession: (workerId: string) => void
-  onScrollTmuxSession: (
-    workerId: string,
-    direction: 'up' | 'down',
-    session?: string | null,
-  ) => void
-}
-
-function ControlPlaneStage({
-  members,
-  selectedId,
-  roomIds,
-  activeRuntimeCount,
-  authErrors,
-  selectedLabel,
-  workspaceModel,
-  lanes,
-  activeAgents,
-  recentUpdates,
-  latestMission,
-  missions,
-  runtimeEntries,
-  inboxCounts,
-  routerSeed,
-  onOpenInboxItem,
-  onRouteToReviewer,
-  viewMode,
-  onViewModeChange,
-  onOpenRouter,
-  onRouterResults,
-  onSelect,
-  onToggleRoom,
-  onOpenTui,
-  onOpenTasks,
-  runtimeByWorker,
-  terminalTargets,
-  tmuxAvailable,
-  pendingTmux,
-  focusedRuntimeWorkerId,
-  onToggleFocusedRuntimeWorker,
-  onClearFocusedRuntimeWorker,
-  onStartAgentSession,
-  onScrollTmuxSession,
-}: ControlPlaneStageProps) {
-  const stageRef = useRef<HTMLDivElement | null>(null)
-  const anchorRef = useRef<HTMLDivElement | null>(null)
-  const workerRefsMap = useRef<Map<string, HTMLElement>>(new Map())
-  const cardSetters = useRef<Map<string, (node: HTMLElement | null) => void>>(
-    new Map(),
-  )
-  const [refsVersion, setRefsVersion] = useState(0)
-  const bumpRefsVersion = useCallback(() => {
-    setRefsVersion((value) => value + 1)
-  }, [])
-
-  const setAnchor = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (anchorRef.current === node) return
-      anchorRef.current = node
-      bumpRefsVersion()
-    },
-    [bumpRefsVersion],
-  )
-
-  const setWorkerRef = useCallback(
-    (workerId: string) => {
-      const existing = cardSetters.current.get(workerId)
-      if (existing) return existing
-      const setter = (node: HTMLElement | null) => {
-        const map = workerRefsMap.current
-        const prior = map.get(workerId) ?? null
-        if (node === prior) return
-        if (node) map.set(workerId, node)
-        else map.delete(workerId)
-        bumpRefsVersion()
-      }
-      cardSetters.current.set(workerId, setter)
-      return setter
-    },
-    [bumpRefsVersion],
-  )
-
-  // Drop stale setters for workers that left the roster.
-  useEffect(() => {
-    const liveIds = new Set(members.map((member) => member.id))
-    let mutated = false
-    for (const id of cardSetters.current.keys()) {
-      if (!liveIds.has(id)) {
-        cardSetters.current.delete(id)
-        workerRefsMap.current.delete(id)
-        mutated = true
-      }
-    }
-    if (mutated) bumpRefsVersion()
-  }, [members, bumpRefsVersion])
-
-  const wireTargets = useMemo(
-    () =>
-      members.map((member) => ({
-        id: member.id,
-        selected: member.id === selectedId,
-        inRoom: roomIds.includes(member.id),
-      })),
-    [members, selectedId, roomIds],
-  )
-  const activeMissionQueue = useMemo(
-    () => buildActiveMissionQueue(missions),
-    [missions],
-  )
-
-  return (
-    <section
-      ref={stageRef}
-      className="relative overflow-hidden rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 shadow-[0_24px_80px_var(--theme-shadow)]"
-    >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,var(--theme-accent-soft),transparent_42%)]" />
-      <Swarm2Wires
-        containerRef={stageRef}
-        anchorRef={anchorRef}
-        workerRefs={workerRefsMap.current}
-        workers={wireTargets}
-        version={refsVersion}
-      />
-      <div className="relative z-10 flex flex-col items-center gap-4">
-        <div className="w-full max-w-5xl rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--theme-muted)]">
-                Active missions
-              </div>
-              <div className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                Running, blocked, and review-needed work before the visual
-                roster.
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => onViewModeChange('reports')}
-              className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-1.5 text-xs font-medium text-[var(--theme-muted)] transition-colors hover:text-[var(--theme-text)]"
-            >
-              Open reports
-            </button>
-          </div>
-          <div className="mt-3 grid gap-2 lg:grid-cols-2">
-            {activeMissionQueue.map((mission) => (
-              <article
-                key={mission.id}
-                className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-[var(--theme-text)]">
-                      {mission.title}
-                    </div>
-                    <div className="mt-1 truncate text-xs text-[var(--theme-muted-2)]">
-                      {mission.nextAction}
-                    </div>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-[var(--theme-border)] bg-[var(--theme-card2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--theme-muted)]">
-                    {mission.state}
-                  </span>
-                </div>
-                <div className="mt-3 grid grid-cols-4 gap-2 text-center text-[11px] text-[var(--theme-muted)]">
-                  <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
-                    <div className="text-sm font-semibold text-[var(--theme-text)]">
-                      {mission.assignmentCount}
-                    </div>
-                    <div>tasks</div>
-                  </div>
-                  <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
-                    <div className="text-sm font-semibold text-[var(--theme-text)]">
-                      {mission.checkpointedCount}
-                    </div>
-                    <div>checked</div>
-                  </div>
-                  <div className="rounded-lg border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-2 py-1 text-[var(--theme-warning)]">
-                    <div className="text-sm font-semibold">
-                      {mission.reviewCount}
-                    </div>
-                    <div>review</div>
-                  </div>
-                  <div className="rounded-lg border border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] px-2 py-1 text-[var(--theme-danger)]">
-                    <div className="text-sm font-semibold">
-                      {mission.blockedCount}
-                    </div>
-                    <div>blocked</div>
-                  </div>
-                </div>
-              </article>
-            ))}
-            {activeMissionQueue.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3 text-sm text-[var(--theme-muted)]">
-                No active missions in the current swarm log.
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <Swarm2OrchestratorCard
-          totalWorkers={members.length}
-          activeRuntimeCount={activeRuntimeCount}
-          roomCount={roomIds.length}
-          authErrors={authErrors}
-          selectedLabel={selectedLabel}
-          workspaceModel={workspaceModel}
-          viewMode={viewMode}
-          onViewModeChange={onViewModeChange}
-          lanes={lanes}
-          activeAgents={activeAgents}
-          recentUpdates={recentUpdates}
-          latestMission={latestMission}
-          inboxCounts={inboxCounts}
-          members={members}
-          roomIds={roomIds}
-          selectedId={selectedId}
-          routerSeed={routerSeed}
-          onOpenRouter={onOpenRouter}
-          onRouterResults={() => {
-            void onRouterResults()
-          }}
-          onAnchorRef={setAnchor}
-          className="w-full max-w-5xl"
-        />
-        <div className="relative w-full pt-3">
-          <div
-            className={cn(
-              'relative z-10',
-              viewMode === 'cards' ? 'block' : 'hidden',
-            )}
-          >
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 min-[1680px]:grid-cols-3">
-              {members.length === 0 ? (
-                <SetupEmptyState
-                  title="No swarm workers discovered from crew status yet."
-                  description="Swarm can coordinate once crew status or the roster reports available workers."
-                  nextAction="Open Operations to fix worker setup, then verify crew status and swarm roster before dispatching a mission."
-                  detail="/api/crew-status + /api/swarm-roster"
-                  className="col-span-full p-8 text-[var(--theme-muted)]"
-                  action={
-                    <a
-                      href="/workspace/agents/operations"
-                      className="inline-flex rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    >
-                      Open Operations
-                    </a>
-                  }
-                />
-              ) : (
-                members.map((member) => {
-                  const runtime = runtimeByWorker.get(member.id)
-                  return (
-                    <OperationalWorkerCard
-                      key={member.id}
-                      cardRef={setWorkerRef(member.id)}
-                      member={member}
-                      currentTask={runtime?.currentTask ?? null}
-                      checkpointStatus={runtime?.checkpointStatus ?? null}
-                      runtimeState={runtime?.state ?? null}
-                      recentLines={recentLines(runtime)}
-                      recentOutputAt={
-                        runtime?.lastOutputAt ??
-                        runtime?.lastSessionStartedAt ??
-                        null
-                      }
-                      recentSummary={
-                        runtime?.lastRealSummary ??
-                        runtime?.lastRealResult ??
-                        runtime?.lastSummary ??
-                        runtime?.lastResult ??
-                        runtime?.blockedReason ??
-                        null
-                      }
-                      artifacts={runtime?.artifacts ?? []}
-                      previews={runtime?.previews ?? []}
-                      inRoom={roomIds.includes(member.id)}
-                      selected={member.id === selectedId}
-                      onSelect={() => onSelect(member.id)}
-                      onToggleRoom={() => onToggleRoom(member.id)}
-                      onOpenTui={() => onOpenTui(member.id)}
-                      onOpenTasks={() => onOpenTasks(member.id)}
-                    />
-                  )
-                })
-              )}
-            </div>
-          </div>
-
-          <div
-            className={cn(
-              'relative z-10 flex flex-col gap-3',
-              viewMode === 'runtime' ? 'block' : 'hidden',
-            )}
-          >
-            {!tmuxAvailable ? (
-              <div className="rounded-xl border border-amber-300/40 bg-amber-300/10 px-4 py-2.5 text-xs text-amber-100">
-                <div className="font-semibold text-amber-50">
-                  tmux not installed on this host
-                </div>
-                <div className="mt-1 text-amber-100/80">
-                  Spawning a Hermes swarm worker requires tmux. Without it, the
-                  worker can start but cannot dispatch tasks (you'll see
-                  &lsquo;can't find pane: swarm-&lt;id&gt;&rsquo; errors).
-                  Install tmux:
-                </div>
-                <code className="mt-1 inline-block rounded bg-black/30 px-2 py-0.5 text-[10px] text-amber-100">
-                  brew install tmux
-                </code>{' '}
-                <span className="text-amber-100/60">(macOS) or</span>{' '}
-                <code className="inline-block rounded bg-black/30 px-2 py-0.5 text-[10px] text-amber-100">
-                  apt install tmux
-                </code>{' '}
-                <span className="text-amber-100/60">(Ubuntu/Debian).</span>
-              </div>
-            ) : null}
-            {focusedRuntimeWorkerId ? (
-              <div className="flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-2 text-xs text-[var(--theme-muted)]">
-                <span>
-                  Focus mode on{' '}
-                  <span className="font-semibold text-[var(--theme-text)]">
-                    {members.find(
-                      (member) => member.id === focusedRuntimeWorkerId,
-                    )?.displayName || focusedRuntimeWorkerId}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={onClearFocusedRuntimeWorker}
-                  className="rounded-full border border-[var(--theme-border)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]"
-                >
-                  Exit focus
-                </button>
-              </div>
-            ) : null}
-            <div
-              className={cn(
-                'grid grid-cols-1 gap-3',
-                focusedRuntimeWorkerId ? '' : '2xl:grid-cols-2',
-              )}
-            >
-              {terminalTargets.length === 0 ? (
-                <div className="rounded-[1.5rem] border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] p-8 text-sm text-[var(--theme-muted)]">
-                  No active workers detected. Select a worker or wire it into
-                  the room to mount its terminal.
-                </div>
-              ) : (
-                terminalTargets.map((member) => {
-                  const runtime = runtimeByWorker.get(member.id)
-                  const cmd = commandForRuntime(runtime, 'auto')
-                  const kindBadgeClass =
-                    cmd.kind === 'tmux'
-                      ? 'border-[var(--theme-accent)]/40 bg-[var(--theme-accent-soft)] text-[var(--theme-accent-strong)]'
-                      : cmd.kind === 'log-tail'
-                        ? 'border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] text-[var(--theme-warning)]'
-                        : 'border-[var(--theme-border)] bg-[var(--theme-card2)] text-[var(--theme-muted)]'
-                  const titleLabel = member.displayName || member.id
-                  const modelLabel = formatAssignedModel(
-                    member.model,
-                    member.provider,
-                  )
-                  return (
-                    <div
-                      key={member.id}
-                      className="overflow-hidden rounded-[1.5rem] border border-[var(--theme-border)] bg-[var(--theme-card)] shadow-[0_20px_60px_color-mix(in_srgb,var(--theme-shadow)_14%,transparent)]"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--theme-border)] px-3 py-2 text-[11px] text-[var(--theme-muted)]">
-                        <span className="inline-flex items-center gap-2 font-semibold text-[var(--theme-text)]">
-                          <HugeiconsIcon icon={CpuIcon} size={13} />
-                          <span>{titleLabel}</span>
-                          <span className="text-[10px] font-medium text-[var(--theme-muted)]">
-                            · {modelLabel}
-                          </span>
-                        </span>
-                        <div className="ml-auto flex items-center gap-1">
-                          {runtime?.tmuxAttachable ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onScrollTmuxSession(
-                                    member.id,
-                                    'up',
-                                    runtime.tmuxSession,
-                                  )
-                                }
-                                className="rounded-full border border-transparent px-1.5 py-0.5 text-[12px] text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-border)] hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]"
-                                title={`Scroll up in ${runtime.tmuxSession ?? `swarm-${member.id}`}`}
-                              >
-                                ↑
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onScrollTmuxSession(
-                                    member.id,
-                                    'down',
-                                    runtime.tmuxSession,
-                                  )
-                                }
-                                className="rounded-full border border-transparent px-1.5 py-0.5 text-[12px] text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-border)] hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]"
-                                title={`Scroll down in ${runtime.tmuxSession ?? `swarm-${member.id}`}`}
-                              >
-                                ↓
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onToggleFocusedRuntimeWorker(member.id)
-                                }
-                                className="rounded-full border border-transparent px-1.5 py-0.5 text-[12px] text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-border)] hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]"
-                                title={
-                                  focusedRuntimeWorkerId === member.id
-                                    ? `Exit focus for swarm-${member.id}`
-                                    : `Focus swarm-${member.id}`
-                                }
-                              >
-                                {focusedRuntimeWorkerId === member.id
-                                  ? '⛶'
-                                  : '⤢'}
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={
-                                pendingTmux.has(member.id) || !tmuxAvailable
-                              }
-                              onClick={() => onStartAgentSession(member.id)}
-                              className={cn(
-                                'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] transition-colors',
-                                'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-accent-strong)] hover:opacity-90',
-                                (pendingTmux.has(member.id) ||
-                                  !tmuxAvailable) &&
-                                  'cursor-not-allowed opacity-50',
-                              )}
-                              title={
-                                tmuxAvailable
-                                  ? `Start a live agent session in tmux (swarm-${member.id})`
-                                  : 'tmux is not installed on this host'
-                              }
-                            >
-                              {pendingTmux.has(member.id)
-                                ? 'Starting…'
-                                : 'Start agent'}
-                            </button>
-                          )}
-                        </div>
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em]',
-                            kindBadgeClass,
-                          )}
-                          title={cmd.command.join(' ')}
-                        >
-                          {cmd.kind === 'tmux'
-                            ? 'tmux'
-                            : cmd.kind === 'log-tail'
-                              ? 'logs'
-                              : 'shell'}
-                        </span>
-                      </div>
-                      <SwarmTerminal
-                        workerId={member.id}
-                        command={cmd.command}
-                        cwd={runtime?.cwd ?? undefined}
-                        height={420}
-                        active={viewMode === 'runtime'}
-                      />
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-
-          <div
-            className={cn(
-              'relative z-10',
-              viewMode === 'kanban' ? 'block' : 'hidden',
-            )}
-          >
-            <Swarm2KanbanBoard
-              workers={members}
-              latestMission={latestMission}
-              selectedWorkerId={selectedId}
-              onSelectWorker={onSelect}
-              onOpenRouter={onOpenRouter}
-            />
-          </div>
-
-          <div
-            className={cn(
-              'relative z-10',
-              viewMode === 'reports' ? 'block' : 'hidden',
-            )}
-          >
-            <Swarm2ReportsView
-              missions={missions}
-              runtimes={runtimeEntries}
-              onSelectWorker={(workerId) => {
-                onSelect(workerId)
-                onViewModeChange('cards')
-              }}
-              onOpenItem={onOpenInboxItem}
-              onRouteToReviewer={onRouteToReviewer}
-            />
-          </div>
-        </div>
-      </div>
-    </section>
-  )
 }
 
 export const __runtimeTabInternals = {
@@ -1621,6 +752,31 @@ export function Swarm2Screen() {
     workerOperatorStates,
     selectedMember?.role || 'builder',
   )
+  const cockpitTiles = useMemo(
+    () =>
+      buildSwarm2CockpitTiles({
+        memberCount: members.length,
+        activeRuntimeCount,
+        blockedWorkerCount,
+        reviewWorkerCount,
+        staleWorkerCount,
+        terminalTargetCount: terminalTargets.length,
+        notificationCount: actionableNotificationCount,
+        latestMission,
+        recommendedWorker,
+      }),
+    [
+      actionableNotificationCount,
+      activeRuntimeCount,
+      blockedWorkerCount,
+      latestMission,
+      members.length,
+      recommendedWorker,
+      reviewWorkerCount,
+      staleWorkerCount,
+      terminalTargets.length,
+    ],
+  )
 
   const recentUpdates = useMemo(() => {
     return members
@@ -1759,8 +915,8 @@ export function Swarm2Screen() {
                 </h1>
                 <p className="truncate text-xs text-[var(--theme-muted-2)]">
                   {members.length > 0
-                    ? `Detected ${members.length} worker${members.length === 1 ? '' : 's'} for planning, routing, reports, and reviewer-gated execution.`
-                    : 'Detected Hermes profiles and roster workers for planning, routing, reports, and reviewer-gated execution.'}
+                    ? `${members.length} worker${members.length === 1 ? '' : 's'} · route · reports · review`
+                    : 'Profiles + roster · route · reports · review'}
                 </p>
               </div>
             </div>
@@ -1774,22 +930,22 @@ export function Swarm2Screen() {
                   {
                     title: 'What this surface does',
                     bullets: [
-                      'Swarm turns a group of workers into one coordinated execution surface.',
-                      'Use it to route tasks, monitor state, and keep parallel work moving without losing context.',
+                      'Routes tasks across workers.',
+                      'Shows state, reports, and live runtime.',
                     ],
                   },
                   {
                     title: 'Typical flow',
                     bullets: [
-                      'Review worker state, then dispatch or reroute work from the orchestration controls.',
-                      'Use reports, inbox, and runtime signals to spot blockers and pull workers back on track.',
+                      'Check workers, then dispatch or reroute.',
+                      'Use reports, inbox, and runtime for blockers.',
                     ],
                   },
                   {
                     title: 'FAQ',
                     bullets: [
-                      'If a worker is missing setup or model config, fix that in Operations first.',
-                      'Swarm2 is the operational coordination layer, not the first-time setup screen.',
+                      'Missing setup lives in Operations.',
+                      'Swarm is coordination, not setup.',
                     ],
                   },
                 ]}
@@ -1817,11 +973,10 @@ export function Swarm2Screen() {
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--theme-muted)]">
-                        Swarm updates
+                        Updates
                       </div>
                       <div className="text-xs text-[var(--theme-muted-2)]">
-                        Actionable state from canonical mission checkpoints and
-                        durable report lanes.
+                        Checkpoints + reports.
                       </div>
                     </div>
                     <button
@@ -1875,42 +1030,94 @@ export function Swarm2Screen() {
                 className="inline-flex items-center gap-2 rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-primary-950 shadow-sm hover:bg-[var(--theme-accent-strong)]"
               >
                 <HugeiconsIcon icon={MessageMultiple01Icon} size={13} />
-                Add Swarm
+                Add
               </button>
             </div>
           </div>
         </header>
 
         <div className="grid min-h-0 grid-cols-1 gap-3">
+          <section
+            aria-label="Swarm cockpit"
+            className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"
+          >
+            {cockpitTiles.slice(0, 4).map((tile) => (
+              <button
+                key={tile.id}
+                type="button"
+                onClick={() => {
+                  if (tile.id === 'review' || tile.id === 'mission') {
+                    setViewMode('reports')
+                    return
+                  }
+                  if (tile.id === 'runtime') {
+                    setViewMode('runtime')
+                    return
+                  }
+                  if (tile.id === 'router') {
+                    setRouterOpen(true)
+                  }
+                }}
+                className={cn(
+                  'min-h-[7rem] rounded-xl border p-3 text-left shadow-sm transition-[border-color,background-color,box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]',
+                  tile.tone === 'danger'
+                    ? 'border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] text-[var(--theme-danger)]'
+                    : tile.tone === 'warning'
+                      ? 'border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] text-[var(--theme-warning)]'
+                      : tile.tone === 'good'
+                        ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-accent-strong)]'
+                        : 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)]',
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-70">
+                      {tile.label}
+                    </p>
+                    <p className="mt-1 truncate text-xl font-semibold tracking-normal">
+                      {tile.value}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-current/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-75">
+                    {tile.tone}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-1 text-xs leading-snug opacity-80">
+                  {tile.detail}
+                </p>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-current/10">
+                  <div
+                    className="h-full rounded-full bg-current transition-[width]"
+                    style={{
+                      width: `${Math.min(100, Math.max(4, tile.progress))}%`,
+                    }}
+                  />
+                </div>
+              </button>
+            ))}
+          </section>
           <section className="rounded-xl border border-primary-200 bg-primary-50/80 px-4 py-3 text-xs text-[var(--theme-muted)] shadow-sm">
-            <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">
+            <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr_1fr]">
               <div>
                 <h2 className="text-sm font-semibold text-primary-900">
-                  Swarm operator view
+                  Operator
                 </h2>
-                <p className="mt-1">{getSwarmSurfaceDistinction()}</p>
-                <p className="mt-1">
-                  Mission-to-worker mapping: {members.length} workers,{' '}
-                  {blockedWorkerCount} blocked, {reviewWorkerCount}{' '}
-                  review-needed, {staleWorkerCount} stale heartbeat badges.
-                </p>
-                <p className="mt-1">
-                  Recommended worker for selected task: {recommendedWorker}.
+                <p className="mt-1 truncate">
+                  {members.length} workers · {blockedWorkerCount} blocked ·{' '}
+                  {reviewWorkerCount} review · pick {recommendedWorker}.
                 </p>
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-primary-900">
-                  Worker controls
+                  Controls
                 </h2>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {['safe stop', 'pause', 'resume'].map((label) => (
+                  {['Stop', 'Pause', 'Resume'].map((label) => (
                     <button
                       key={label}
                       type="button"
                       onClick={() =>
-                        toast(
-                          `${label} requires confirmation in runtime controls`,
-                        )
+                        toast(`${label} requires runtime confirmation`)
                       }
                       className="rounded-full border border-[var(--theme-border)] px-3 py-1 text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
                     >
@@ -1926,43 +1133,30 @@ export function Swarm2Screen() {
                     }
                     className="rounded-full border border-[var(--theme-border)] px-3 py-1 text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
                   >
-                    Snapshot export
+                    JSON
                   </button>
                   <button
                     type="button"
                     onClick={() => setRouterOpen(true)}
                     className="rounded-full border border-[var(--theme-border)] px-3 py-1 text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
                   >
-                    Create task from output
+                    Task
                   </button>
                 </div>
-                <p className="mt-2">
-                  Cost guard and model/provider health are visible per worker;
-                  setup checks flag missing profiles or tools.
-                </p>
               </div>
               <div>
                 <h2 className="text-sm font-semibold text-primary-900">
-                  Mobile compact queue
+                  Glance
                 </h2>
                 <p className="mt-1">
                   Active {activeRuntimeCount}, blocked {blockedWorkerCount},
                   handoff {reviewWorkerCount}, logs {terminalTargets.length}.
                 </p>
-                <p className="mt-1">
-                  Recent reports and handoffs live in Reports; requires Tyler
-                  lane aggregates blocked/review worker output.
-                </p>
-                <p className="mt-1">
-                  Utilization trend: {activeRuntimeCount}/
-                  {Math.max(1, members.length)} active over time. Search/filter
-                  by worker, capability, mission, and status.
-                </p>
               </div>
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
               {(workerOperatorStates.length
-                ? workerOperatorStates.slice(0, 4)
+                ? workerOperatorStates.slice(0, 3)
                 : [
                     {
                       id: 'inactive',
@@ -1989,14 +1183,10 @@ export function Swarm2Screen() {
                   </div>
                   <p className="mt-1 truncate">{worker.assignment}</p>
                   <p className="mt-1">
-                    Last heartbeat {worker.lastHeartbeat} · queue depth{' '}
-                    {worker.queueDepth}
+                    Beat {worker.lastHeartbeat} · queue {worker.queueDepth}
                   </p>
-                  <p className="mt-1">
-                    Capability {worker.capability} · {worker.costGuard}
-                  </p>
-                  <p className="mt-1">
-                    Log/error preview available in runtime.
+                  <p className="mt-1 truncate">
+                    Cap {worker.capability} · {worker.costGuard}
                   </p>
                 </div>
               ))}
@@ -2067,200 +1257,38 @@ export function Swarm2Screen() {
         ) : null}
       </div>
 
-      {addSwarmOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-3xl border border-[var(--theme-border2)] bg-[var(--theme-card)] p-6 shadow-[0_30px_100px_var(--theme-shadow)]">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold text-[var(--theme-text)]">
-                  Add Swarm Agent
-                </h2>
-                <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                  Create a new swarm roster entry and configure its identity.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAddSwarmOpen(false)}
-                className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-1.5 text-[var(--theme-muted)] hover:text-[var(--theme-text)]"
-              >
-                Close
-              </button>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="block text-sm md:col-span-2">
-                <span className="mb-1 block text-[var(--theme-muted)]">
-                  Role preset
-                </span>
-                <select
-                  value={newWorkerRole}
-                  onChange={(e) => {
-                    const role = e.target.value
-                    setNewWorkerRole(role)
-                    const preset = ROLE_PRESETS.find((p) => p.role === role)
-                    if (preset && role !== 'Custom') {
-                      if (!newWorkerSpecialty.trim())
-                        setNewWorkerSpecialty(preset.specialty)
-                      if (!newWorkerMission.trim())
-                        setNewWorkerMission(preset.mission)
-                      if (preset.defaultModel && !newWorkerModel.trim())
-                        setNewWorkerModel(preset.defaultModel)
-                    }
-                  }}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
-                >
-                  {ROLE_NAMES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-[var(--theme-muted-2)]">
-                  Presets auto-fill specialty, mission, system prompt, and skill
-                  stack. Pick “Custom” for a blank slate.
-                </p>
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block text-[var(--theme-muted)]">
-                  Worker ID
-                </span>
-                <input
-                  value={newWorkerId}
-                  onChange={(e) => setNewWorkerId(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
-                  placeholder="swarmN"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block text-[var(--theme-muted)]">
-                  Display name
-                </span>
-                <input
-                  value={newWorkerName}
-                  onChange={(e) => setNewWorkerName(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
-                  placeholder="e.g. Mirror, Builder"
-                />
-              </label>
-              <label className="block text-sm md:col-span-2">
-                <span className="mb-1 flex items-center justify-between text-[var(--theme-muted)]">
-                  <span>Model</span>
-                  <span className="text-[10px] text-[var(--theme-muted-2)]">
-                    {availableModels.length > 0
-                      ? `${availableModels.length} available`
-                      : modelsQuery.isLoading
-                        ? 'loading…'
-                        : '0 found'}
-                  </span>
-                </span>
-                <input
-                  value={newWorkerModel}
-                  onChange={(e) => setNewWorkerModel(e.target.value)}
-                  list="swarm-add-models"
-                  placeholder={
-                    availableModels.length
-                      ? 'Search or pick a detected model…'
-                      : modelsQuery.isLoading
-                        ? 'Loading detected models…'
-                        : 'No models detected'
-                  }
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
-                />
-                <datalist id="swarm-add-models">
-                  {availableModels.map((m) => (
-                    <option key={m.id} value={m.name}>
-                      {m.provider}
-                    </option>
-                  ))}
-                </datalist>
-                <p className="mt-1 text-xs text-[var(--theme-muted-2)]">
-                  Searchable picker backed by /api/models, the same source as
-                  chat.{' '}
-                  {modelsQuery.isError
-                    ? 'Model discovery errored, so this is empty until refresh.'
-                    : 'Start typing to see every detected model from the user’s Hermes config and local providers.'}
-                </p>
-              </label>
-              <label className="block text-sm md:col-span-2">
-                <span className="mb-1 block text-[var(--theme-muted)]">
-                  Specialty
-                </span>
-                <input
-                  value={newWorkerSpecialty}
-                  onChange={(e) => setNewWorkerSpecialty(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
-                  placeholder={
-                    ROLE_PRESETS.find((p) => p.role === newWorkerRole)
-                      ?.specialty || 'short focus area'
-                  }
-                />
-              </label>
-              <label className="block text-sm md:col-span-2">
-                <span className="mb-1 block text-[var(--theme-muted)]">
-                  Mission
-                </span>
-                <textarea
-                  value={newWorkerMission}
-                  onChange={(e) => setNewWorkerMission(e.target.value)}
-                  rows={3}
-                  className="w-full resize-none rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
-                  placeholder={
-                    ROLE_PRESETS.find((p) => p.role === newWorkerRole)
-                      ?.mission || 'standing mission for this worker'
-                  }
-                />
-              </label>
-              {ROLE_PRESETS.find((p) => p.role === newWorkerRole)
-                ?.systemPrompt ? (
-                <div className="md:col-span-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card2)] px-3 py-2 text-xs text-[var(--theme-muted-2)]">
-                  <div className="mb-1 font-semibold text-[var(--theme-muted)]">
-                    System prompt (embedded with role)
-                  </div>
-                  <div className="whitespace-pre-wrap leading-relaxed">
-                    {
-                      ROLE_PRESETS.find((p) => p.role === newWorkerRole)
-                        ?.systemPrompt
-                    }
-                  </div>
-                  <div className="mt-2 font-semibold text-[var(--theme-muted)]">
-                    Skills loaded
-                  </div>
-                  <div className="font-mono">
-                    {(
-                      ROLE_PRESETS.find((p) => p.role === newWorkerRole)
-                        ?.skills ?? []
-                    ).join(', ') || '—'}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            {addSwarmError ? (
-              <div className="mt-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                {addSwarmError}
-              </div>
-            ) : null}
-            <div className="mt-4 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setAddSwarmOpen(false)}
-                className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-2 text-sm text-[var(--theme-muted)] hover:text-[var(--theme-text)]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={
-                  addSwarmSaving || !newWorkerId.trim() || !newWorkerName.trim()
-                }
-                onClick={() => void saveAddSwarm()}
-                className="rounded-lg bg-[var(--theme-accent)] px-4 py-2 text-sm font-medium text-primary-950 disabled:opacity-50"
-              >
-                {addSwarmSaving ? 'Saving…' : 'Save swarm agent'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <Swarm2AddAgentModal
+        open={addSwarmOpen}
+        saving={addSwarmSaving}
+        error={addSwarmError}
+        modelsLoading={modelsQuery.isLoading}
+        modelsError={modelsQuery.isError}
+        availableModels={availableModels}
+        workerId={newWorkerId}
+        workerName={newWorkerName}
+        workerRole={newWorkerRole}
+        workerSpecialty={newWorkerSpecialty}
+        workerModel={newWorkerModel}
+        workerMission={newWorkerMission}
+        onClose={() => setAddSwarmOpen(false)}
+        onSave={() => void saveAddSwarm()}
+        onWorkerIdChange={setNewWorkerId}
+        onWorkerNameChange={setNewWorkerName}
+        onWorkerRoleChange={(role) => {
+          setNewWorkerRole(role)
+          const preset = ROLE_PRESETS.find((item) => item.role === role)
+          if (preset && role !== 'Custom') {
+            if (!newWorkerSpecialty.trim())
+              setNewWorkerSpecialty(preset.specialty)
+            if (!newWorkerMission.trim()) setNewWorkerMission(preset.mission)
+            if (preset.defaultModel && !newWorkerModel.trim())
+              setNewWorkerModel(preset.defaultModel)
+          }
+        }}
+        onWorkerSpecialtyChange={setNewWorkerSpecialty}
+        onWorkerModelChange={setNewWorkerModel}
+        onWorkerMissionChange={setNewWorkerMission}
+      />
 
       <RouterChat
         members={members}

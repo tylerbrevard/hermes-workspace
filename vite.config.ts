@@ -28,7 +28,8 @@ import viteTsConfigPaths from 'vite-tsconfig-paths'
 function resolveClaudeAgentDir(env: Record<string, string>): string | null {
   const candidates: string[] = []
 
-  const explicitAgentPath = env.HERMES_AGENT_PATH?.trim() || env.CLAUDE_AGENT_PATH?.trim()
+  const explicitAgentPath =
+    env.HERMES_AGENT_PATH?.trim() || env.CLAUDE_AGENT_PATH?.trim()
   if (explicitAgentPath) {
     candidates.push(explicitAgentPath)
   }
@@ -438,6 +439,9 @@ const config = defineConfig(({ mode, command }) => {
       exclude: [
         '**/node_modules/**',
         '**/dist/**',
+        '**/e2e/**',
+        '**/playwright-report/**',
+        '**/test-results/**',
         '**/skills-bundle/**',
         '**/.{idea,git,cache,output,temp}/**',
       ],
@@ -569,7 +573,11 @@ const config = defineConfig(({ mode, command }) => {
       chunkSizeWarningLimit: 3000,
       rollupOptions: {
         onwarn(warning, warn) {
-          if (warning.message.includes('dynamic import will not move module into another chunk')) {
+          if (
+            warning.message.includes(
+              'dynamic import will not move module into another chunk',
+            )
+          ) {
             return
           }
           warn(warning)
@@ -741,9 +749,11 @@ const config = defineConfig(({ mode, command }) => {
           )
           result = result.replace(
             /process\.env\.TSS_ROUTER_BASEPATH/g,
-            JSON.stringify(appBasePath === '/' ? '/' : appBasePath.replace(/\/$/, '')),
+            JSON.stringify(
+              appBasePath === '/' ? '/' : appBasePath.replace(/\/$/, ''),
+            ),
           )
-          result = result.replace(/process\.env/g, '{}')
+          result = result.replace(/(?<![\w$.])process\.env/g, '{}')
           result = result.replace(/process\.platform/g, '"browser"')
           return { code: result, map: null }
         },

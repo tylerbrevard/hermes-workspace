@@ -68,14 +68,22 @@ export const Route = createFileRoute('/api/iot/m5-ota')({
           const version = url.searchParams.get('version')
 
           if (download === 'true' && version) {
-            const firmware = getFirmwareList().find((item) => item.version === version)
+            const firmware = getFirmwareList().find(
+              (item) => item.version === version,
+            )
             if (!firmware) {
-              return json({ error: 'Firmware version not found' }, { status: 404 })
+              return json(
+                { error: 'Firmware version not found' },
+                { status: 404 },
+              )
             }
 
             const filePath = join(FIRMWARE_DIR, firmware.filename)
             if (!existsSync(filePath)) {
-              return json({ error: 'Firmware file not found on disk' }, { status: 404 })
+              return json(
+                { error: 'Firmware file not found on disk' },
+                { status: 404 },
+              )
             }
 
             const fileData = readFileSync(filePath)
@@ -101,7 +109,9 @@ export const Route = createFileRoute('/api/iot/m5-ota')({
           }
           const allFirmware = getFirmwareList()
           const latest = allFirmware[0] || null
-          const currentVersion = deviceId ? getDeviceFirmwareVersion(deviceId) : null
+          const currentVersion = deviceId
+            ? getDeviceFirmwareVersion(deviceId)
+            : null
 
           return json({
             latest: latest
@@ -111,7 +121,9 @@ export const Route = createFileRoute('/api/iot/m5-ota')({
                   uploaded_at: latest.uploaded_at,
                 }
               : null,
-            available: Boolean(latest && currentVersion && latest.version !== currentVersion),
+            available: Boolean(
+              latest && currentVersion && latest.version !== currentVersion,
+            ),
             currentVersion,
             allVersions: allFirmware.map((firmware) => ({
               version: firmware.version,
@@ -123,7 +135,10 @@ export const Route = createFileRoute('/api/iot/m5-ota')({
         } catch (error) {
           return json(
             {
-              error: error instanceof Error ? error.message : 'Failed to process OTA request',
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to process OTA request',
             },
             { status: 500 },
           )

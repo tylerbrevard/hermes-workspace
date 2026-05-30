@@ -189,13 +189,13 @@ function getActionableMessage(
       return `Run \`${cliCmd}\` in terminal to re-authenticate your session.`
     }
     if (provider === 'openai') {
-      return 'Run `chatgpt` in terminal to refresh your ChatGPT session, or update your API key in Settings → Providers.'
+      return 'Run `chatgpt` in terminal to refresh your ChatGPT session, or update your API key in Settings → Model.'
     }
-    return 'Re-authenticate your provider session or update your API key in Settings → Providers.'
+    return 'Re-authenticate your provider session or update your API key in Settings → Model.'
   }
 
   if (status === 'missing_credentials') {
-    return "Add your API key in Settings → Providers, or run the provider's CLI to authenticate."
+    return "Add your API key in Settings → Model, or run the provider's CLI to authenticate."
   }
 
   if (status === 'error') {
@@ -387,7 +387,8 @@ export function UsageDetailsModal({
               <div className="grid gap-2">
                 {usage.models.length === 0 ? (
                   <div className="text-sm text-primary-500">
-                    No model usage reported yet. Send a message to start tracking usage here.
+                    No model usage reported yet. Send a message to start
+                    tracking usage here.
                   </div>
                 ) : (
                   usage.models.map((model) => (
@@ -418,7 +419,8 @@ export function UsageDetailsModal({
               <div className="grid gap-2">
                 {usage.sessions.length === 0 ? (
                   <div className="text-sm text-primary-500">
-                    No sessions reported yet. Start a chat to see session history here.
+                    No sessions reported yet. Start a chat to see session
+                    history here.
                   </div>
                 ) : (
                   usage.sessions.map((session) => (
@@ -487,10 +489,10 @@ export function UsageDetailsModal({
               {providerUsage.length === 0 ? (
                 <div className="rounded-2xl border border-primary-200 bg-primary-50/70 p-6 text-center">
                   <div className="text-sm font-medium text-primary-700">
-                    No providers connected. Add a provider in Settings to start chatting.
+                    No providers connected.
                   </div>
                   <div className="mt-1 text-xs text-primary-500">
-                    Open Settings -{'>'} Providers to connect Claude CLI or add an API key.
+                    Settings - Model connects Claude CLI or API keys.
                   </div>
                 </div>
               ) : (

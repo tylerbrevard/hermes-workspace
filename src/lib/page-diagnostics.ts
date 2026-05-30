@@ -1,4 +1,5 @@
-import { findWorkspaceRouteRegistryEntry } from './workspace-route-registry'
+import { readJsonStorage, writeJsonStorage } from './typed-storage'
+import { buildWorkspaceRouteDiagnosticContext } from './workspace-route-registry'
 
 export type DiagnosticEvent = {
   id: string
@@ -27,6 +28,23 @@ const MAX_EVENTS = 80
 let fetchPatched = false
 let consolePatched = false
 
+function isDiagnosticEvent(value: unknown): value is DiagnosticEvent {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const event = value as Partial<Record<keyof DiagnosticEvent, unknown>>
+  return (
+    typeof event.id === 'string' &&
+    typeof event.type === 'string' &&
+    typeof event.route === 'string' &&
+    typeof event.timestamp === 'string'
+  )
+}
+
+function isDiagnosticEventArray(
+  value: unknown,
+): value is Array<DiagnosticEvent> {
+  return Array.isArray(value) && value.every(isDiagnosticEvent)
+}
+
 function nowIso() {
   return new Date().toISOString()
 }
@@ -41,15 +59,9 @@ function makeId() {
 }
 
 export function readDiagnosticEvents(): Array<DiagnosticEvent> {
-  if (typeof localStorage === 'undefined') return []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.slice(-MAX_EVENTS) : []
-  } catch {
-    return []
-  }
+  return readJsonStorage(STORAGE_KEY, [], isDiagnosticEventArray).value.slice(
+    -MAX_EVENTS,
+  )
 }
 
 export function recordDiagnosticEvent(
@@ -58,7 +70,6 @@ export function recordDiagnosticEvent(
     timestamp?: string
   },
 ) {
-  if (typeof localStorage === 'undefined') return
   try {
     const events = readDiagnosticEvents()
     events.push({
@@ -67,7 +78,7 @@ export function recordDiagnosticEvent(
       timestamp: event.timestamp ?? nowIso(),
       ...event,
     })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(events.slice(-MAX_EVENTS)))
+    writeJsonStorage(STORAGE_KEY, events.slice(-MAX_EVENTS))
   } catch {
     // Diagnostics must never affect the page being diagnosed.
   }
@@ -209,7 +220,7 @@ export function installPageDiagnostics() {
 export function buildDiagnosticBundle(extra?: Record<string, unknown>) {
   const route = currentRoute()
   const routePath = route.split('?')[0] || route
-  const routeRegistry = findWorkspaceRouteRegistryEntry(routePath)
+  const routeContext = buildWorkspaceRouteDiagnosticContext(routePath)
   const performanceEntries =
     typeof performance === 'undefined'
       ? []
@@ -228,7 +239,8 @@ export function buildDiagnosticBundle(extra?: Record<string, unknown>) {
   return {
     capturedAt: nowIso(),
     route,
-    routeRegistry,
+    routeRegistry: routeContext.registry,
+    routeContext,
     userAgent: typeof navigator === 'undefined' ? null : navigator.userAgent,
     viewport:
       typeof window === 'undefined'

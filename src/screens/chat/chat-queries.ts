@@ -13,6 +13,11 @@ type StatusResponse = {
   status?: number
 }
 
+type CachedHistoryData = {
+  sessionId?: string
+  messages?: Array<ChatMessage>
+}
+
 function normalizeId(value: unknown): string {
   if (typeof value !== 'string') return ''
   const trimmed = value.trim()
@@ -470,12 +475,12 @@ export function moveHistoryMessages(
 ) {
   const fromKey = chatQueryKeys.history(fromFriendlyId, fromSessionKey)
   const toKey = chatQueryKeys.history(toFriendlyId, toSessionKey)
-  const fromData = queryClient.getQueryData(fromKey)
+  const fromData = queryClient.getQueryData<CachedHistoryData>(fromKey)
   if (!fromData) return
   const messages = Array.isArray(fromData.messages) ? fromData.messages : []
   queryClient.setQueryData(toKey, {
     sessionKey: toSessionKey,
-    sessionId: (fromData as any).sessionId,
+    sessionId: fromData.sessionId,
     messages,
   })
   queryClient.removeQueries({ queryKey: fromKey, exact: true })
@@ -535,14 +540,17 @@ export function reconcileSessionDraft(
             key: toSessionKey,
             friendlyId: toFriendlyId,
             lastMessage: source.lastMessage ?? session.lastMessage,
-            updatedAt: Math.max(source.updatedAt ?? 0, session.updatedAt ?? 0) ||
+            updatedAt:
+              Math.max(source.updatedAt ?? 0, session.updatedAt ?? 0) ||
               session.updatedAt ||
               source.updatedAt,
             label: session.label ?? source.label,
             title: session.title ?? source.title,
             derivedTitle: session.derivedTitle ?? source.derivedTitle,
             titleStatus:
-              session.titleStatus === 'idle' ? source.titleStatus : session.titleStatus,
+              session.titleStatus === 'idle'
+                ? source.titleStatus
+                : session.titleStatus,
             titleSource: session.titleSource ?? source.titleSource,
             titleError: session.titleError ?? source.titleError,
           },

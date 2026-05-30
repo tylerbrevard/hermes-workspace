@@ -26,8 +26,10 @@ function readVisibleRoutes(): Array<VisibleRoute> {
 
 describe('workspace improvement catalog', () => {
   it('tracks 20 recommendations for every visible workspace menu page', () => {
-    expect(WORKSPACE_IMPROVEMENT_PAGES).toHaveLength(23)
-    expect(countWorkspaceRecommendations()).toBe(460)
+    const visibleRoutes = readVisibleRoutes()
+
+    expect(WORKSPACE_IMPROVEMENT_PAGES).toHaveLength(visibleRoutes.length)
+    expect(countWorkspaceRecommendations()).toBe(visibleRoutes.length * 20)
     for (const page of WORKSPACE_IMPROVEMENT_PAGES) {
       expect(page.recommendations).toHaveLength(20)
     }

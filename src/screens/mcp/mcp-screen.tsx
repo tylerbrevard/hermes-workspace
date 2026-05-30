@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
+import {
+  AppStoreIcon,
+  CommandIcon,
+  PackageIcon,
+  RefreshIcon,
+  Shield01Icon,
+} from '@hugeicons/core-free-icons'
 import { McpServerCard } from './components/mcp-server-card'
 import { McpServerDialog } from './components/mcp-server-dialog'
 import { InstallConfirmationDialog } from './components/install-confirmation-dialog'
@@ -9,19 +16,35 @@ import { useMcpServers } from './hooks/use-mcp-servers'
 import { useMcpHub } from './hooks/use-mcp-hub'
 import { SourcesManagerDialog } from './components/sources-manager-dialog'
 import type { HubMcpEntry } from './hooks/use-mcp-hub'
+import type { HugeIcon } from '@/screens/dashboard/dashboard-ui'
 import type { McpClientInput, McpServer } from '@/types/mcp'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 import { Tabs, TabsList, TabsPanel, TabsTab } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { withBasePath } from '@/lib/base-path'
 
 type Tab = 'installed' | 'marketplace'
 type McpFocus = 'all' | 'failed' | 'stale' | 'auth'
+type McpCommandAction = 'all' | 'failed' | 'tools' | 'auth' | 'marketplace'
+
+const MCP_COMMAND_ICONS: Record<McpCommandAction, HugeIcon> = {
+  all: CommandIcon,
+  failed: Shield01Icon,
+  tools: PackageIcon,
+  auth: Shield01Icon,
+  marketplace: AppStoreIcon,
+}
 
 const TOOLBAR_FIELD =
   'h-9 w-full min-w-0 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none transition-colors focus:border-primary sm:min-w-[220px]'
 
 function formatRefreshTime(updatedAt: number): string {
-  if (!updatedAt) return 'not loaded yet'
+  if (!updatedAt) return 'Not loaded'
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
@@ -39,7 +62,7 @@ function daysSince(value?: string): number | null {
 
 function isStaleServer(server: McpServer): boolean {
   const age = daysSince(server.lastTestedAt)
-  return !server.lastTestedAt || (age != null && age > 7)
+  return Boolean(server.lastTestedAt && age != null && age > 7)
 }
 
 export function getMcpConfigPaths(mode: string) {
@@ -97,9 +120,9 @@ export function buildMcpDiagnosticsExport(servers: Array<McpServer>): string {
 
 export function getMcpEmptyStateCopy(mode: string) {
   if (mode === 'fallback') {
-    return 'Backend support is in config fallback mode. Add only known local servers, test each connection, and do not paste secrets into marketplace templates.'
+    return 'config fallback. Test first.'
   }
-  return 'Add a server, test the connection, then discover tools before routing agent work to it. Do not install unverified remote tools without reviewing the command and permissions.'
+  return 'Add, test, route.'
 }
 
 export function sortMcpServersForAttention(servers: Array<McpServer>) {
@@ -119,12 +142,12 @@ export function sortMcpServersForAttention(servers: Array<McpServer>) {
 }
 
 export function getMcpPrimaryAction(server: McpServer): string {
-  if (server.status === 'failed') return 'Test and inspect logs'
-  if (server.lastError) return 'Open failed diagnostic'
+  if (server.status === 'failed') return 'Logs'
+  if (server.lastError) return 'Diag'
   if (server.authType !== 'none' || server.hasBearerToken) return 'Verify auth'
-  if (isStaleServer(server)) return 'Retest server'
-  if (!server.enabled) return 'Enable when needed'
-  return 'Review tools'
+  if (isStaleServer(server)) return 'Retest'
+  if (!server.enabled) return 'Enable'
+  return 'Tools'
 }
 
 export function getMcpCapabilityMatrixRows(servers: Array<McpServer>) {
@@ -161,6 +184,85 @@ export function getMcpSkillRoute(server: McpServer): string {
   return '/skills?search=mcp'
 }
 
+export function buildMcpGuidedSetupSteps(
+  servers: Array<McpServer>,
+  mode: string,
+) {
+  const enabled = servers.filter((server) => server.enabled)
+  const failed = servers.filter(
+    (server) => server.status === 'failed' || Boolean(server.lastError),
+  )
+  const stale = servers.filter(isStaleServer)
+  const credentialed = servers.filter(
+    (server) => server.authType !== 'none' || server.hasBearerToken,
+  )
+  const undiscovered = enabled.filter(
+    (server) => server.discoveredToolsCount === 0,
+  )
+  const connected = enabled.filter((server) => server.status === 'connected')
+
+  return [
+    {
+      id: 'config-source',
+      label: 'Config',
+      status: mode === 'fallback' ? 'needs review' : 'ready',
+      detail: mode === 'fallback' ? 'Fallback' : 'Native',
+      action: mode === 'fallback' ? 'Mode' : 'API',
+    },
+    {
+      id: 'connection-test',
+      label: 'Tests',
+      status:
+        failed.length > 0
+          ? `${failed.length} failing`
+          : stale.length > 0
+            ? `${stale.length} stale`
+            : enabled.length > 0
+              ? 'ready'
+              : 'not configured',
+      detail:
+        failed[0]?.lastError ||
+        (failed[0] ? `${failed[0].name} failed last check` : null) ||
+        (stale[0] ? `${stale[0].name} stale` : null) ||
+        `${connected.length} live`,
+      action:
+        failed.length > 0
+          ? 'Open logs'
+          : stale.length > 0
+            ? 'Retest'
+            : 'Review health',
+    },
+    {
+      id: 'tool-discovery',
+      label: 'Discovery',
+      status:
+        undiscovered.length > 0
+          ? `${undiscovered.length} missing`
+          : enabled.length > 0
+            ? 'ready'
+            : 'not configured',
+      detail:
+        undiscovered[0] != null
+          ? `${undiscovered[0].name}: no tools`
+          : 'Ready',
+      action: undiscovered.length > 0 ? 'Discover' : 'Matrix',
+    },
+    {
+      id: 'security-review',
+      label: 'Security',
+      status:
+        credentialed.length > 0
+          ? `${credentialed.length} credentialed`
+          : 'low-risk',
+      detail:
+        credentialed[0] != null
+          ? `${credentialed[0].name}: ${credentialed[0].authType} auth`
+          : 'None',
+      action: credentialed.length > 0 ? 'Verify auth' : 'Risk',
+    },
+  ]
+}
+
 export function McpScreen() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<Tab>('installed')
@@ -175,7 +277,6 @@ export function McpScreen() {
   const [focus, setFocus] = useState<McpFocus>('all')
 
   const { mode: capabilityMode } = useMcpCapabilityMode()
-  const configPaths = getMcpConfigPaths(capabilityMode)
   // Marketplace tab uses useMcpHub instead; coerce to 'installed' so the
   // server-list query stays valid but its results aren't rendered there.
   const serverListTab = tab === 'marketplace' ? 'installed' : tab
@@ -231,6 +332,45 @@ export function McpScreen() {
       ),
     [servers],
   )
+  const commandSummary = useMemo(() => {
+    const enabled = servers.filter((server) => server.enabled)
+    const credentialed = servers.filter(
+      (server) => server.authType !== 'none' || server.hasBearerToken,
+    )
+    const undiscovered = enabled.filter(
+      (server) => server.discoveredToolsCount === 0,
+    )
+    const totalTools = enabled.reduce(
+      (sum, server) => sum + server.discoveredToolsCount,
+      0,
+    )
+    const nextServer =
+      lastErrorServer ?? staleServers[0] ?? attentionServers[0] ?? null
+    return {
+      credentialed: credentialed.length,
+      undiscovered: undiscovered.length,
+      totalTools,
+      nextServer,
+      posture:
+        serverCounts.failed > 0
+          ? 'Repair failing tools'
+          : staleServers.length > 0
+            ? 'Retest stale tools'
+            : undiscovered.length > 0
+              ? 'Discover tools'
+              : 'Ready to route work',
+    }
+  }, [
+    attentionServers,
+    lastErrorServer,
+    serverCounts.failed,
+    servers,
+    staleServers,
+  ])
+  const guidedSetupSteps = useMemo(
+    () => buildMcpGuidedSetupSteps(servers, capabilityMode),
+    [servers, capabilityMode],
+  )
 
   const hubQuery = useMcpHub(tab === 'marketplace' ? search : '')
 
@@ -246,22 +386,91 @@ export function McpScreen() {
       ? `${(hubQuery.data?.total ?? 0).toLocaleString()} results`
       : `${servers.length.toLocaleString()} servers`
 
+  const commandTiles: Array<{
+    id: string
+    title: string
+    value: string
+    detail: string
+    tone: 'neutral' | 'blue' | 'green' | 'amber' | 'red' | 'purple'
+    action: McpCommandAction
+  }> = [
+    {
+      id: 'all',
+      title: 'Servers',
+      value: String(serverCounts.enabled),
+      detail: `${serverCounts.connected} live`,
+      tone: serverCounts.failed > 0 ? 'amber' : 'green',
+      action: 'all',
+    },
+    {
+      id: 'failed',
+      title: 'Issues',
+      value: String(serverCounts.failed),
+      detail: lastErrorServer?.name || 'Clear',
+      tone: serverCounts.failed > 0 ? 'red' : 'green',
+      action: 'failed',
+    },
+    {
+      id: 'tools',
+      title: 'Tools',
+      value: String(commandSummary.totalTools),
+      detail:
+        commandSummary.undiscovered > 0
+          ? `${commandSummary.undiscovered} missing`
+          : 'Discovered',
+      tone: commandSummary.undiscovered > 0 ? 'amber' : 'blue',
+      action: 'tools',
+    },
+    {
+      id: 'auth',
+      title: 'Auth',
+      value: String(commandSummary.credentialed),
+      detail: commandSummary.credentialed > 0 ? 'Verify' : 'None',
+      tone: commandSummary.credentialed > 0 ? 'purple' : 'neutral',
+      action: 'auth',
+    },
+    {
+      id: 'marketplace',
+      title: 'Catalog',
+      value:
+        tab === 'marketplace'
+          ? String(hubQuery.data?.total ?? 0)
+          : String(serverCounts.presets),
+      detail: tab === 'marketplace' ? 'Results' : 'Presets',
+      tone: 'blue',
+      action: 'marketplace',
+    },
+  ]
+
+  function handleCommandAction(action: McpCommandAction) {
+    if (action === 'marketplace') {
+      setTab('marketplace')
+      setSearch('')
+      return
+    }
+    if (action === 'auth') {
+      setFocus('auth')
+      setTab('installed')
+      return
+    }
+    if (action === 'failed') {
+      setFocus('failed')
+      setTab('installed')
+      return
+    }
+    setFocus('all')
+    setTab('installed')
+  }
+
   return (
     <div className="min-h-full overflow-y-auto bg-surface text-ink">
-      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 pb-[calc(var(--tabbar-h,80px)+1.5rem)] sm:px-6 lg:px-8">
-        <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium uppercase text-primary-500 tabular-nums">
-                Hermes Workspace · MCP
-              </p>
-              <h1 className="text-2xl font-medium text-ink text-balance sm:text-3xl">
+      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-3 px-3 py-3 pb-[calc(var(--tabbar-h,80px)+0.75rem)] sm:gap-4 sm:px-6 sm:py-5 lg:px-8">
+        <header className="rounded-xl border border-primary-200 bg-primary-50/85 p-3 backdrop-blur-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-ink text-balance">
                 MCP Servers
               </h1>
-              <p className="text-sm text-primary-500 text-pretty sm:text-base">
-                Discover, install, and manage Model Context Protocol servers
-                exposed to Hermes Agent.
-              </p>
             </div>
             <Button
               variant="outline"
@@ -271,20 +480,20 @@ export function McpScreen() {
                 setDialogOpen(true)
               }}
             >
-              Add Server
+              Add
             </Button>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+          <div className="mt-3 hidden grid-cols-2 gap-2 text-xs sm:grid sm:grid-cols-5">
             {[
               ['Total', serverCounts.total],
               ['Enabled', serverCounts.enabled],
-              ['Connected', serverCounts.connected],
+              ['Live', serverCounts.connected],
               ['Failed', serverCounts.failed],
               ['Presets', serverCounts.presets],
             ].map(([label, value]) => (
               <div
                 key={String(label)}
-                className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2"
+                className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-1.5"
               >
                 <span className="text-primary-500">{label}</span>
                 <p className="mt-1 text-lg font-semibold text-ink">
@@ -293,66 +502,155 @@ export function McpScreen() {
               </div>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-primary-500">
+          <div className="mt-3 hidden flex-wrap items-center gap-2 text-xs text-primary-500 sm:flex">
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Source: Hermes Agent MCP endpoints
+              Agent MCP
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Last refreshed: {formatRefreshTime(query.dataUpdatedAt)}
+              {formatRefreshTime(query.dataUpdatedAt)}
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Health:{' '}
+              Health{' '}
               {query.isError
-                ? 'server list unavailable'
+                ? 'unavailable'
                 : serverCounts.failed > 0
                   ? `${serverCounts.failed} failing`
-                  : 'no failures reported'}
+                  : 'ok'}
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Stale catalogs: {staleServers.length}
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Config: {configPaths.detected}
+              Stale {staleServers.length}
             </span>
           </div>
-          <details className="mt-3 rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2 text-xs text-primary-600">
-            <summary className="cursor-pointer font-semibold text-primary-700">
-              Model Context Protocol help
-            </summary>
-            <p className="mt-1 text-pretty">
-              MCP servers expose external tools to agents. Test connection,
-              inspect tools, review security scope, and only then route Hermes
-              or Codex jobs to the server.
-            </p>
-          </details>
           {capabilityMode === 'fallback' ? (
             <div
               role="status"
               className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
             >
-              ⚠ Local fallback mode — using config.yaml. Test, Discover, and
-              Logs require the new hermes-agent /api/mcp endpoints.
+              Fallback config. Some actions need /api/mcp.
             </div>
           ) : null}
-          <div className="mt-4 grid gap-2 text-xs md:grid-cols-3">
+          <AppSurface className="mt-3">
+            <AppSectionHeader
+              title="MCP command center"
+              meta={commandSummary.posture}
+              action={
+                <AppStatusPill
+                  tone={
+                    query.isError || serverCounts.failed > 0
+                      ? 'red'
+                      : staleServers.length > 0
+                        ? 'amber'
+                        : 'green'
+                  }
+                >
+                  {query.isError
+                    ? 'Offline'
+                    : serverCounts.failed > 0
+                      ? 'Repair'
+                      : staleServers.length > 0
+                        ? 'Retest'
+                        : 'Ready'}
+                </AppStatusPill>
+              }
+            />
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+              {commandTiles.map((tile) => (
+                <AppTile
+                  key={tile.id}
+                  title={tile.title}
+                  value={tile.value}
+                  detail={tile.detail}
+                  icon={MCP_COMMAND_ICONS[tile.action]}
+                  tone={tile.tone}
+                  actionLabel={
+                    tile.action === 'marketplace'
+                      ? 'Browse'
+                      : tile.action === 'failed'
+                        ? 'Repair'
+                        : 'Open'
+                  }
+                  className="min-h-[118px]"
+                  onClick={() => handleCommandAction(tile.action)}
+                />
+              ))}
+            </div>
+          </AppSurface>
+          <section className="mt-3 hidden rounded-xl border border-primary-200 bg-primary-100/50 p-3 md:block">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-500">
+                  Tool routing cockpit
+                </p>
+                <h2 className="mt-1 text-sm font-semibold text-ink">
+                  {commandSummary.posture}
+                </h2>
+                <p className="mt-1 line-clamp-1 text-xs text-primary-500">
+                  {commandSummary.nextServer
+                    ? `${commandSummary.nextServer.name}: ${
+                        commandSummary.nextServer.lastError ||
+                        getMcpPrimaryAction(commandSummary.nextServer)
+                      }`
+                    : 'Add or browse.'}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                {[
+                  ['Tools', commandSummary.totalTools],
+                  ['Auth', commandSummary.credentialed],
+                  ['No tools', commandSummary.undiscovered],
+                  ['Stale', staleServers.length],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="min-w-[72px] rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1.5"
+                  >
+                    <span className="block text-[10px] uppercase tracking-[0.12em] text-primary-500">
+                      {label}
+                    </span>
+                    <span className="mt-1 block text-lg font-semibold text-ink">
+                      {String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              {[
+                { key: 'failed' as const, label: 'Failures' },
+                { key: 'stale' as const, label: 'Retest' },
+                { key: 'auth' as const, label: 'Auth' },
+                { key: 'all' as const, label: 'Matrix' },
+              ].map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  onClick={() => setFocus(action.key)}
+                  className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-left text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100"
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </section>
+          <div className="mt-3 hidden gap-2 text-xs md:grid md:grid-cols-3">
             <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2">
               <span className="block text-[10px] font-semibold uppercase tracking-wide text-primary-500">
-                Server health
+                Health
               </span>
               <span className="mt-1 block text-lg font-semibold text-ink">
                 {serverCounts.failed > 0
                   ? `${serverCounts.failed} failing`
                   : staleServers.length > 0
-                    ? `${staleServers.length} stale checks`
-                    : `${serverCounts.connected} connected`}
+                    ? `${staleServers.length} stale`
+                    : `${serverCounts.connected} live`}
               </span>
               <span className="mt-0.5 block truncate text-primary-500">
-                {serverCounts.enabled} enabled of {serverCounts.total}
+                {serverCounts.enabled}/{serverCounts.total} enabled
               </span>
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2 md:col-span-2">
               <span className="block text-[10px] font-semibold uppercase tracking-wide text-primary-500">
-                Last tool error
+                Last error
               </span>
               {lastErrorServer ? (
                 <>
@@ -367,21 +665,21 @@ export function McpScreen() {
               ) : (
                 <>
                   <span className="mt-1 block font-semibold text-ink">
-                    No tool errors reported
+                    Clear
                   </span>
                   <span className="mt-0.5 block text-primary-500">
-                    Run Test on stale servers before relying on them.
+                    Retest stale.
                   </span>
                 </>
               )}
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-left text-xs sm:grid-cols-4">
+          <div className="mt-4 hidden grid-cols-2 gap-2 text-left text-xs sm:grid sm:grid-cols-4">
             {[
               { key: 'all' as const, label: 'All', value: serverCounts.total },
               {
                 key: 'failed' as const,
-                label: 'Recently failed',
+                label: 'Failed',
                 value:
                   serverCounts.failed +
                   servers.filter((server) => server.lastError).length,
@@ -421,6 +719,48 @@ export function McpScreen() {
           </div>
         </header>
 
+        <section className="hidden rounded-xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl md:block">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500">
+                Setup
+              </h2>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 text-xs"
+              onClick={() => {
+                setTab('marketplace')
+                setSearch('')
+              }}
+            >
+              Browse
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-4">
+            {guidedSetupSteps.map((step) => (
+              <article
+                key={step.id}
+                className="rounded-xl border border-primary-200 bg-primary-100/55 px-3 py-2 text-xs"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-ink">{step.label}</div>
+                  <span className="rounded-md border border-primary-200 bg-primary-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-primary-500">
+                    {step.status}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-1 text-primary-500">
+                  {step.detail}
+                </p>
+                <div className="mt-2 text-[11px] font-semibold text-primary-700">
+                  {step.action}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
         <section className="grid gap-2 md:hidden">
           {visibleServers.slice(0, 3).map((server) => (
             <article
@@ -448,16 +788,12 @@ export function McpScreen() {
           ))}
         </section>
 
-        <section className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl sm:p-4">
+        <section className="hidden rounded-xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl md:block">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500">
-                Capability Matrix
+                Matrix
               </h2>
-              <p className="text-xs text-primary-500">
-                Tools, resources, prompts, auth, risk, and skill handoff per
-                server.
-              </p>
             </div>
           </div>
           <div className="mt-3 overflow-auto rounded-xl border border-primary-200">
@@ -517,7 +853,7 @@ export function McpScreen() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl sm:p-4">
+        <section className="hidden rounded-xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl md:block">
           <Tabs value={tab} onValueChange={handleTabChange}>
             <div className="flex flex-wrap items-center gap-2">
               <TabsList
@@ -538,7 +874,7 @@ export function McpScreen() {
                 placeholder={
                   tab === 'marketplace'
                     ? 'Search MCP catalog…'
-                    : 'Search servers and tools'
+                    : 'Search'
                 }
                 className={`${TOOLBAR_FIELD} flex-1`}
               />
@@ -591,7 +927,7 @@ export function McpScreen() {
               {hubQuery.data?.warnings && hubQuery.data.warnings.length > 0 ? (
                 hubQuery.data.results.length > 0 ? (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    ⚠ One or more sources unavailable; showing local results.
+                    Source fallback.
                     <span className="ml-1 text-[11px] text-primary-500">
                       ({hubQuery.data.warnings[0]})
                     </span>
@@ -629,7 +965,7 @@ export function McpScreen() {
                   >
                     {hubQuery.isFetchingNextPage
                       ? 'Loading…'
-                      : `Load more (${(hubQuery.data?.results.length ?? 0).toLocaleString()} of ${(hubQuery.data?.total ?? 0).toLocaleString()})`}
+                      : `More (${(hubQuery.data?.results.length ?? 0).toLocaleString()}/${(hubQuery.data?.total ?? 0).toLocaleString()})`}
                   </Button>
                 </div>
               ) : null}
@@ -640,7 +976,7 @@ export function McpScreen() {
         <footer className="flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-2.5 text-sm text-primary-500 tabular-nums">
           <span>{totalLabel}</span>
           <span className="text-xs">
-            mode: {capabilityMode === 'fallback' ? 'config fallback' : 'native'}
+            {capabilityMode === 'fallback' ? 'fallback' : 'native'}
           </span>
         </footer>
       </div>
@@ -684,15 +1020,15 @@ function ServerList({
   if (query.isLoading) {
     return (
       <EmptyCard
-        title="Loading servers…"
-        description="Fetching MCP servers from Hermes Agent."
+        title="Loading…"
+        description="MCP servers"
       />
     )
   }
   if (query.isError) {
     return (
       <EmptyCard
-        title="Failed to load servers"
+        title="Load failed"
         description={query.error.message}
         tone="danger"
       />
@@ -701,18 +1037,13 @@ function ServerList({
   if (servers.length === 0) {
     return (
       <EmptyCard
-        title="No MCP servers configured"
+        title="No servers"
         description={getMcpEmptyStateCopy(capabilityMode)}
       />
     )
   }
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2 text-xs text-primary-600">
-        Log snippets for failed MCP startup are shown on each card when
-        available. Ownership lanes map servers to the agent/job that depends on
-        them.
-      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {servers.map((server) => (
           <McpServerCard key={server.id} server={server} onEdit={onEdit} />
@@ -805,7 +1136,7 @@ function MarketplaceGrid({
     return (
       <EmptyCard
         title="No results"
-        description="Try a different search term. The registry may be unavailable — local presets are used as fallback."
+        description="Try another term. Local presets stay available."
       />
     )
   }
@@ -841,7 +1172,7 @@ function MarketplaceGrid({
                     ) : null}
                   </div>
                   <p className="line-clamp-2 text-xs text-primary-500 text-pretty">
-                    {entry.description || 'No description.'}
+                    {entry.description || 'No summary'}
                   </p>
                 </div>
               </div>
@@ -868,7 +1199,7 @@ function MarketplaceGrid({
               <div className="mt-auto flex items-center justify-end gap-2 pt-2">
                 {entry.installed ? (
                   <span className="text-xs text-primary-500">
-                    Already installed
+                    Installed
                   </span>
                 ) : (
                   <Button
@@ -876,7 +1207,7 @@ function MarketplaceGrid({
                     size="sm"
                     onClick={() => onInstall(entry)}
                   >
-                    Review install
+                    Review
                   </Button>
                 )}
               </div>

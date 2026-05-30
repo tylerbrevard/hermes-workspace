@@ -9,11 +9,8 @@ import { PERSONA_COLORS, PixelAvatar } from './pixel-avatar'
 import { DESK_POSITIONS, LOCATIONS } from './agent-behaviors'
 import { getSwarmSessionDisplayName } from './session-display-name'
 import type { SwarmSession } from '@/stores/agent-swarm-store'
-import type {AgentBehaviorView} from '@/hooks/use-agent-behaviors';
-import {
-
-  useAgentBehaviors
-} from '@/hooks/use-agent-behaviors'
+import type { AgentBehaviorView } from '@/hooks/use-agent-behaviors'
+import { useAgentBehaviors } from '@/hooks/use-agent-behaviors'
 import { assignPersona } from '@/lib/agent-personas'
 import { cn } from '@/lib/utils'
 

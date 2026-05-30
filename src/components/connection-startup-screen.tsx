@@ -239,7 +239,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
           aria-hidden={showFailureState}
         >
           <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
-          <span>Connecting to your backend...</span>
+          <span>Connecting...</span>
         </div>
 
         {/* Failure state — setup guide */}
@@ -252,13 +252,9 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
           ].join(' ')}
         >
           <div className="w-full rounded-3xl border border-white/10 bg-white/5 p-5 text-left shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-sm">
-            <p className="text-base font-medium text-white">
-              Welcome! Let&apos;s connect your backend
-            </p>
+            <p className="text-base font-medium text-white">Connect backend</p>
             <p className="mt-2 text-sm leading-6 text-white/60">
-              Hermes Workspace works with any OpenAI-compatible backend. Hermes Agent
-              gateway APIs unlock enhanced features automatically when they are
-              available.
+              OpenAI-compatible backend or Hermes Agent gateway.
             </p>
 
             {/* Auto-start section */}
@@ -373,7 +369,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
 
         {!showFailureState ? (
           <p className="mt-6 text-xs text-white/45">
-            This page auto-refreshes when a compatible backend is detected
+            Auto-refreshing for backend.
           </p>
         ) : null}
       </div>

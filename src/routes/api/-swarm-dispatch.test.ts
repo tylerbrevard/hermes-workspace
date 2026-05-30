@@ -24,7 +24,9 @@ describe('checkpointFromRuntimeSnapshot', () => {
     expect(checkpoint).not.toBeNull()
     expect(checkpoint?.stateLabel).toBe('DONE')
     expect(checkpoint?.checkpointStatus).toBe('done')
-    expect(checkpoint?.result).toBe('Structured checkpoint returned to RouterChat')
+    expect(checkpoint?.result).toBe(
+      'Structured checkpoint returned to RouterChat',
+    )
     expect(checkpoint?.nextAction).toBe('Verify in UI flow')
     expect(checkpoint?.raw).toContain('STATE: DONE')
   })
@@ -61,7 +63,13 @@ describe('runtimeSnapshotIsFresh', () => {
     }
     const dispatchedAt = 1_746_000_000_000
 
-    expect(runtimeSnapshotIsFresh(baseline, runtimeCheckpointSignature(baseline), dispatchedAt)).toBe(false)
+    expect(
+      runtimeSnapshotIsFresh(
+        baseline,
+        runtimeCheckpointSignature(baseline),
+        dispatchedAt,
+      ),
+    ).toBe(false)
 
     const updated = {
       ...baseline,
@@ -72,7 +80,13 @@ describe('runtimeSnapshotIsFresh', () => {
       lastOutputAt: 1_746_000_001_000,
     }
 
-    expect(runtimeSnapshotIsFresh(updated, runtimeCheckpointSignature(baseline), dispatchedAt)).toBe(true)
+    expect(
+      runtimeSnapshotIsFresh(
+        updated,
+        runtimeCheckpointSignature(baseline),
+        dispatchedAt,
+      ),
+    ).toBe(true)
   })
 })
 
@@ -142,8 +156,12 @@ describe('buildWorkerPrompt', () => {
 
     expect(prompt).toContain('Worker: Builder — Primary Builder')
     expect(prompt).toContain('Machine ID: swarm5')
-    expect(prompt).toContain('Mission: Ship focused product slices with tests and clean diffs.')
-    expect(prompt).toContain('Capabilities: code-editing, ui-implementation, build-verification')
+    expect(prompt).toContain(
+      'Mission: Ship focused product slices with tests and clean diffs.',
+    )
+    expect(prompt).toContain(
+      'Capabilities: code-editing, ui-implementation, build-verification',
+    )
     expect(prompt).toContain('Skills: swarm-ui-worker, swarm-worker-core')
   })
 

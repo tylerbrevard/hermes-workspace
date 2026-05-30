@@ -26,8 +26,8 @@ module.exports = {
     category: 'public.app-category.developer-tools',
     target: [{ target: 'dmg', arch: ['arm64', 'x64'] }],
     darkModeSupport: true,
-    hardenedRuntime: false,
-    gatekeeperAssess: false,
+    hardenedRuntime: true,
+    gatekeeperAssess: true,
   },
   dmg: {
     title: 'Hermes Workspace',
@@ -52,6 +52,6 @@ module.exports = {
     repo: 'hermes-workspace',
     releaseType: 'release',
   },
-  asar: false,
+  asar: true,
   compression: 'maximum',
 }

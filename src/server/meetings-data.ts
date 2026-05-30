@@ -4,9 +4,7 @@ import { existsSync } from 'node:fs'
 
 const HERMES_MEETINGS_DB =
   '/Users/tylerlyon/.hermes/workspace/runtime/db/workspace/.meetings.db'
-const MEETINGS_DB_PATH =
-  process.env.HERMES_MEETINGS_DB ||
-  HERMES_MEETINGS_DB
+const MEETINGS_DB_PATH = process.env.HERMES_MEETINGS_DB || HERMES_MEETINGS_DB
 
 if (!existsSync(MEETINGS_DB_PATH)) {
   throw new Error(`Hermes meetings database not found: ${MEETINGS_DB_PATH}`)
@@ -188,7 +186,9 @@ function hydrateMeetings(meetings: Array<Meeting>) {
         priority: issue.priority || undefined,
         assignee: issue.assignee || undefined,
         stagnantDays:
-          typeof issue.stagnant_days === 'number' ? issue.stagnant_days : undefined,
+          typeof issue.stagnant_days === 'number'
+            ? issue.stagnant_days
+            : undefined,
       },
     ])
   }
@@ -225,12 +225,14 @@ export function getMeetingById(meetingId: string) {
   return row ? hydrateMeetings([rowToMeeting(row)])[0] : null
 }
 
-export function listMeetings(options: {
-  search?: string
-  limit?: number
-  offset?: number
-  upcoming?: boolean
-} = {}) {
+export function listMeetings(
+  options: {
+    search?: string
+    limit?: number
+    offset?: number
+    upcoming?: boolean
+  } = {},
+) {
   const limit = Math.max(1, Math.min(options.limit || 50, 500))
   const offset = Math.max(0, options.offset || 0)
   const clauses: Array<string> = []
@@ -500,14 +502,21 @@ export function createActionItem(input: {
 export function updateActionItem(actionItem: any) {
   if (!actionItem?.id) throw new Error('Action item ID required')
   const sets: Array<string> = []
-  if (actionItem.text !== undefined) sets.push(`text = ${sqlString(actionItem.text)}`)
-  if (actionItem.assignee !== undefined) sets.push(`assignee = ${sqlString(actionItem.assignee)}`)
-  if (actionItem.dueDate !== undefined) sets.push(`due_date = ${sqlString(actionItem.dueDate)}`)
-  if (actionItem.status !== undefined) sets.push(`status = ${sqlString(actionItem.status)}`)
-  if (actionItem.priority !== undefined) sets.push(`priority = ${sqlString(actionItem.priority)}`)
+  if (actionItem.text !== undefined)
+    sets.push(`text = ${sqlString(actionItem.text)}`)
+  if (actionItem.assignee !== undefined)
+    sets.push(`assignee = ${sqlString(actionItem.assignee)}`)
+  if (actionItem.dueDate !== undefined)
+    sets.push(`due_date = ${sqlString(actionItem.dueDate)}`)
+  if (actionItem.status !== undefined)
+    sets.push(`status = ${sqlString(actionItem.status)}`)
+  if (actionItem.priority !== undefined)
+    sets.push(`priority = ${sqlString(actionItem.priority)}`)
   sets.push("source = 'user-edited'")
   sets.push(`last_updated = ${sqlString(new Date().toISOString())}`)
-  execDb(`UPDATE action_items SET ${sets.join(', ')} WHERE id = ${sqlString(actionItem.id)};`)
+  execDb(
+    `UPDATE action_items SET ${sets.join(', ')} WHERE id = ${sqlString(actionItem.id)};`,
+  )
   return { success: true }
 }
 
@@ -522,12 +531,18 @@ export function updateIssue(issue: any) {
   if (!issue?.id) throw new Error('Issue ID required')
   const sets: Array<string> = []
   if (issue.title !== undefined) sets.push(`title = ${sqlString(issue.title)}`)
-  if (issue.description !== undefined) sets.push(`description = ${sqlString(issue.description)}`)
-  if (issue.status !== undefined) sets.push(`status = ${sqlString(issue.status)}`)
-  if (issue.priority !== undefined) sets.push(`priority = ${sqlString(issue.priority)}`)
-  if (issue.assignee !== undefined) sets.push(`assignee = ${sqlString(issue.assignee)}`)
+  if (issue.description !== undefined)
+    sets.push(`description = ${sqlString(issue.description)}`)
+  if (issue.status !== undefined)
+    sets.push(`status = ${sqlString(issue.status)}`)
+  if (issue.priority !== undefined)
+    sets.push(`priority = ${sqlString(issue.priority)}`)
+  if (issue.assignee !== undefined)
+    sets.push(`assignee = ${sqlString(issue.assignee)}`)
   if (!sets.length) return { success: true }
-  execDb(`UPDATE issues SET ${sets.join(', ')} WHERE id = ${sqlString(issue.id)};`)
+  execDb(
+    `UPDATE issues SET ${sets.join(', ')} WHERE id = ${sqlString(issue.id)};`,
+  )
   return { success: true }
 }
 
@@ -539,12 +554,18 @@ export function deleteIssue(issueId: string) {
 export function updateDecision(decision: any) {
   if (!decision?.id) throw new Error('Decision ID required')
   const sets: Array<string> = []
-  if (decision.text !== undefined) sets.push(`text = ${sqlString(decision.text)}`)
-  if (decision.decisionMaker !== undefined) sets.push(`decision_maker = ${sqlString(decision.decisionMaker)}`)
-  if (decision.impact !== undefined) sets.push(`impact = ${sqlString(decision.impact)}`)
-  if (decision.rationale !== undefined) sets.push(`rationale = ${sqlString(decision.rationale)}`)
+  if (decision.text !== undefined)
+    sets.push(`text = ${sqlString(decision.text)}`)
+  if (decision.decisionMaker !== undefined)
+    sets.push(`decision_maker = ${sqlString(decision.decisionMaker)}`)
+  if (decision.impact !== undefined)
+    sets.push(`impact = ${sqlString(decision.impact)}`)
+  if (decision.rationale !== undefined)
+    sets.push(`rationale = ${sqlString(decision.rationale)}`)
   if (!sets.length) return { success: true }
-  execDb(`UPDATE decisions SET ${sets.join(', ')} WHERE id = ${sqlString(decision.id)};`)
+  execDb(
+    `UPDATE decisions SET ${sets.join(', ')} WHERE id = ${sqlString(decision.id)};`,
+  )
   return { success: true }
 }
 

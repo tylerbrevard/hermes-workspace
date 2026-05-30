@@ -5,7 +5,7 @@ export const tourSteps: Array<Step> = [
   {
     target: 'body',
     placement: 'center',
-    title: 'Welcome to Hermes Workspace! ⚕',
+    title: 'Hermes Workspace',
     content: (
       <div
         style={{
@@ -21,8 +21,7 @@ export const tourSteps: Array<Step> = [
           style={{ width: 48, height: 48, borderRadius: 12 }}
         />
         <p style={{ textAlign: 'center', margin: 0 }}>
-          Your AI-powered command center for managing agents, chats, files, and
-          more. Let&apos;s take a quick tour!
+          Agents, chats, files, and runtime checks in one place.
         </p>
       </div>
     ),
@@ -32,72 +31,63 @@ export const tourSteps: Array<Step> = [
   {
     target: '[data-tour="sidebar-container"]',
     placement: 'right',
-    title: 'Sidebar Navigation',
-    content:
-      'Navigate between all your tools here. Collapse/expand sections to customize your workspace.',
+    title: 'Sidebar',
+    content: 'Pinned pages and collapsible sections.',
   },
   // Step 3: New Session
   {
     target: '[data-tour="new-session"]',
     placement: 'right',
-    title: 'Start a New Chat',
-    content:
-      'Click here to start a new AI chat session. Each conversation is saved automatically.',
+    title: 'New Chat',
+    content: 'Start a saved chat session.',
   },
   // Step 4: Dashboard
   {
     target: '[data-tour="dashboard"]',
     placement: 'right',
-    title: 'Your Dashboard',
-    content:
-      'Your overview of sessions, usage, and activity. See everything at a glance.',
+    title: 'Dashboard',
+    content: 'Sessions, usage, and activity.',
   },
   // Step 5: Agent Hub
   {
     target: '[data-tour="agent-hub"]',
     placement: 'right',
     title: 'Agent Hub',
-    content:
-      'Manage your AI agents and configurations. Create custom agents with specialized behaviors.',
+    content: 'Manage agents, profiles, and runtime checks.',
   },
   // Step 7: Skills
   {
     target: '[data-tour="skills"]',
     placement: 'right',
     title: 'Skills Library',
-    content:
-      'Browse and install agent skills to extend capabilities. Add new tools and abilities to your agents.',
+    content: 'Browse and install agent skills.',
   },
   // Step 8: Terminal
   {
     target: '[data-tour="terminal"]',
     placement: 'right',
-    title: 'Built-in Terminal',
-    content:
-      'Built-in terminal for quick commands. Execute shell commands without leaving Hermes Workspace.',
+    title: 'Terminal',
+    content: 'Run quick shell commands.',
   },
   // Step 9: Usage Meter (in header)
   {
     target: '[data-tour="usage-meter"]',
     placement: 'bottom',
     title: 'Usage Monitor',
-    content:
-      'Monitor your AI provider usage in real-time. Track costs and API consumption.',
+    content: 'Provider usage and cost signals.',
   },
   // Step 10: Settings
   {
     target: '[data-tour="settings"]',
     placement: 'right',
-    title: 'Settings & Customization',
-    content:
-      'Configure providers, themes, accent colors, and more. Make Hermes Workspace yours.',
+    title: 'Settings',
+    content: 'Model, routing, look, alerts, and runtime defaults.',
   },
   // Step 11: Finish
   {
     target: 'body',
     placement: 'center',
-    title: "You're all set! 🎉",
-    content:
-      'Start chatting with your AI, explore the tools, and customize Hermes Workspace to fit your workflow. Need help? Press ? to see all keyboard shortcuts.',
+    title: 'Ready',
+    content: 'Start a chat or open a page. Press ? for shortcuts.',
   },
 ]

@@ -14,6 +14,11 @@ import {
 } from '@/lib/workspace-improvements'
 import { findWorkspaceRouteRegistryEntry } from '@/lib/workspace-route-registry'
 import {
+  isBooleanRecord,
+  readJsonStorage,
+  writeJsonStorage,
+} from '@/lib/typed-storage'
+import {
   IMPROVEMENT_CATEGORIES,
   WORKSPACE_IMPROVEMENT_OPEN_EVENT,
   WORKSPACE_IMPROVEMENT_STORAGE_KEY,
@@ -26,23 +31,12 @@ import {
 type CopyState = 'idle' | 'copied' | 'failed'
 
 function readCompleted(): CompletedMap {
-  if (typeof localStorage === 'undefined') return {}
-  try {
-    const raw = localStorage.getItem(WORKSPACE_IMPROVEMENT_STORAGE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
+  return readJsonStorage(WORKSPACE_IMPROVEMENT_STORAGE_KEY, {}, isBooleanRecord)
+    .value
 }
 
 function writeCompleted(completed: CompletedMap) {
-  if (typeof localStorage === 'undefined') return
-  localStorage.setItem(
-    WORKSPACE_IMPROVEMENT_STORAGE_KEY,
-    JSON.stringify(completed),
-  )
+  writeJsonStorage(WORKSPACE_IMPROVEMENT_STORAGE_KEY, completed)
 }
 
 function ImprovementScopeButton({

@@ -8,6 +8,13 @@ const rawArgs = process.argv.slice(2).filter((arg) => arg !== '--')
 const mobile = rawArgs.includes('--mobile')
 const args = rawArgs.filter((arg) => arg !== '--mobile')
 const baseUrl = args[0] || 'http://127.0.0.1:3002/workspace'
+const base = new URL(baseUrl)
+const originUrl = base.origin
+const basePath = base.pathname.replace(/\/$/, '')
+const appBaseUrl =
+  basePath && basePath !== '/'
+    ? `${originUrl}${basePath}`
+    : `${originUrl}/workspace`
 const repoRoot = process.cwd()
 const envPath = path.join(repoRoot, '.env')
 const routesPath = path.join(
@@ -21,6 +28,7 @@ const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'))
     ...(routeConfig.routeSmokeFixtures ?? []).map((fixtureConfig) => ({
       ...routeConfig,
       ...fixtureConfig,
+      visualText: fixtureConfig.visualText,
       mobileOnly: routeConfig.mobileOnly,
       screenshotName:
         fixtureConfig.screenshotName ?? routeConfig.screenshotName,
@@ -78,7 +86,7 @@ async function installWorkspaceSession() {
   const token = readWorkspaceSessionToken()
   if (!token) return false
 
-  const url = new URL(baseUrl)
+  const url = new URL(appBaseUrl)
   await context.addCookies([
     {
       name: 'claude-auth',
@@ -91,7 +99,12 @@ async function installWorkspaceSession() {
       expires: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
     },
   ])
-  return true
+  const authCheck = await context.request
+    .get(`${originUrl}/api/auth-check`, { timeout: NAVIGATION_TIMEOUT_MS })
+    .catch(() => null)
+  if (!authCheck?.ok()) return false
+  const status = await authCheck.json().catch(() => null)
+  return Boolean(status?.authenticated || status?.authRequired === false)
 }
 
 async function withCleanupTimeout(label, action) {
@@ -117,7 +130,7 @@ async function withCleanupTimeout(label, action) {
 
 async function workspaceShellReachable() {
   const response = await context.request
-    .get(baseUrl, { timeout: NAVIGATION_TIMEOUT_MS })
+    .get(appBaseUrl, { timeout: NAVIGATION_TIMEOUT_MS })
     .catch(() => null)
   if (!response?.ok()) return false
   const html = await response.text().catch(() => '')
@@ -142,10 +155,13 @@ const context = await browser.newContext({
 })
 
 const hasWorkspaceSession = await installWorkspaceSession()
+if (!hasWorkspaceSession) {
+  await context.clearCookies()
+}
 if (!hasWorkspaceSession && env.HERMES_PASSWORD) {
   let auth
   for (let attempt = 1; attempt <= AUTH_ATTEMPTS; attempt += 1) {
-    auth = await context.request.post(`${baseUrl}/api/auth`, {
+    auth = await context.request.post(`${originUrl}/api/auth`, {
       data: { password: env.HERMES_PASSWORD },
       headers: { 'content-type': 'application/json' },
     })
@@ -197,21 +213,48 @@ for (const routeConfig of routes) {
       })
 
       try {
-        await page.goto(`${baseUrl}${route}`, {
+        await page.goto(`${appBaseUrl}${route}`, {
           waitUntil: 'domcontentloaded',
           timeout: NAVIGATION_TIMEOUT_MS,
         })
         await page.waitForFunction(
-          (expected) => document.body.innerText.includes(expected),
+          (expected) => {
+            const mainText = Array.from(document.querySelectorAll('main'))
+              .map((node) => node.innerText || '')
+              .join('\n')
+            return mainText.toLowerCase().includes(expected.toLowerCase())
+          },
           expectedText,
           { timeout: EXPECTED_TEXT_TIMEOUT_MS },
         )
+        await page.waitForFunction(
+          () =>
+            !/Connecting\.\.\.|Connect backend|Auto-Start Hermes Agent Gateway/i.test(
+              document.body.innerText || '',
+            ),
+          { timeout: 10_000 },
+        )
         const text = await page.locator('body').innerText({ timeout: 10_000 })
-        if (!text.includes(expectedText)) {
+        const mainText = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('main'))
+            .map((node) => node.innerText || '')
+            .join('\n'),
+        )
+        if (!mainText.toLowerCase().includes(expectedText.toLowerCase())) {
           throw new Error(`missing expected text "${expectedText}"`)
         }
-        if (/not found|404/i.test(text)) {
+        if (/not found|404/i.test(mainText)) {
           throw new Error('rendered not-found state')
+        }
+        if (/\bROUTE ERROR\b/i.test(mainText)) {
+          throw new Error('rendered route error state')
+        }
+        if (
+          /Connecting\.\.\.|Connect backend|Auto-Start Hermes Agent Gateway/i.test(
+            text,
+          )
+        ) {
+          throw new Error('rendered connection startup state')
         }
         if (errors.length) {
           throw new Error(errors.join('; '))

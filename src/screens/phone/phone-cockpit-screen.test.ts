@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { Task01Icon } from '@hugeicons/core-free-icons'
 import {
   buildPhoneAtAGlance,
+  buildPhoneCommandDashboard,
   buildPhoneDailyLoopSignals,
   buildPhoneFreshnessNotice,
   buildPhoneModeReadouts,
   buildPhoneSignalRail,
+  buildPhoneTravelGlance,
   describeQueuedCapture,
   nextPhoneTab,
   quickLogPhoneFood,
@@ -143,7 +146,7 @@ describe('phone mode readouts', () => {
     const glance = buildPhoneAtAGlance(snapshot)
     expect(glance.map((item) => item.label)).toEqual([
       'Next event',
-      'Urgent tasks',
+      'Tasks',
       'Waiting',
       'Desk state',
       'Source health',
@@ -162,6 +165,66 @@ describe('phone mode readouts', () => {
     ])
     expect(rail.find((item) => item.id === 'meeting')?.tone).toBe('warn')
     expect(rail.find((item) => item.id === 'desk')?.value).toBe('online')
+
+    const driving = buildPhoneTravelGlance(snapshot, 'driving')
+    expect(driving.modeLabel).toBe('Driving')
+    expect(driving.urgentCount).toBe(0)
+    expect(driving.nextEvent).toContain('CAB Review')
+    expect(driving.captureLabel).toBe('Voice note')
+    expect(driving.lilyLabel).toBe('Hands-free LILY')
+
+    const walking = buildPhoneTravelGlance(snapshot, 'walking')
+    expect(walking.modeLabel).toBe('Walking')
+    expect(walking.captureLabel).toBe('Capture')
+
+    const commandDashboard = buildPhoneCommandDashboard(snapshot, [
+      {
+        id: 'food',
+        label: 'Food',
+        value: '0',
+        detail: 'meals today',
+        href: '/food-log',
+        icon: Task01Icon,
+        tone: 'warn',
+        priority: 1,
+      },
+      {
+        id: '75',
+        label: '75',
+        value: 'Done',
+        detail: 'Daily loop complete',
+        href: '/75-tracker',
+        icon: Task01Icon,
+        tone: 'ok',
+        priority: 2,
+      },
+    ])
+    expect(commandDashboard.posture).toBe('Triage')
+    expect(commandDashboard.nextAction).toBe('Approval needed')
+    expect(commandDashboard.loopPercent).toBe(50)
+    expect(commandDashboard.tiles.map((tile) => tile.id)).toEqual([
+      'workload',
+      'loops',
+      'meeting',
+      'sources',
+    ])
+
+    const staleDeskSnapshot = {
+      ...snapshot,
+      devices: {
+        ...snapshot.devices,
+        office: {
+          ...snapshot.devices.office,
+          status: 'stale' as const,
+          online: false,
+        },
+      },
+    }
+    expect(
+      buildPhoneSignalRail(staleDeskSnapshot).find(
+        (item) => item.id === 'desk',
+      ),
+    ).toMatchObject({ value: 'idle', tone: 'muted' })
   })
 })
 

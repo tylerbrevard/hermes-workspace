@@ -13,9 +13,7 @@ import {
   Clock01Icon,
   ComputerTerminal01Icon,
   DashboardSquare01Icon,
-  Dumbbell01Icon,
   File01Icon,
-  InjectionIcon,
   McpServerIcon,
   MessageMultiple01Icon,
   Moon02Icon,
@@ -25,25 +23,21 @@ import {
   Search01Icon,
   Settings01Icon,
   Sun02Icon,
-  Target02Icon,
   UserGroupIcon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
 import { AnimatePresence, motion } from 'motion/react'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { CHAT_OPEN_SETTINGS_EVENT } from '../chat-events'
-import { useChatSettings as useSidebarSettings } from '../hooks/use-chat-settings'
 import { useDeleteSession } from '../hooks/use-delete-session'
 import { useRenameSession } from '../hooks/use-rename-session'
-import { ProvidersDialog } from './providers-dialog'
 import { SessionRenameDialog } from './sidebar/session-rename-dialog'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
 import { SidebarSessions } from './sidebar/sidebar-sessions'
 import type { ChatOpenSettingsDetail } from '../chat-events'
 import type { SessionMeta } from '../types'
 import { t } from '@/lib/i18n'
-import { SettingsDialog } from '@/components/settings-dialog'
 import {
   TooltipContent,
   TooltipProvider,
@@ -536,8 +530,7 @@ function ChatSidebarComponent({
   onRetrySessions,
   showSessions = true,
 }: ChatSidebarProps) {
-  const { settingsOpen, settingsSection, setSettingsOpen, handleOpenSettings } =
-    useSidebarSettings()
+  const navigate = useNavigate()
   const profileDisplayName = useChatSettingsStore(selectChatProfileDisplayName)
   const profileAvatarDataUrl = useChatSettingsStore(
     selectChatProfileAvatarDataUrl,
@@ -551,13 +544,20 @@ function ChatSidebarComponent({
       return state.location.pathname
     },
   })
+  const openSettings = useCallback(
+    (section: ChatOpenSettingsDetail['section'] = 'claude') => {
+      void navigate({
+        to: '/settings',
+        search: { section: section === 'appearance' ? 'appearance' : 'claude' },
+      })
+    },
+    [navigate],
+  )
 
   useEffect(() => {
     function handleOpenSettingsEvent(event: Event) {
       const detail = (event as CustomEvent<ChatOpenSettingsDetail>).detail
-      handleOpenSettings(
-        detail.section === 'appearance' ? 'appearance' : 'claude',
-      )
+      openSettings(detail.section)
     }
 
     window.addEventListener(CHAT_OPEN_SETTINGS_EVENT, handleOpenSettingsEvent)
@@ -567,7 +567,7 @@ function ChatSidebarComponent({
         handleOpenSettingsEvent,
       )
     }
-  }, [handleOpenSettings])
+  }, [openSettings])
 
   // Platform-aware modifier key
   const _mod = useMemo(
@@ -593,7 +593,6 @@ function ChatSidebarComponent({
   const isPlaygroundActive = pathname === '/playground'
   const isAgoraActive = pathname === '/agora'
   const isTerminalActive = pathname === '/terminal'
-  const isHealthActive = pathname === '/health'
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
   const isTasksActive = pathname === '/tasks'
@@ -601,11 +600,9 @@ function ChatSidebarComponent({
   const isOperationsActive = pathname === '/operations'
   const isOpsIntelligenceActive = pathname === '/ops-intelligence'
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
-  const isSeventyFiveTrackerActive = pathname === '/75-tracker'
   const isPtoTrackerActive = pathname === '/pto-tracker'
-  const isWegovyActive = pathname === '/wegovy'
-  const isZynTrackerActive = pathname === '/zyn-tracker'
-  const isFoodLogActive = pathname === '/food-log'
+  const isChiefOfStaffMailboxActive = pathname === '/chief-of-staff-mailbox'
+  const isAppleHealthActive = pathname === '/apple-health'
   const isSettingsActive = pathname === '/settings'
   const mainRoutes = ['/chat', '/new', '/lily', '/files', '/terminal']
   const knowledgeRoutes = ['/memory', '/skills']
@@ -657,7 +654,6 @@ function ChatSidebarComponent({
   const [deleteSessionKey, setDeleteSessionKey] = useState<string | null>(null)
   const [deleteFriendlyId, setDeleteFriendlyId] = useState<string | null>(null)
   const [deleteSessionTitle, setDeleteSessionTitle] = useState('')
-  const [providersOpen, setProvidersOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [isHoverExpanded, setIsHoverExpanded] = useState(false)
   const sidebarHoverExpand = useChatSettingsStore(selectSidebarHoverExpand)
@@ -780,7 +776,7 @@ function ChatSidebarComponent({
 
   useEffect(() => {
     function handleOpenSettingsFromSearch() {
-      handleOpenSettings()
+      openSettings()
     }
 
     window.addEventListener(
@@ -793,7 +789,7 @@ function ChatSidebarComponent({
         handleOpenSettingsFromSearch,
       )
     }
-  }, [handleOpenSettings])
+  }, [openSettings])
 
   // ── Nav definitions ─────────────────────────────────────────────────
 
@@ -818,13 +814,6 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
-      to: '/phone',
-      icon: DashboardSquare01Icon,
-      label: 'Phone Cockpit',
-      active: isPhoneActive,
-    },
-    {
-      kind: 'link',
       to: '/chat',
       icon: MessageMultiple01Icon,
       label: t('nav.chat'),
@@ -837,6 +826,16 @@ function ChatSidebarComponent({
       label: 'LILY',
       active: isLilyActive,
     },
+  ]
+
+  const workspaceToolItems: Array<NavItemDef> = [
+    {
+      kind: 'link',
+      to: '/phone',
+      icon: DashboardSquare01Icon,
+      label: 'Phone Cockpit',
+      active: isPhoneActive,
+    },
     {
       kind: 'link',
       to: '/tasks',
@@ -844,22 +843,12 @@ function ChatSidebarComponent({
       label: 'Tasks',
       active: isTasksActive,
     },
-  ]
-
-  const dailyItems: Array<NavItemDef> = [
     {
       kind: 'link',
       to: '/meetings',
       icon: Clock01Icon,
       label: 'Meetings',
       active: pathname === '/meetings',
-    },
-    {
-      kind: 'link',
-      to: '/75-tracker',
-      icon: Dumbbell01Icon,
-      label: '75 Hard/Soft',
-      active: isSeventyFiveTrackerActive,
     },
     {
       kind: 'link',
@@ -870,24 +859,24 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
-      to: '/wegovy',
-      icon: InjectionIcon,
-      label: 'Wegovy Shots',
-      active: isWegovyActive,
+      to: '/chief-of-staff-mailbox',
+      icon: MessageMultiple01Icon,
+      label: 'Mailbox CoS',
+      active: isChiefOfStaffMailboxActive,
     },
     {
       kind: 'link',
-      to: '/zyn-tracker',
-      icon: Target02Icon,
-      label: 'Zyn Tracker',
-      active: isZynTrackerActive,
-    },
-    {
-      kind: 'link',
-      to: '/food-log',
+      to: '/apple-health',
       icon: Apple01Icon,
-      label: 'Food Log',
-      active: isFoodLogActive,
+      label: 'Apple Health',
+      active: isAppleHealthActive,
+    },
+    {
+      kind: 'link',
+      to: '/it-ops',
+      icon: Building01Icon,
+      label: 'ConnectWise',
+      active: pathname === '/it-ops',
     },
     {
       kind: 'link',
@@ -898,7 +887,7 @@ function ChatSidebarComponent({
     },
   ]
 
-  const agentOpsItems: Array<NavItemDef> = [
+  const gatewayItems: Array<NavItemDef> = [
     {
       kind: 'link',
       to: '/conductor',
@@ -933,13 +922,6 @@ function ChatSidebarComponent({
       icon: Clock01Icon,
       label: t('nav.jobs'),
       active: isJobsActive,
-    },
-    {
-      kind: 'link',
-      to: '/it-ops',
-      icon: Building01Icon,
-      label: 'ConnectWise',
-      active: pathname === '/it-ops',
     },
     {
       kind: 'link',
@@ -997,13 +979,6 @@ function ChatSidebarComponent({
       label: t('nav.terminal'),
       active: isTerminalActive,
     },
-    {
-      kind: 'link',
-      to: '/health',
-      icon: ComputerTerminal01Icon,
-      label: 'Health',
-      active: isHealthActive,
-    },
   ]
 
   const settingsItems: Array<NavItemDef> = [
@@ -1013,20 +988,6 @@ function ChatSidebarComponent({
       icon: Settings01Icon,
       label: 'Settings',
       active: isSettingsActive,
-    },
-    {
-      kind: 'button',
-      icon: Settings01Icon,
-      label: 'Claude settings',
-      active: settingsOpen,
-      onClick: () => handleOpenSettings(),
-    },
-    {
-      kind: 'button',
-      icon: Settings01Icon,
-      label: 'Providers',
-      active: providersOpen,
-      onClick: () => setProvidersOpen(true),
     },
   ]
 
@@ -1225,7 +1186,7 @@ function ChatSidebarComponent({
         {/* Navigation sections */}
         <div className={cn('shrink-0 space-y-0.5 px-2', isMobile && 'order-2')}>
           <SectionLabel
-            label="Pinned"
+            label="Main"
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
           />
@@ -1238,7 +1199,7 @@ function ChatSidebarComponent({
           />
 
           <SectionLabel
-            label="Daily"
+            label="Tools"
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             collapsible
@@ -1247,14 +1208,14 @@ function ChatSidebarComponent({
           />
           <CollapsibleSection
             expanded={dailyExpanded || isCollapsed}
-            items={dailyItems}
+            items={workspaceToolItems}
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             onSelectSession={onSelectSession}
           />
 
           <SectionLabel
-            label="Agent Ops"
+            label="Gateway"
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             collapsible
@@ -1263,7 +1224,7 @@ function ChatSidebarComponent({
           />
           <CollapsibleSection
             expanded={agentOpsExpanded || isCollapsed}
-            items={agentOpsItems}
+            items={gatewayItems}
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             onSelectSession={onSelectSession}
@@ -1287,7 +1248,7 @@ function ChatSidebarComponent({
           />
 
           <SectionLabel
-            label="Systems"
+            label="System"
             isCollapsed={isVisuallyCollapsed}
             transition={transition}
             collapsible
@@ -1394,7 +1355,7 @@ function ChatSidebarComponent({
             <MenuContent side="top" align="start" className="min-w-[200px]">
               <MenuItem
                 onClick={function onOpenSettings() {
-                  handleOpenSettings('claude')
+                  openSettings('claude')
                 }}
                 className="justify-between"
               >
@@ -1415,7 +1376,7 @@ function ChatSidebarComponent({
             <div className="flex items-center gap-0.5">
               <button
                 type="button"
-                onClick={() => handleOpenSettings('claude')}
+                onClick={() => openSettings('claude')}
                 className="shrink-0 rounded-lg p-1.5 text-primary-400 hover:bg-primary-200 dark:hover:bg-neutral-800 hover:text-primary-600 dark:hover:text-neutral-300 transition-colors"
                 aria-label="Settings"
               >
@@ -1432,14 +1393,6 @@ function ChatSidebarComponent({
       </div>
 
       {/* ── Dialogs ─────────────────────────────────────────────────── */}
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        initialSection={settingsSection}
-      />
-
-      <ProvidersDialog open={providersOpen} onOpenChange={setProvidersOpen} />
-
       <SessionRenameDialog
         open={renameDialogOpen}
         onOpenChange={(open) => {

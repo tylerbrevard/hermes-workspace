@@ -40,8 +40,12 @@ describe('buildWeeklyWorkspaceUtilizationReport', () => {
       ],
     })
 
-    expect(report.metrics.find((metric) => metric.label === 'Sessions')?.value).toBe('1')
-    expect(report.metrics.find((metric) => metric.label === 'Tokens')?.value).toBe('12,000')
+    expect(
+      report.metrics.find((metric) => metric.label === 'Sessions')?.value,
+    ).toBe('1')
+    expect(
+      report.metrics.find((metric) => metric.label === 'Tokens')?.value,
+    ).toBe('12,000')
     expect(report.topSessions.map((session) => session.key)).toEqual(['recent'])
     expect(report.markdown).toContain('# Weekly Workspace Utilization')
     expect(report.markdown).toContain('Workspace implementation')

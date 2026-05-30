@@ -113,8 +113,14 @@ export function GlassCard({
       <div className={cn('flex-1', noPadding ? '' : 'px-5 pb-4 pt-3')}>
         {children}
       </div>
-      <div className="border-t border-[var(--theme-border)] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-        Source workspace · freshness live · owner Hermes · last success recent
+      <div
+        className="flex items-center gap-2 border-t border-[var(--theme-border)] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted"
+        title="Source: workspace · freshness: live · owner: Hermes · last success: recent"
+      >
+        <span className="inline-flex size-1.5 rounded-full bg-emerald-400" />
+        <span>workspace</span>
+        <span aria-hidden>·</span>
+        <span>live</span>
       </div>
     </div>
   )

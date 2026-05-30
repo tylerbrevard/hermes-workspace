@@ -92,7 +92,7 @@ Minimal single-worker example:
 
 ```bash
 curl -X POST http://localhost:3000/api/swarm-dispatch   -H 'Content-Type: application/json'   -d '{
-    "workerIds": ["swarm7"],
+    "workerIds": ["km-agent"],
     "prompt": "Write a short checkpoint explaining what you can see in your current workspace. Do not modify files.",
     "timeoutSeconds": 240,
     "waitForCheckpoint": true
@@ -106,7 +106,7 @@ curl -X POST http://localhost:3000/api/swarm-dispatch   -H 'Content-Type: applic
     "missionTitle": "Docs smoke test",
     "assignments": [
       {
-        "workerId": "swarm7",
+        "workerId": "km-agent",
         "task": "Review docs/swarm/README.md and return a checkpoint with one improvement suggestion.",
         "rationale": "Scribe owns docs and handoff quality."
       }
@@ -121,12 +121,10 @@ Expected response shape:
 ```json
 {
   "missionId": "mission-...",
-  "assignments": [
-    { "workerId": "swarm7", "task": "..." }
-  ],
+  "assignments": [{ "workerId": "km-agent", "task": "..." }],
   "results": [
     {
-      "workerId": "swarm7",
+      "workerId": "km-agent",
       "ok": true,
       "delivery": "tmux",
       "checkpointStatus": "checkpointed"
@@ -159,14 +157,14 @@ Switch to Kanban view for planning. The board is useful when you want a visual q
 
 Recommended lane meanings:
 
-| Lane | Meaning |
-| --- | --- |
-| Backlog | Useful but not ready. |
-| Ready | Clear enough to dispatch. |
-| Running | Worker owns it now. |
-| Review | Needs reviewer or Eric. |
+| Lane    | Meaning                                  |
+| ------- | ---------------------------------------- |
+| Backlog | Useful but not ready.                    |
+| Ready   | Clear enough to dispatch.                |
+| Running | Worker owns it now.                      |
+| Review  | Needs reviewer or Eric.                  |
 | Blocked | Needs repair, input, auth, or scope cut. |
-| Done | Verified checkpoint landed. |
+| Done    | Verified checkpoint landed.              |
 
 ## 9. Add a worker with role presets
 

@@ -60,12 +60,12 @@ describe('memory-browser', () => {
   it('tags regression and watch memory files', async () => {
     const mod = await loadMod()
 
-    expect(mod.getMemoryFileAttention('workspace/memory/evolve-regression-watch.md')).toBe(
-      'regression',
-    )
-    expect(mod.getMemoryFileAttention('workspace/memory/health-monitor.md')).toBe(
-      'watch',
-    )
+    expect(
+      mod.getMemoryFileAttention('workspace/memory/evolve-regression-watch.md'),
+    ).toBe('regression')
+    expect(
+      mod.getMemoryFileAttention('workspace/memory/health-monitor.md'),
+    ).toBe('watch')
     expect(mod.getMemoryFileAttention('memories/mail-failure-triage.md')).toBe(
       'operations',
     )

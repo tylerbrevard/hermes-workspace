@@ -22,30 +22,28 @@ import { CreateJobDialog } from './create-job-dialog'
 import { EditJobDialog } from './edit-job-dialog'
 import {
   buildFailureSparkline,
-  buildJobDependencyMap,
   buildJobIncidentReport,
+  buildJobsCockpitTiles,
   classifyJobFailureFamily,
   filterJobOutputs,
   filterJobs,
   formatNextRun,
   formatRunTimestamp,
-  getAffectedSystems,
   getJobCompletionSla,
   getJobHealth,
   getJobLifecycleState,
   getJobOwnerSource,
   getJobRetryPolicy,
   getJobRunMetadata,
-  getLastFailedJob,
   getLastRunStatus,
   getNextScheduledJob,
   getNoOpContractLabel,
   getSourceLabel,
-  groupJobsByOwner,
   isDailyCheckJob,
   jobNeedsTyler,
   jobUsesPaidCall,
   serializeJobsCsv,
+  sortJobsForAttention,
 } from './jobs-screen-utils'
 import type { JobActionState, JobSavedFilter } from './jobs-screen-utils'
 import type { ClaudeJob } from '@/lib/jobs-api'
@@ -62,10 +60,69 @@ import {
   triggerJob,
   updateJob,
 } from '@/lib/jobs-api'
+import { readJsonStorage, writeJsonStorage } from '@/lib/typed-storage'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 
 const QUERY_KEY = ['claude', 'jobs'] as const
 const PROFILES_QUERY_KEY = ['claude', 'job-profiles'] as const
 const JOBS_FILTER_STORAGE_KEY = 'hermes-jobs-saved-filter-v1'
+const JOB_SAVED_FILTERS = [
+  'all',
+  'active',
+  'daily',
+  'failing',
+  'paused',
+  'recent',
+  'stale',
+  'blocked',
+  'paid',
+] as const
+
+function isJobSavedFilter(value: unknown): value is JobSavedFilter {
+  return (
+    typeof value === 'string' &&
+    JOB_SAVED_FILTERS.includes(value as JobSavedFilter)
+  )
+}
+
+export function readPersistedJobSavedFilter(): JobSavedFilter {
+  if (typeof window === 'undefined') return 'all'
+  const legacy = window.localStorage.getItem(JOBS_FILTER_STORAGE_KEY)
+  const parsed = readJsonStorage(
+    JOBS_FILTER_STORAGE_KEY,
+    'all',
+    isJobSavedFilter,
+  )
+  if (!parsed.recovered) return parsed.value
+
+  if (isJobSavedFilter(legacy)) {
+    writeJsonStorage(JOBS_FILTER_STORAGE_KEY, legacy)
+    return legacy
+  }
+  return 'all'
+}
+
+function writePersistedJobSavedFilter(value: JobSavedFilter) {
+  writeJsonStorage(JOBS_FILTER_STORAGE_KEY, value)
+}
+
+function summarizeJobPrompt(
+  prompt: string | undefined,
+  fallback: string,
+): string {
+  const trimmed = (prompt || '').replace(/\s+/g, ' ').trim()
+  if (!trimmed) return fallback || 'No prompt summary.'
+  const firstSentence = trimmed.match(/^[^.!?]{12,90}[.!?]/)?.[0]
+  const summary = firstSentence || trimmed.slice(0, 84)
+  return summary.length < trimmed.length
+    ? `${summary.replace(/[.,;:\s]+$/, '')}...`
+    : summary
+}
 
 function getJobsSmokeFixture(): Array<ClaudeJob> | null {
   if (typeof window === 'undefined') return null
@@ -108,6 +165,26 @@ function formatQueryFreshness(updatedAt: number): string {
   return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
+function formatJobOwnerLabel(owner: string): string {
+  if (owner.toLowerCase() === 'workflow') return 'Flow'
+  return owner
+}
+
+function getJobsTileTone(tone: ReturnType<typeof buildJobsCockpitTiles>[number]['tone']) {
+  if (tone === 'danger') return 'red'
+  if (tone === 'warning') return 'amber'
+  if (tone === 'good') return 'green'
+  return 'neutral'
+}
+
+function getJobsTileIcon(id: ReturnType<typeof buildJobsCockpitTiles>[number]['id']) {
+  if (id === 'failed') return Cancel01Icon
+  if (id === 'running') return PlayIcon
+  if (id === 'next-due') return Clock01Icon
+  if (id === 'blocked') return PauseIcon
+  return Download01Icon
+}
+
 function JobCard({
   job,
   onPause,
@@ -135,17 +212,13 @@ function JobCard({
   const sourceLabel = getSourceLabel(job)
   const health = getJobHealth(job)
   const ownerSource = getJobOwnerSource(job)
-  const lifecycle = getJobLifecycleState(job)
   const failureFamily = classifyJobFailureFamily(job)
   const needsTyler = jobNeedsTyler(job)
   const paidCall = jobUsesPaidCall(job)
-  const retryPolicy = getJobRetryPolicy(job)
-  const dependencyMap = buildJobDependencyMap(job)
-  const completionSla = getJobCompletionSla(job)
-  const affectedSystems = getAffectedSystems(job)
   const runMetadata = getJobRunMetadata(job)
   const noOpContract = getNoOpContractLabel(job)
   const isPending = pendingAction !== null
+  const promptSummary = summarizeJobPrompt(job.prompt, job.name || 'Job')
   const outputPreview =
     job.last_run_error || job.error || 'No error text captured'
 
@@ -175,12 +248,12 @@ function JobCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       className={cn(
-        'rounded-xl border p-4 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]',
+        'rounded-xl border p-3 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--theme-accent)]',
         'bg-[var(--theme-card)] border-[var(--theme-border)]',
         isPaused && 'opacity-60',
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <span
@@ -197,29 +270,23 @@ function JobCard({
               {job.name || '(unnamed)'}
             </h3>
           </div>
-          <p className="mb-2 line-clamp-2 text-xs text-[var(--theme-muted)]">
-            {job.prompt}
+          <p className="mb-2 line-clamp-1 text-xs text-[var(--theme-muted)]">
+            {promptSummary}
           </p>
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] text-[var(--theme-muted)]">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--theme-muted)]">
             {job.profile && (
-              <>
-                <span className="rounded-md border border-[var(--theme-border)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-[var(--theme-text)]">
-                  {job.profile}
-                </span>
-                <span>·</span>
-              </>
+              <span className="rounded-md border border-[var(--theme-border)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-[var(--theme-text)]">
+                {job.profile}
+              </span>
             )}
             <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5">
-              Source: {sourceLabel}
+              {sourceLabel}
             </span>
             <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5">
-              Owner: {ownerSource}
+              {formatJobOwnerLabel(ownerSource)}
             </span>
             <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5">
-              Lifecycle: {lifecycle}
-            </span>
-            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5">
-              Schedule: {job.schedule_display || 'custom'}
+              {runMetadata.nextRun}
             </span>
             {job.skills && job.skills.length > 0 && (
               <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5">
@@ -227,33 +294,7 @@ function JobCard({
               </span>
             )}
           </div>
-          <div className="mb-2 grid gap-2 text-[10px] text-[var(--theme-muted)] sm:grid-cols-4">
-            <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5">
-              <span className="block uppercase tracking-wide">Next</span>
-              <span className="text-[var(--theme-text)]">
-                {runMetadata.nextRun}
-              </span>
-            </div>
-            <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5">
-              <span className="block uppercase tracking-wide">Last</span>
-              <span className="text-[var(--theme-text)]">
-                {runMetadata.lastRun}
-              </span>
-            </div>
-            <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5">
-              <span className="block uppercase tracking-wide">Duration</span>
-              <span className="text-[var(--theme-text)]">
-                {runMetadata.lastDuration}
-              </span>
-            </div>
-            <div className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5">
-              <span className="block uppercase tracking-wide">Systems</span>
-              <span className="line-clamp-1 text-[var(--theme-text)]">
-                {affectedSystems.join(', ')}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--theme-muted)]">
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--theme-muted)]">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ background: lastRunStatus.color }}
@@ -275,17 +316,16 @@ function JobCard({
                 {pendingAction === 'run' ? 'Running...' : 'Run recovery'}
               </button>
             ) : null}
-            <span>Failure family: {failureFamily}</span>
-            <span>Trend 7d {buildFailureSparkline(job)}</span>
-            <span>{retryPolicy}</span>
-            <span>{completionSla}</span>
-            <span>{dependencyMap}</span>
-            <span>
-              Cost guard: {paidCall ? 'paid-call job' : 'local/free job'}
+            <span title={`Failure family: ${failureFamily}`}>
+              {failureFamily}
             </span>
+            <span title="7 day failure trend">
+              {buildFailureSparkline(job)}
+            </span>
+            <span>{paidCall ? 'paid' : 'local'}</span>
             {needsTyler ? (
               <span className="rounded-md border border-amber-300/50 bg-amber-500/10 px-1.5 py-0.5 text-amber-500">
-                Needs Tyler
+                Tyler
               </span>
             ) : null}
             {noOpContract ? (
@@ -294,23 +334,29 @@ function JobCard({
               </span>
             ) : null}
           </div>
-          <div className="mt-2 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-[11px] text-[var(--theme-muted)]">
-            <div>Changed since last run: {runMetadata.changedSinceLastRun}</div>
-            <div className="mt-1">Last output preview: {outputPreview}</div>
-            {health === 'failed' ? (
-              <pre className="mt-2 max-h-20 overflow-auto whitespace-pre-wrap rounded border border-red-300/30 bg-red-500/10 px-2 py-1.5 text-[10px] text-red-300">
-                {outputPreview}
-              </pre>
-            ) : null}
-          </div>
+          {health === 'failed' ? (
+            <p className="mt-1 line-clamp-1 text-[11px] text-red-400">
+              {outputPreview}
+            </p>
+          ) : null}
+          <details className="mt-2 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-[11px] text-[var(--theme-muted)]">
+            <summary className="cursor-pointer text-[var(--theme-text)]">
+              Details
+            </summary>
+            <div className="mt-1">{runMetadata.lastRun}</div>
+            <div className="mt-1">{runMetadata.changedSinceLastRun}</div>
+            <div className="mt-1 line-clamp-1" title={outputPreview}>
+              {outputPreview}
+            </div>
+          </details>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-1 sm:w-auto">
           <button
             onClick={() => onTrigger(job.id)}
             disabled={isPending}
-            className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-            title="Run job now"
-            aria-label={`Run ${job.name || 'job'} now`}
+            className="min-h-9 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--theme-hover)]"
+            title={`Run ${job.name || 'job'} now`}
+            aria-label="Run job"
           >
             <HugeiconsIcon
               icon={PlayIcon}
@@ -320,9 +366,9 @@ function JobCard({
           </button>
           <button
             onClick={() => onDryRun(job)}
-            className="rounded-lg px-2 py-1 text-[10px] font-medium transition-colors hover:bg-[var(--theme-hover)]"
-            title="Dry-run rerun plan"
-            aria-label={`Dry-run ${job.name || 'job'}`}
+            className="min-h-9 rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors hover:bg-[var(--theme-hover)]"
+            title={`Dry-run ${job.name || 'job'}`}
+            aria-label="Dry-run"
           >
             Dry-run
           </button>
@@ -331,18 +377,18 @@ function JobCard({
               void navigator.clipboard.writeText(buildJobIncidentReport(job))
               toast('Job incident report copied')
             }}
-            className="rounded-lg px-2 py-1 text-[10px] font-medium transition-colors hover:bg-[var(--theme-hover)]"
-            title="Copy job incident report"
-            aria-label={`Copy incident report for ${job.name || 'job'}`}
+            className="min-h-9 rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors hover:bg-[var(--theme-hover)]"
+            title={`Copy incident for ${job.name || 'job'}`}
+            aria-label="Copy incident"
           >
             Incident
           </button>
           <button
             onClick={() => (isPaused ? onResume(job.id) : onPause(job.id))}
             disabled={isPending}
-            className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-            title={isPaused ? 'Resume scheduled job' : 'Pause scheduled job'}
-            aria-label={`${isPaused ? 'Resume' : 'Pause'} ${job.name || 'job'}`}
+            className="min-h-9 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--theme-hover)]"
+            title={`${isPaused ? 'Resume' : 'Pause'} ${job.name || 'job'}`}
+            aria-label={isPaused ? 'Resume job' : 'Pause job'}
           >
             <HugeiconsIcon
               icon={isPaused ? PlayIcon : PauseIcon}
@@ -353,9 +399,9 @@ function JobCard({
           <button
             onClick={() => onEdit(job)}
             disabled={isPending}
-            className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-            title="Edit job schedule and prompt"
-            aria-label={`Edit ${job.name || 'job'}`}
+            className="min-h-9 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--theme-hover)]"
+            title={`Edit ${job.name || 'job'}`}
+            aria-label="Edit job"
           >
             <HugeiconsIcon
               icon={PencilEdit02Icon}
@@ -365,9 +411,9 @@ function JobCard({
           </button>
           <button
             onClick={() => onOpenLogs(job)}
-            className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-            title="Open job logs"
-            aria-label={`Open logs for ${job.name || 'job'}`}
+            className="min-h-9 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--theme-hover)]"
+            title={`Open logs for ${job.name || 'job'}`}
+            aria-label="Open logs"
           >
             <HugeiconsIcon
               icon={ViewIcon}
@@ -378,9 +424,9 @@ function JobCard({
           <button
             onClick={() => onDelete(job.id)}
             disabled={isPending}
-            className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-            title="Delete scheduled job"
-            aria-label={`Delete ${job.name || 'job'}`}
+            className="min-h-9 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--theme-hover)]"
+            title={`Delete ${job.name || 'job'}`}
+            aria-label="Delete job"
           >
             <HugeiconsIcon
               icon={Delete01Icon}
@@ -581,24 +627,9 @@ function JobLogsDrawer({
 export function JobsScreen() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
-  const [savedFilter, setSavedFilter] = useState<JobSavedFilter>(() => {
-    if (typeof window === 'undefined') return 'all'
-    const stored = window.localStorage.getItem(JOBS_FILTER_STORAGE_KEY)
-    if (
-      stored === 'all' ||
-      stored === 'active' ||
-      stored === 'daily' ||
-      stored === 'failing' ||
-      stored === 'paused' ||
-      stored === 'recent' ||
-      stored === 'stale' ||
-      stored === 'blocked' ||
-      stored === 'paid'
-    ) {
-      return stored
-    }
-    return 'all'
-  })
+  const [savedFilter, setSavedFilter] = useState<JobSavedFilter>(
+    readPersistedJobSavedFilter,
+  )
   const [showCreate, setShowCreate] = useState(false)
   const [editingJob, setEditingJob] = useState<ClaudeJob | null>(null)
   const [logsJob, setLogsJob] = useState<ClaudeJob | null>(null)
@@ -705,7 +736,7 @@ export function JobsScreen() {
 
   const setPersistedSavedFilter = useCallback((value: JobSavedFilter) => {
     setSavedFilter(value)
-    window.localStorage.setItem(JOBS_FILTER_STORAGE_KEY, value)
+    writePersistedJobSavedFilter(value)
   }, [])
 
   const statusCounts = useMemo(() => {
@@ -729,11 +760,10 @@ export function JobsScreen() {
     [jobsData],
   )
 
-  const lastFailedJob = useMemo(() => {
-    return getLastFailedJob(jobsData)
-  }, [jobsData])
-
-  const ownerGroups = useMemo(() => groupJobsByOwner(jobsData), [jobsData])
+  const attentionJobs = useMemo(
+    () => sortJobsForAttention(jobsData).slice(0, 4),
+    [jobsData],
+  )
 
   const attentionSummary = useMemo(() => {
     return {
@@ -747,9 +777,17 @@ export function JobsScreen() {
       disabled: jobsData.filter(
         (job) => getJobLifecycleState(job) === 'disabled',
       ).length,
+      recoverable: jobsData.filter(
+        (job) =>
+          getJobHealth(job) === 'failed' &&
+          classifyJobFailureFamily(job) !== 'auth',
+      ).length,
     }
   }, [jobsData])
-
+  const cockpitTiles = useMemo(
+    () => buildJobsCockpitTiles(jobsData),
+    [jobsData],
+  )
   const jobsListStale =
     !fixtureJobs &&
     jobsDataUpdatedAt > 0 &&
@@ -804,9 +842,9 @@ export function JobsScreen() {
   }, [])
 
   return (
-    <div className="min-h-full overflow-y-auto bg-surface text-ink">
-      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 pb-[calc(var(--tabbar-h,80px)+1.5rem)] sm:px-6 lg:px-8">
-        <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface text-ink">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 flex-col gap-3 px-3 py-3 pb-[calc(var(--tabbar-h,80px)+0.75rem)] sm:gap-5 sm:px-6 sm:py-6 sm:pb-[calc(var(--tabbar-h,80px)+1.5rem)] lg:px-8">
+        <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-3 backdrop-blur-xl sm:p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <HugeiconsIcon
@@ -844,7 +882,7 @@ export function JobsScreen() {
                 disabled={filteredJobs.length === 0}
                 className="rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5 text-xs text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-hover)] disabled:opacity-50"
               >
-                Export CSV
+                CSV
               </button>
               <button
                 onClick={() => setShowCreate(true)}
@@ -852,11 +890,11 @@ export function JobsScreen() {
                 style={{ background: 'var(--theme-accent)' }}
               >
                 <HugeiconsIcon icon={Add01Icon} size={14} />
-                New Job
+                New
               </button>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:mt-4 sm:grid-cols-5">
             {[
               ['Running', statusCounts.running, 'var(--theme-accent)'],
               ['Failed', statusCounts.failed, 'var(--theme-danger)'],
@@ -882,7 +920,7 @@ export function JobsScreen() {
             ))}
           </div>
           <div className="mt-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-xs text-[var(--theme-muted)]">
-            Source: Hermes Agent `/api/claude-jobs` · Last fetched:{' '}
+            Fetched{' '}
             <span className="text-[var(--theme-text)]">
               {formatQueryFreshness(jobsDataUpdatedAt)}
             </span>{' '}
@@ -909,57 +947,119 @@ export function JobsScreen() {
               </button>
             ) : null}
           </div>
-          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
-            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-              Mobile compact: failed {attentionSummary.failed}, running{' '}
-              {attentionSummary.running}
+          <AppSurface className="mt-3">
+            <AppSectionHeader
+              title="Today"
+              meta={
+                attentionSummary.failed > 0
+                  ? `${attentionSummary.failed} need recovery`
+                  : attentionSummary.running > 0
+                    ? `${attentionSummary.running} running`
+                    : 'Quiet'
+              }
+              action={
+                jobsListStale ? (
+                  <AppStatusPill tone="amber">Stale</AppStatusPill>
+                ) : (
+                  <AppStatusPill tone="green">Fresh</AppStatusPill>
+                )
+              }
+            />
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+              {cockpitTiles.map((tile) => (
+                <AppTile
+                  key={tile.id}
+                  title={tile.label}
+                  value={tile.value}
+                  detail={tile.detail}
+                  icon={getJobsTileIcon(tile.id)}
+                  tone={getJobsTileTone(tile.tone)}
+                  actionLabel="Open"
+                  className="min-h-[116px]"
+                  onClick={() => setPersistedSavedFilter(tile.filter)}
+                />
+              ))}
             </div>
-            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-              Next due {attentionSummary.nextDue}, blocked{' '}
-              {attentionSummary.blocked}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AppStatusPill
+                tone={attentionSummary.recoverable > 0 ? 'amber' : 'green'}
+              >
+                Recovery {attentionSummary.recoverable}
+              </AppStatusPill>
+              <AppStatusPill
+                tone={attentionSummary.blocked > 0 ? 'amber' : 'green'}
+              >
+                Tyler {attentionSummary.blocked}
+              </AppStatusPill>
+              <AppStatusPill
+                tone={attentionSummary.stale > 0 ? 'amber' : 'green'}
+              >
+                Stale {attentionSummary.stale}
+              </AppStatusPill>
             </div>
-            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-              Paused/stale/disabled split: {statusCounts.paused}/
-              {attentionSummary.stale}/{attentionSummary.disabled}
-            </div>
-            <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-              Paid-call jobs {attentionSummary.paid}; cost guard visible per job
-            </div>
-          </div>
-          {ownerGroups.length > 0 ? (
-            <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-xs font-semibold text-[var(--theme-text)]">
-                  Owner groups
-                </h2>
-                <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--theme-muted)]">
-                  Hermes · Codex · workflow · launchd · manual
-                </span>
-              </div>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                {ownerGroups.map((group) => (
-                  <div
-                    key={group.owner}
-                    className="rounded-lg border border-[var(--theme-border)] px-2.5 py-2"
+            <div className="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+              {(attentionJobs.length
+                ? attentionJobs
+                : filteredJobs.slice(0, 4)
+              ).map((job) => {
+                const health = getJobHealth(job)
+                const failureFamily = classifyJobFailureFamily(job)
+                const runMetadata = getJobRunMetadata(job)
+                return (
+                  <article
+                    key={`cockpit-${job.id}`}
+                    className="rounded-lg border border-[var(--theme-border)] px-3 py-2"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-[var(--theme-text)]">
-                        {group.owner}
+                      <span
+                        className={cn(
+                          'rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wide',
+                          health === 'failed'
+                            ? 'border-red-300/40 bg-red-500/10 text-red-400'
+                            : health === 'running'
+                              ? 'border-[var(--theme-accent)] bg-[var(--theme-hover)] text-[var(--theme-accent)]'
+                              : 'border-[var(--theme-border)] text-[var(--theme-muted)]',
+                        )}
+                      >
+                        {health}
                       </span>
-                      <span className="text-base font-semibold text-[var(--theme-text)]">
-                        {group.total}
+                      <span className="text-[10px] text-[var(--theme-muted)]">
+                        {buildFailureSparkline(job)}
                       </span>
                     </div>
-                    <p className="mt-1 text-[10px] text-[var(--theme-muted)]">
-                      failed {group.failed} · running {group.running} · stale{' '}
-                      {group.stale}
+                    <h3 className="mt-2 line-clamp-1 text-xs font-semibold text-[var(--theme-text)]">
+                      {job.name || '(unnamed)'}
+                    </h3>
+                    <p className="mt-1 line-clamp-2 text-[11px] text-[var(--theme-muted)]">
+                      {failureFamily} · next {runMetadata.nextRun} ·{' '}
+                      {getSourceLabel(job)}
                     </p>
-                  </div>
-                ))}
-              </div>
+                    <div className="mt-2 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPendingJobAction({ id: job.id, action: 'run' })
+                          triggerMutation.mutate(job.id)
+                        }}
+                        disabled={pendingJobAction?.id === job.id}
+                        className="rounded-md border border-[var(--theme-border)] px-2 py-1 text-[10px] font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-hover)] disabled:opacity-50"
+                      >
+                        {health === 'failed' ? 'Recover' : 'Run'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogsJob(job)}
+                        className="rounded-md px-2 py-1 text-[10px] text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-hover)]"
+                      >
+                        Logs
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
-          ) : null}
-          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          </AppSurface>
+          <div className="mt-3 hidden gap-3 sm:grid lg:grid-cols-1">
             <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -987,8 +1087,8 @@ export function JobsScreen() {
                         triggerMutation.mutate(nextScheduledJob.id)
                       }}
                       className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-                      title="Run next scheduled job now"
-                      aria-label={`Run ${nextScheduledJob.name || 'next scheduled job'} now`}
+                      title={`Run ${nextScheduledJob.name || 'next scheduled job'} now`}
+                      aria-label="Run next job"
                     >
                       <HugeiconsIcon
                         icon={PlayIcon}
@@ -1000,8 +1100,8 @@ export function JobsScreen() {
                       type="button"
                       onClick={() => setEditingJob(nextScheduledJob)}
                       className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-                      title="Edit next scheduled job"
-                      aria-label={`Edit ${nextScheduledJob.name || 'next scheduled job'}`}
+                      title={`Edit ${nextScheduledJob.name || 'next scheduled job'}`}
+                      aria-label="Edit next job"
                     >
                       <HugeiconsIcon
                         icon={PencilEdit02Icon}
@@ -1013,73 +1113,20 @@ export function JobsScreen() {
                 ) : null}
               </div>
             </section>
-            <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--theme-muted)]">
-                    Last failed
-                  </p>
-                  <h2 className="mt-1 truncate text-sm font-semibold text-[var(--theme-text)]">
-                    {lastFailedJob?.name || 'No failed jobs'}
-                  </h2>
-                  <p className="mt-1 line-clamp-2 text-xs text-[var(--theme-muted)]">
-                    {lastFailedJob
-                      ? `${formatRunTimestamp(lastFailedJob.last_run_at)} · ${classifyJobFailureFamily(lastFailedJob)} · ${lastFailedJob.last_run_error || lastFailedJob.error || 'No error text captured'}`
-                      : 'The latest visible job runs are clean.'}
-                  </p>
-                </div>
-                {lastFailedJob ? (
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPendingJobAction({
-                          id: lastFailedJob.id,
-                          action: 'run',
-                        })
-                        triggerMutation.mutate(lastFailedJob.id)
-                      }}
-                      className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-                      title="Run recovery for last failed job"
-                      aria-label={`Run recovery for ${lastFailedJob.name || 'last failed job'}`}
-                    >
-                      <HugeiconsIcon
-                        icon={PlayIcon}
-                        size={15}
-                        className="text-[var(--theme-danger)]"
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLogsJob(lastFailedJob)}
-                      className="rounded-lg p-1.5 transition-colors hover:bg-[var(--theme-hover)]"
-                      title="Open logs for last failed job"
-                      aria-label={`Open logs for ${lastFailedJob.name || 'last failed job'}`}
-                    >
-                      <HugeiconsIcon
-                        icon={ViewIcon}
-                        size={15}
-                        className="text-[var(--theme-muted)]"
-                      />
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </section>
           </div>
         </header>
 
-        <div className="rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl">
+        <div className="rounded-2xl border border-primary-200 bg-primary-50/85 p-3 backdrop-blur-xl sm:p-4">
           <div className="mb-3 flex flex-wrap gap-2">
             {[
               ['all', 'All'],
               ['active', 'Active'],
-              ['daily', 'Daily checks'],
+              ['daily', 'Daily'],
               ['failing', 'Failing'],
               ['stale', 'Stale'],
               ['paused', 'Paused'],
               ['recent', 'Changed 7d'],
-              ['blocked', 'Needs Tyler'],
+              ['blocked', 'Tyler'],
               ['paid', 'Paid calls'],
             ].map(([value, label]) => (
               <button
@@ -1119,7 +1166,7 @@ export function JobsScreen() {
               }
               className="rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5 text-[var(--theme-text)] hover:bg-[var(--theme-hover)]"
             >
-              Refresh selected
+              Refresh
             </button>
             <button
               type="button"
@@ -1128,7 +1175,7 @@ export function JobsScreen() {
               }
               className="rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5 text-[var(--theme-text)] hover:bg-[var(--theme-hover)]"
             >
-              Pause selected
+              Pause
             </button>
             <button
               type="button"
@@ -1136,10 +1183,10 @@ export function JobsScreen() {
               disabled={filteredJobs.length === 0}
               className="rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5 text-[var(--theme-text)] hover:bg-[var(--theme-hover)] disabled:opacity-50"
             >
-              Export selected incidents
+              Incidents
             </button>
             <span className="rounded-lg border border-[var(--theme-border)] px-2.5 py-1.5 text-[var(--theme-muted)]">
-              Search/filter persistence enabled
+              Saved view
             </span>
           </div>
           {profilesQuery.isError ? (
@@ -1153,7 +1200,7 @@ export function JobsScreen() {
           ) : null}
         </div>
 
-        <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-2xl border border-primary-200 bg-primary-50/60 px-3 py-3 sm:px-4">
           {jobsQuery.isLoading && !fixtureJobs ? (
             <div className="flex items-center justify-center py-12 text-sm text-[var(--theme-muted)]">
               Loading jobs...
@@ -1182,8 +1229,8 @@ export function JobsScreen() {
               </p>
               <p className="mt-1 text-xs">
                 {search.trim()
-                  ? 'Search covers name, prompt, and profile. Clear the filter or create a new job.'
-                  : 'Create a cron-style job or heartbeat job to run recurring Hermes work.'}
+                  ? 'Clear filters or create a job.'
+                  : 'Create a cron or heartbeat job.'}
               </p>
               <button
                 onClick={() => setShowCreate(true)}
@@ -1191,7 +1238,7 @@ export function JobsScreen() {
                 style={{ background: 'var(--theme-accent)' }}
               >
                 <HugeiconsIcon icon={Add01Icon} size={14} />
-                New Job
+                New
               </button>
             </div>
           ) : (

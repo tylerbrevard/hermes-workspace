@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildSettingsDiagnosticBundle,
+  calculateSettingsHealthScore,
   getDefaultMobileSettingsSections,
   getPrimarySettingsRecoveryAction,
+  getSettingsCockpitTiles,
   getSettingsMobileGroup,
+  getSettingsPrioritySections,
   getSettingsSchemaReport,
   getSettingsSearchSummary,
   getSettingsSectionForValidation,
@@ -22,7 +25,7 @@ describe('settings route helpers', () => {
     )
     expect(searchSettingsSections('fallback')).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'routing', label: 'Smart Routing' }),
+        expect.objectContaining({ id: 'routing', label: 'Routing' }),
       ]),
     )
     expect(searchSettingsSections('not-a-section')).toHaveLength(0)
@@ -89,6 +92,32 @@ describe('settings route helpers', () => {
         severity: 'critical',
       }),
     )
+  })
+
+  it('builds settings cockpit score, tiles, and priority sections', () => {
+    expect(calculateSettingsHealthScore(defaultStudioSettings)).toBeLessThan(75)
+    expect(
+      calculateSettingsHealthScore({
+        claudeUrl: 'http://127.0.0.1:8645',
+        claudeToken: 'secret-token',
+        preferredBudgetModel: 'local/qwen',
+        theme: 'dark',
+      }),
+    ).toBe(100)
+
+    expect(getSettingsCockpitTiles(defaultStudioSettings).slice(0, 2)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'provider',
+          label: 'Endpoint',
+          metric: 'Fix',
+          section: 'claude',
+        }),
+      ]),
+    )
+    expect(
+      getSettingsPrioritySections(defaultStudioSettings).map((x) => x.id),
+    ).toEqual(expect.arrayContaining(['claude', 'routing', 'notifications']))
   })
 
   it('defines mobile settings glance groups', () => {

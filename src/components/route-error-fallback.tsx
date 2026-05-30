@@ -21,8 +21,8 @@ function getErrorStack(error: unknown) {
 
 export function RouteErrorFallback({
   error,
-  title = 'This page failed to load',
-  description = 'Retry the route first. If it fails again, reload the page.',
+  title = 'Page failed',
+  description = 'Retry, then reload.',
   reset,
   className,
 }: RouteErrorFallbackProps) {

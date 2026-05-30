@@ -75,8 +75,8 @@ describe('streaming activity ui helpers', () => {
     expect(buildHermesActivitySummary([])).toMatchObject({
       countLabel: '0 calls',
       statusLabel: 'idle',
-      visibleLabel: 'No active tools',
-      collapsedLabel: 'No active tools',
+      visibleLabel: 'No tools',
+      collapsedLabel: 'No tools',
     })
   })
 
@@ -95,7 +95,7 @@ describe('streaming activity ui helpers', () => {
         },
       ]),
     ).toMatchObject({
-      countLabel: '2 calls',
+      countLabel: '2 tools',
       statusLabel: '1 running',
       visibleLabel: 'read AGENTS.md, browser http://127.0.0.1:3002/chat/new',
       collapsedLabel: 'read AGENTS.md, browser http://127.0.0.1:3002/chat/new',

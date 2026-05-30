@@ -378,7 +378,9 @@ function shouldHideSystemInjectedUserMessage(text: string): boolean {
   // Only hide messages that begin with known system-injected prompts. User
   // context summaries may quote these phrases later in the message and must
   // remain visible/persistent in the chat UI.
-  return HIDDEN_SYSTEM_USER_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+  return HIDDEN_SYSTEM_USER_PREFIXES.some((prefix) =>
+    trimmed.startsWith(prefix),
+  )
 }
 
 function getChronologyRank(message: ChatMessage): number {
@@ -498,7 +500,10 @@ export function buildDisplayEntries(
       attachedToolMessages: [],
     }
 
-    if (message.role === 'assistant' && pendingAssistantToolMessages.length > 0) {
+    if (
+      message.role === 'assistant' &&
+      pendingAssistantToolMessages.length > 0
+    ) {
       entry.attachedToolMessages.push(...pendingAssistantToolMessages)
       pendingAssistantToolMessages = []
     }
@@ -511,7 +516,11 @@ export function buildDisplayEntries(
 
 export function getTrailingToolOnlyTurnSummary(
   displayMessages: Array<ChatMessage>,
-): { count: number; toolNames: Array<string>; hasFinalAssistantText: boolean } | null {
+): {
+  count: number
+  toolNames: Array<string>
+  hasFinalAssistantText: boolean
+} | null {
   let lastTextAssistantIndex = -1
   for (let index = displayMessages.length - 1; index >= 0; index -= 1) {
     const message = displayMessages[index]
@@ -524,7 +533,10 @@ export function getTrailingToolOnlyTurnSummary(
       break
     }
   }
-  if (lastTextAssistantIndex < 0 || lastTextAssistantIndex === displayMessages.length - 1) {
+  if (
+    lastTextAssistantIndex < 0 ||
+    lastTextAssistantIndex === displayMessages.length - 1
+  ) {
     return null
   }
 
@@ -535,7 +547,10 @@ export function getTrailingToolOnlyTurnSummary(
       message.role === 'tool' ||
       message.role === 'toolResult',
   )
-  if (hiddenToolMessages.length !== trailing.length || hiddenToolMessages.length === 0) {
+  if (
+    hiddenToolMessages.length !== trailing.length ||
+    hiddenToolMessages.length === 0
+  ) {
     return null
   }
 
@@ -1178,19 +1193,13 @@ function ChatMessageListComponent({
                 ? 'calling'
                 : toolCall.phase === 'failed' || toolCall.phase === 'error'
                   ? 'error'
-                  : toolCall.phase === 'calling' ||
-                      toolCall.phase === 'running'
+                  : toolCall.phase === 'calling' || toolCall.phase === 'running'
                     ? toolCall.phase
                     : 'calling',
           args: tcAny.args,
           preview:
-            typeof tcAny.preview === 'string'
-              ? (tcAny.preview)
-              : undefined,
-          result:
-            typeof tcAny.result === 'string'
-              ? (tcAny.result)
-              : undefined,
+            typeof tcAny.preview === 'string' ? tcAny.preview : undefined,
+          result: typeof tcAny.result === 'string' ? tcAny.result : undefined,
         }
       })
     }
@@ -1205,7 +1214,8 @@ function ChatMessageListComponent({
   // Pin the last user+assistant group without adding bottom padding.
   const groupStartIndex = typeof lastUserIndex === 'number' ? lastUserIndex : -1
   const hasGroup = pinToTop && groupStartIndex >= 0
-  const shouldVirtualize = false // Disabled — causes scroll glitches
+  const shouldVirtualize =
+    !hasGroup && !isMessageSearchActive && visibleEntries.length > 80
 
   const virtualRange = useMemo(() => {
     if (!shouldVirtualize || scrollMetrics.clientHeight <= 0) {
@@ -1918,9 +1928,7 @@ function ChatMessageListComponent({
                           const first = Object.values(args).find(
                             (v) => typeof v === 'string' && v.trim(),
                           )
-                          return typeof first === 'string'
-                            ? first.trim()
-                            : null
+                          return typeof first === 'string' ? first.trim() : null
                         }}
                       />
                     </div>

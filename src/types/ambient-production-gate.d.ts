@@ -1,8 +1,13 @@
 declare module '@playwright/test' {
   export const test: {
-    (name: string, fn: (args: { page: any }) => unknown | Promise<unknown>): void
+    (
+      name: string,
+      fn: (args: { page: any }) => unknown | Promise<unknown>,
+    ): void
     describe: (name: string, fn: () => void) => void
-    beforeEach: (fn: (args: { page: any }) => unknown | Promise<unknown>) => void
+    beforeEach: (
+      fn: (args: { page: any }) => unknown | Promise<unknown>,
+    ) => void
     use: (options: Record<string, unknown>) => void
   }
   export const expect: any

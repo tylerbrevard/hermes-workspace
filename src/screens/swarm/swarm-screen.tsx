@@ -345,7 +345,7 @@ export function SwarmScreen() {
                 title: 'FAQ',
                 bullets: [
                   'If workers look empty or unhealthy, fix setup and runtime issues in Operations first.',
-                  'Swarm is best for coordination and throughput, not first-time configuration.',
+                  'Swarm is for throughput; do first setup in Operations.',
                 ],
               },
             ]}
@@ -406,11 +406,10 @@ export function SwarmScreen() {
       {!isLoading && swarmMembers.length === 0 ? (
         <section className="rounded-[1.5rem] border border-amber-400/25 bg-amber-500/10 px-4 py-5 text-sm text-amber-100">
           <div className="font-semibold text-amber-50">
-            No swarm workers discovered
+            No workers
           </div>
           <div className="mt-1 text-amber-100/75">
-            Worker discovery is empty. Check Operations for configured agents,
-            then refresh runtime after workers are started.
+            Check Operations, then refresh runtime.
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button

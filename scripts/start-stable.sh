@@ -35,6 +35,10 @@ stop_pid() {
   fi
 }
 
+pid_command() {
+  ps -p "$1" -o command= 2>/dev/null || true
+}
+
 if [[ -f "$PID_FILE" ]]; then
   old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   if [[ -n "$old_pid" ]]; then
@@ -44,11 +48,20 @@ if [[ -f "$PID_FILE" ]]; then
 fi
 
 for pid in $(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true); do
-  stop_pid "$pid"
+  command="$(pid_command "$pid")"
+  if [[ "$command" == *"server-entry.js"* && "$command" == *"$ROOT"* ]]; then
+    stop_pid "$pid"
+  elif [[ "${FORCE_PORT_KILL:-0}" == "1" ]]; then
+    echo "[stable] FORCE_PORT_KILL=1 stopping pid=$pid command=$command" >&2
+    stop_pid "$pid"
+  else
+    echo "[stable] refusing to stop unowned listener on port $PORT: pid=$pid command=$command" >&2
+    echo "[stable] stop it manually or rerun with FORCE_PORT_KILL=1" >&2
+    exit 1
+  fi
 done
 
 echo "[stable] building Hermes Workspace..."
-rm -rf dist
 pnpm build >"$BUILD_LOG_FILE" 2>&1
 
 echo "[stable] starting Hermes Workspace on port $PORT..."

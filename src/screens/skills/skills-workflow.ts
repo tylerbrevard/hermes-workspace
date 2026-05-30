@@ -221,7 +221,7 @@ export function buildSkillInventoryExport(skills: Array<SkillSummary>): string {
 
 export function getSkillSearchSnippet(skill: SkillSummary, query: string) {
   const normalized = query.trim().toLowerCase()
-  if (!normalized) return `Category match: ${skill.category}`
+  if (!normalized) return `Category: ${skill.category}`
   if (skill.name.toLowerCase().includes(normalized)) {
     return `Name match: ${skill.name}`
   }
@@ -256,7 +256,7 @@ export function getSkillMutationRisk(
   return skill.installed ? 'medium' : 'low'
 }
 
-function sourceTail(sourcePath: string): string {
+export function sourceTail(sourcePath: string): string {
   if (!sourcePath) return 'unknown source'
   const parts = sourcePath.split('/').filter(Boolean)
   return parts.slice(-2).join('/') || sourcePath

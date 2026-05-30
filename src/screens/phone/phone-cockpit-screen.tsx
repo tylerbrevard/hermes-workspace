@@ -4,21 +4,14 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Add01Icon,
   Alert01Icon,
-  Apple01Icon,
   Calendar01Icon,
   Chat01Icon,
-  CheckListIcon,
   Clock01Icon,
   ComputerIcon,
-  DashboardSquare01Icon,
   File01Icon,
-  InjectionIcon,
   Mail01Icon,
   Mic01Icon,
-  Notification01Icon,
   SentIcon,
-  Settings01Icon,
-  Target02Icon,
   Task01Icon,
   Video01Icon,
 } from '@hugeicons/core-free-icons'
@@ -27,53 +20,69 @@ import {
   Card,
   EmptyState,
   ExternalAction,
-  IconTile,
-  StatPill,
-  StatusDot,
 } from './phone-cockpit-ui'
 import {
-  FOOD_MEAL_OPTIONS,
+  PhoneCommandDashboardSection,
+  PhoneDailyLoopsSection,
+  PhoneDeskModeSection,
+  PhoneFastActionsSection,
+  PhoneFloatingLilyAction,
+  PhoneHeroSection,
+  PhoneSystemStatusSection,
+  PhoneTabsSection,
+  PhoneThumbControlDock,
+  PhoneTravelModeSection,
+  PhoneViewControlsSection,
+  PhoneWorkspaceShortcutsSection,
+} from './phone-cockpit-sections'
+import {
+  DEFAULT_PHONE_COLLAPSED_CARDS,
   PHONE_COMPACT_BADGES_KEY,
   PHONE_HIGH_CONTRAST_KEY,
   PHONE_LOW_DATA_KEY,
-  PHONE_TABS,
-  WEGOVY_DOSE_OPTIONS,
-  WEGOVY_SITE_OPTIONS,
   buildPhoneAtAGlance,
+  buildPhoneCommandDashboard,
   buildPhoneDailyLoopSignals,
   buildPhoneFreshnessNotice,
   buildPhoneModeReadouts,
   buildPhoneSignalRail,
+  buildPhoneTravelGlance,
   captureModeMeta,
   cx,
   describeQueuedCapture,
-  fmtShortTime,
   fmtTime,
   formatFreshness,
   isStandalonePwa,
+  mergeUnknownEntries,
   nextPhoneTab,
   quickLogPhoneFood,
   quickLogPhoneWegovy,
   quickLogPhoneZyn,
   readBooleanPreference,
   readCollapsedCards,
+  readLocalJson,
+  readPhoneTravelMode,
   readPinnedCards,
   readQueuedCaptures,
   relativeMinutes,
   removePhoneQuickLog,
-  sourceTone,
   toggleCollapsedCardSet,
   toneClass,
   writeBooleanPreference,
   writeCollapsedCards,
+  writeLocalJson,
+  writePhoneTravelMode,
   writePinnedCards,
   writeQueuedCaptures,
 } from './lib/phone-cockpit-helpers'
 import type {
   CaptureMode,
+  NotificationState,
   PhoneCardId,
   PhoneTab,
+  PhoneTravelMode,
   QueuedCapture,
+  QuickUndo,
 } from './lib/phone-cockpit-helpers'
 import type {
   PhoneAttentionItem,
@@ -96,6 +105,7 @@ export function PhoneCockpitScreen() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('note')
   const [activeTab, setActiveTab] = useState<PhoneTab>('today')
   const [captureText, setCaptureText] = useState('')
+  const [captureSheetOpen, setCaptureSheetOpen] = useState(false)
   const [quickFoodText, setQuickFoodText] = useState('')
   const [quickFoodMeal, setQuickFoodMeal] = useState('Snack')
   const [quickFoodBarcode, setQuickFoodBarcode] = useState('')
@@ -121,8 +131,9 @@ export function PhoneCockpitScreen() {
   const [lowDataMode, setLowDataMode] = useState(false)
   const [highContrastMode, setHighContrastMode] = useState(false)
   const [compactBadgesMode, setCompactBadgesMode] = useState(false)
+  const [travelMode, setTravelMode] = useState<PhoneTravelMode>('standard')
   const [collapsedCards, setCollapsedCards] = useState<Set<PhoneCardId>>(
-    () => new Set(),
+    () => new Set(DEFAULT_PHONE_COLLAPSED_CARDS),
   )
   const [pinnedCards, setPinnedCards] = useState<Set<PhoneCardId>>(
     () => new Set(),
@@ -161,6 +172,7 @@ export function PhoneCockpitScreen() {
     setLowDataMode(readBooleanPreference(PHONE_LOW_DATA_KEY))
     setHighContrastMode(readBooleanPreference(PHONE_HIGH_CONTRAST_KEY))
     setCompactBadgesMode(readBooleanPreference(PHONE_COMPACT_BADGES_KEY))
+    setTravelMode(readPhoneTravelMode())
     setCollapsedCards(readCollapsedCards())
     setPinnedCards(readPinnedCards())
   }, [])
@@ -221,11 +233,10 @@ export function PhoneCockpitScreen() {
   )
 
   const topSignal = useMemo(() => {
-    if (!snapshot) return 'Phone Cockpit'
+    if (!snapshot) return 'Phone'
     if (snapshot.attention[0]) return snapshot.attention[0].title
     if (snapshot.schedule.nextMeeting)
       return `${snapshot.schedule.nextMeeting.title} in ${relativeMinutes(snapshot.schedule.nextMeeting.minutesUntil)}`
-    if (snapshot.tasks.today) return `${snapshot.tasks.today} due today`
     if (snapshot.inbox.unread !== null)
       return `${snapshot.inbox.unread} unread mail`
     return snapshot.presence.activity || 'Clear'
@@ -237,6 +248,10 @@ export function PhoneCockpitScreen() {
   )
   const atAGlance = useMemo(() => buildPhoneAtAGlance(snapshot), [snapshot])
   const signalRail = useMemo(() => buildPhoneSignalRail(snapshot), [snapshot])
+  const travelGlance = useMemo(
+    () => buildPhoneTravelGlance(snapshot, travelMode),
+    [snapshot, travelMode],
+  )
   const freshnessNotice = useMemo(
     () =>
       buildPhoneFreshnessNotice(
@@ -249,6 +264,10 @@ export function PhoneCockpitScreen() {
   const dailyLoopSignals = useMemo(
     () => buildPhoneDailyLoopSignals(),
     [dailyLoopVersion, snapshot],
+  )
+  const commandDashboard = useMemo(
+    () => buildPhoneCommandDashboard(snapshot, dailyLoopSignals),
+    [dailyLoopSignals, snapshot],
   )
 
   function persistQueuedCaptures(nextQueue: Array<QueuedCapture>) {
@@ -281,6 +300,17 @@ export function PhoneCockpitScreen() {
       hapticTap()
       return next
     })
+  }
+
+  function changeTravelMode(mode: PhoneTravelMode) {
+    setTravelMode(mode)
+    writePhoneTravelMode(mode)
+    hapticTap()
+    setCaptureAnnouncement(
+      mode === 'standard'
+        ? 'Normal phone view selected'
+        : `${mode} glance selected`,
+    )
   }
 
   function toggleCardCollapsed(cardId: PhoneCardId) {
@@ -375,6 +405,7 @@ export function PhoneCockpitScreen() {
       )
     } else {
       setLastCaptureError('')
+      setCaptureSheetOpen(false)
       hapticTap()
       toast('Offline queue synced.', { type: 'success' })
       void load()
@@ -409,13 +440,17 @@ export function PhoneCockpitScreen() {
         )
         if (!ok) return
       }
-      const payload =
+      const payload: PhoneCockpitAction =
         captureMode === 'note'
-          ? { kind: 'note', text, source: 'phone-pwa' }
+          ? { kind: 'note' as const, text, source: 'phone-pwa' }
           : captureMode === 'task'
-            ? { kind: 'task', title: text, priority: 'medium' }
+            ? {
+                kind: 'task' as const,
+                title: text,
+                priority: 'medium' as const,
+              }
             : {
-                kind: 'draft',
+                kind: 'draft' as const,
                 recipient: draftRecipient.trim() || undefined,
                 subject: draftSubject.trim() || undefined,
                 body: text,
@@ -463,6 +498,7 @@ export function PhoneCockpitScreen() {
             ? draftSubject.trim() || draftRecipient.trim() || 'Draft'
             : text
       queueCapture(payload, captureMode, label, message)
+      setCaptureSheetOpen(false)
       toast('Saved offline. Retry when back online.', {
         type: 'warning',
       })
@@ -489,6 +525,7 @@ export function PhoneCockpitScreen() {
     setActiveTab('today')
     setCaptureMode(mode)
     setCaptureText(text)
+    setCaptureSheetOpen(true)
     setCaptureAnnouncement(`${captureModeMeta[mode].label} capture selected`)
     window.requestAnimationFrame(() => captureInputRef.current?.focus())
     hapticTap()
@@ -502,6 +539,7 @@ export function PhoneCockpitScreen() {
     setDraftRecipient(message.sender)
     setDraftSubject(`Re: ${message.subject}`)
     setCaptureText(`Reply intent: ${message.subject}`)
+    setCaptureSheetOpen(true)
     setCaptureAnnouncement(
       'Reply Later draft intent filled from focused inbox message',
     )
@@ -515,6 +553,7 @@ export function PhoneCockpitScreen() {
     setCaptureText(
       'Closeout: turn loose notes into tomorrow tasks. Review inbox, calendar prep, and open captures.',
     )
+    setCaptureSheetOpen(true)
     setCaptureAnnouncement('Closeout capture ready')
     window.requestAnimationFrame(() => captureInputRef.current?.focus())
     hapticTap()
@@ -693,418 +732,121 @@ export function PhoneCockpitScreen() {
   return (
     <div
       className={cx(
-        'min-h-full bg-[#080c10] text-[#e8eeee]',
+        'min-h-full bg-[#070b0f] text-[#e8eeee]',
         highContrastMode && 'bg-black text-white',
       )}
     >
-      <ActionLink
-        to="/lily"
-        label="Open LILY microphone"
-        className="fixed bottom-[calc(88px+env(safe-area-inset-bottom))] right-3 z-[70] size-14 rounded-full border-[#8ee7d5]/50 bg-[#8ee7d5] p-0 text-[#071111] shadow-[0_14px_34px_rgba(0,0,0,.45)] md:hidden"
-      >
-        <HugeiconsIcon icon={Mic01Icon} size={24} aria-hidden="true" />
-      </ActionLink>
+      <PhoneFloatingLilyAction />
       <main
-        className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-3 pb-[calc(112px+env(safe-area-inset-bottom))] pt-[calc(10px+env(safe-area-inset-top))]"
+        className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-3 pb-[calc(176px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))] md:gap-3 md:pb-[calc(112px+env(safe-area-inset-bottom))] md:pt-[calc(10px+env(safe-area-inset-top))]"
         onTouchStart={handleTabTouchStart}
         onTouchEnd={handleTabTouchEnd}
       >
-        <header className="rounded-[10px] border border-[#6ec6b8]/25 bg-[#0d1419] p-3">
-          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-[#8ee7d5]">
-            <HugeiconsIcon
-              icon={DashboardSquare01Icon}
-              size={16}
-              aria-hidden="true"
-            />
-            Today
-          </div>
-          <h1 className="mt-2 line-clamp-2 text-[22px] font-semibold leading-7 tracking-[0] text-white [text-wrap:balance]">
-            {topSignal}
-          </h1>
-          {freshnessNotice ? (
-            <p className="mt-1.5 text-sm leading-5 text-[#b7c6c9]">
-              {freshnessNotice}
-            </p>
-          ) : null}
-          <div
-            className="mt-2.5 grid grid-cols-5 gap-1.5"
-            aria-label="Signal rail"
-          >
-            {signalRail.map((item) => (
-              <div
-                key={item.id}
-                className="min-w-0 rounded-[8px] border border-white/10 bg-white/[0.04] px-1.5 py-2 text-center"
-              >
-                <div className="flex justify-center">
-                  <StatusDot tone={item.tone} />
-                </div>
-                <p className="mt-1 truncate text-[10px] uppercase tracking-[0.08em] text-[#9fb0b4]">
-                  {item.label}
-                </p>
-                <p className="mt-0.5 truncate text-xs font-semibold text-white">
-                  {item.value}
-                </p>
-              </div>
-            ))}
-          </div>
-          {!compactBadgesMode ? (
-            <>
-              <div
-                className="mt-2.5 grid grid-cols-3 gap-2"
-                aria-label="Current counts"
-              >
-                <StatPill
-                  icon={Mail01Icon}
-                  label="Mail"
-                  value={snapshot?.inbox.unread ?? '—'}
-                />
-                <StatPill
-                  icon={Alert01Icon}
-                  label="Urgent"
-                  value={snapshot?.tasks.urgent ?? '—'}
-                />
-                <StatPill
-                  icon={Task01Icon}
-                  label="Due"
-                  value={snapshot?.tasks.overdue ?? '—'}
-                />
-              </div>
-              <details className="mt-2 rounded-[8px] border border-white/10 bg-white/[0.03] px-2.5 py-2">
-                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-[#8ee7d5]">
-                  Detail
-                </summary>
-                <div
-                  className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5"
-                  aria-label="At a glance"
-                >
-                  {atAGlance.map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-[8px] border border-white/10 bg-black/10 px-2.5 py-2"
-                    >
-                      <p className="text-[10px] uppercase tracking-[0.12em] text-[#8ee7d5]">
-                        {item.label}
-                      </p>
-                      <p className="mt-1 line-clamp-2 text-xs font-semibold leading-4 text-white">
-                        {item.value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            </>
-          ) : null}
-          {error ? (
-            <div
-              role="alert"
-              className="mt-3 rounded-[8px] border border-[#ff9aa8]/30 bg-[#ff9aa8]/10 p-3 text-sm text-[#ffb0bb]"
-            >
-              <div className="font-medium text-white">Snapshot unavailable</div>
-              <div className="mt-1 break-words">{error}</div>
-              <button
-                type="button"
-                onClick={() => void load()}
-                className="mt-3 min-h-11 rounded-[8px] border border-[#ff9aa8]/30 px-3 text-xs font-medium text-[#ffd6dc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff9aa8]/70"
-              >
-                Retry
-              </button>
-            </div>
-          ) : null}
-        </header>
+        <PhoneHeroSection
+          topSignal={topSignal}
+          freshnessNotice={freshnessNotice}
+          signalRail={signalRail}
+          compactBadgesMode={compactBadgesMode}
+          snapshot={snapshot}
+          atAGlance={atAGlance}
+          error={error}
+          onRetry={() => void load()}
+        />
 
-        <Card
-          title="View"
-          kicker={lowDataMode ? 'Low data' : 'Full'}
-          icon={Settings01Icon}
-        >
-          <div className="grid grid-cols-3 gap-2 text-sm">
-            <button
-              type="button"
-              onClick={toggleLowDataMode}
-              aria-pressed={lowDataMode}
-              className={cx(
-                'min-h-11 rounded-[8px] border px-3 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70',
-                lowDataMode
-                  ? 'border-[#8ee7d5] bg-[#8ee7d5] text-[#071111]'
-                  : 'border-white/10 bg-white/[0.04] text-[#dbe7e8]',
-              )}
-            >
-              Low-data mode
-            </button>
-            <button
-              type="button"
-              onClick={toggleHighContrastMode}
-              aria-pressed={highContrastMode}
-              className={cx(
-                'min-h-11 rounded-[8px] border px-3 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70',
-                highContrastMode
-                  ? 'border-white bg-white text-black'
-                  : 'border-white/10 bg-white/[0.04] text-[#dbe7e8]',
-              )}
-            >
-              High contrast
-            </button>
-            <button
-              type="button"
-              onClick={toggleCompactBadgesMode}
-              aria-pressed={compactBadgesMode}
-              className={cx(
-                'min-h-11 rounded-[8px] border px-3 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70',
-                compactBadgesMode
-                  ? 'border-[#8ee7d5] bg-[#8ee7d5] text-[#071111]'
-                  : 'border-white/10 bg-white/[0.04] text-[#dbe7e8]',
-              )}
-            >
-              Badges
-            </button>
-          </div>
-          {lowDataMode ? (
-            <p className="mt-2 text-xs leading-5 text-[#b7c6c9]">
-              Low-data mode keeps action cards and hides secondary detail cards.
-            </p>
-          ) : null}
-          <p className="mt-2 text-xs leading-5 text-[#b7c6c9]">
-            Safe to ignore source warnings:{' '}
-            {sourceWarningsIgnored
-              ? 'on for expected off-hours drift'
-              : sourceWarnings.length
-                ? 'off'
-                : 'no active warnings'}
-          </p>
-        </Card>
+        <PhoneCommandDashboardSection
+          posture={commandDashboard.posture}
+          nextAction={commandDashboard.nextAction}
+          nextDetail={commandDashboard.nextDetail}
+          tiles={commandDashboard.tiles}
+          mix={commandDashboard.mix}
+          loopPercent={commandDashboard.loopPercent}
+          onOpenNeeds={() => setActiveTab('today')}
+          onOpenCapture={() => openCapture('note')}
+        />
 
-        <Card title="Fast actions" kicker="Daily" icon={DashboardSquare01Icon}>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <button
-              type="button"
-              onClick={() => setActiveTab('today')}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] border border-white/10 bg-white/[0.04] px-3 font-medium text-[#dbe7e8]"
-            >
-              <HugeiconsIcon icon={Alert01Icon} size={16} aria-hidden="true" />
-              Needs Tyler
-            </button>
-            <button
-              type="button"
-              onClick={() => openCapture('note')}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] border border-white/10 bg-white/[0.04] px-3 font-medium text-[#dbe7e8]"
-            >
-              <HugeiconsIcon icon={Add01Icon} size={16} aria-hidden="true" />
-              Capture
-            </button>
-            <ActionLink
-              to="/meetings"
-              label="Open next meeting prep"
-              className="gap-2"
-            >
-              <HugeiconsIcon
-                icon={Calendar01Icon}
-                size={16}
-                aria-hidden="true"
-              />
-              Next Meeting
-            </ActionLink>
-            <ActionLink to="/lily" label="Open LILY mic" className="gap-2">
-              <HugeiconsIcon icon={Mic01Icon} size={16} aria-hidden="true" />
-              LILY mic
-            </ActionLink>
-          </div>
-        </Card>
+        <PhoneViewControlsSection
+          lowDataMode={lowDataMode}
+          highContrastMode={highContrastMode}
+          compactBadgesMode={compactBadgesMode}
+          travelMode={travelMode}
+          sourceWarningsIgnored={sourceWarningsIgnored}
+          sourceWarningsCount={sourceWarnings.length}
+          onToggleLowDataMode={toggleLowDataMode}
+          onToggleHighContrastMode={toggleHighContrastMode}
+          onToggleCompactBadgesMode={toggleCompactBadgesMode}
+          onTravelModeChange={changeTravelMode}
+        />
 
-        <Card
-          cardId="dailyloops"
-          title="Daily loops"
-          kicker="Subpages"
-          icon={CheckListIcon}
-          collapsed={isCollapsed('dailyloops')}
-          pinned={isPinned('dailyloops')}
-          onTogglePinned={toggleCardPinned}
-          onToggleCollapsed={toggleCardCollapsed}
-        >
-          <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
-            <div className="grid gap-1">
-              <button
-                type="button"
-                onClick={logQuickZyn}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] border border-white/10 bg-white/[0.04] px-3 font-semibold text-[#dbe7e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70"
-              >
-                <HugeiconsIcon
-                  icon={Target02Icon}
-                  size={16}
-                  aria-hidden="true"
-                />
-                Zyn +1
-              </button>
-              <label className="sr-only" htmlFor="phone-zyn-strength">
-                Zyn strength
-              </label>
-              <select
-                id="phone-zyn-strength"
-                value={quickZynStrengthMg}
-                onChange={(event) =>
-                  setQuickZynStrengthMg(Number(event.target.value) || 3)
-                }
-                className="min-h-9 rounded-[8px] border border-white/10 bg-[#080c10] px-2 text-xs font-medium text-[#dbe7e8] outline-none focus-visible:border-[#8ee7d5]"
-              >
-                {[3, 6].map((strength) => (
-                  <option key={strength} value={strength}>
-                    {strength} mg
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-1">
-              <button
-                type="button"
-                onClick={logQuickWegovy}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] border border-white/10 bg-white/[0.04] px-3 font-semibold text-[#dbe7e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70"
-              >
-                <HugeiconsIcon
-                  icon={InjectionIcon}
-                  size={16}
-                  aria-hidden="true"
-                />
-                Wegovy done
-              </button>
-              <div className="grid grid-cols-2 gap-1">
-                <label className="sr-only" htmlFor="phone-wegovy-dose">
-                  Wegovy dose
-                </label>
-                <select
-                  id="phone-wegovy-dose"
-                  value={quickWegovyDoseMg}
-                  onChange={(event) => setQuickWegovyDoseMg(event.target.value)}
-                  className="min-h-9 min-w-0 rounded-[8px] border border-white/10 bg-[#080c10] px-2 text-xs font-medium text-[#dbe7e8] outline-none focus-visible:border-[#8ee7d5]"
-                >
-                  {WEGOVY_DOSE_OPTIONS.map((dose) => (
-                    <option key={dose} value={dose}>
-                      {dose} mg
-                    </option>
-                  ))}
-                </select>
-                <label className="sr-only" htmlFor="phone-wegovy-site">
-                  Wegovy site
-                </label>
-                <select
-                  id="phone-wegovy-site"
-                  value={quickWegovySite}
-                  onChange={(event) => setQuickWegovySite(event.target.value)}
-                  className="min-h-9 min-w-0 rounded-[8px] border border-white/10 bg-[#080c10] px-2 text-xs font-medium text-[#dbe7e8] outline-none focus-visible:border-[#8ee7d5]"
-                >
-                  {WEGOVY_SITE_OPTIONS.map((site) => (
-                    <option key={site} value={site}>
-                      {site}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <label className="col-span-2 grid gap-1 text-xs font-medium text-[#b7c6c9]">
-              Food quick log
-              <div className="grid grid-cols-3 gap-1">
-                <select
-                  value={quickFoodMeal}
-                  onChange={(event) => setQuickFoodMeal(event.target.value)}
-                  className="min-h-9 rounded-[8px] border border-white/10 bg-[#080c10] px-2 text-xs font-medium text-[#dbe7e8] outline-none focus-visible:border-[#8ee7d5]"
-                  aria-label="Meal"
-                >
-                  {FOOD_MEAL_OPTIONS.map((meal) => (
-                    <option key={meal} value={meal}>
-                      {meal}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={quickFoodBarcode}
-                  onChange={(event) => setQuickFoodBarcode(event.target.value)}
-                  inputMode="numeric"
-                  placeholder="Barcode"
-                  className="min-h-9 min-w-0 rounded-[8px] border border-white/10 bg-[#080c10] px-2 text-xs text-white outline-none placeholder:text-[#78888c] focus-visible:border-[#8ee7d5]"
-                />
-                <input
-                  value={quickFoodPhotoName}
-                  onChange={(event) =>
-                    setQuickFoodPhotoName(event.target.value)
-                  }
-                  placeholder="Photo note"
-                  className="min-h-9 min-w-0 rounded-[8px] border border-white/10 bg-[#080c10] px-2 text-xs text-white outline-none placeholder:text-[#78888c] focus-visible:border-[#8ee7d5]"
-                />
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={quickFoodText}
-                  onChange={(event) => setQuickFoodText(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') logQuickFood()
-                  }}
-                  placeholder="Chicken rice bowl..."
-                  className="min-h-11 min-w-0 flex-1 rounded-[8px] border border-white/10 bg-[#080c10] px-3 text-sm text-white outline-none placeholder:text-[#78888c] focus-visible:border-[#8ee7d5] focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/30"
-                />
-                <button
-                  type="button"
-                  onClick={logQuickFood}
-                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[8px] bg-[#8ee7d5] px-3 text-sm font-semibold text-[#071111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70"
-                >
-                  <HugeiconsIcon
-                    icon={Apple01Icon}
-                    size={16}
-                    aria-hidden="true"
-                  />
-                  Log
-                </button>
-              </div>
-            </label>
-            {quickUndo ? (
-              <button
-                type="button"
-                onClick={undoQuickLog}
-                className="col-span-2 min-h-10 rounded-[8px] border border-[#f7b267]/35 bg-[#f7b267]/10 px-3 text-sm font-semibold text-[#ffd39d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f7b267]/70"
-              >
-                {quickUndo.label}
-              </button>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {dailyLoopSignals.map((item) => (
-              <IconTile
-                key={item.id}
-                to={item.href}
-                icon={item.icon}
-                label={`${item.label}: ${item.value}`}
-                detail={item.detail}
-                tone={item.tone}
-              />
-            ))}
-          </div>
-        </Card>
+        <PhoneFastActionsSection
+          onOpenNeeds={() => setActiveTab('today')}
+          onOpenCapture={() => openCapture('note')}
+        />
 
-        {!compactBadgesMode ? (
-          <nav
-            aria-label="Phone cockpit sections"
-            className="grid grid-cols-3 gap-1 rounded-[10px] border border-white/10 bg-[#0d1419] p-1"
-          >
-            {PHONE_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  hapticTap()
-                  setActiveTab(tab.id)
-                }}
-                aria-pressed={activeTab === tab.id}
-                className={cx(
-                  'min-h-10 rounded-[8px] px-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70',
-                  activeTab === tab.id
-                    ? 'bg-[#8ee7d5] text-[#071111]'
-                    : 'text-[#b7c6c9]',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+        {travelMode !== 'standard' ? (
+          <PhoneTravelModeSection
+            glance={travelGlance}
+            onOpenCapture={() =>
+              openCapture(travelMode === 'driving' ? 'note' : 'task')
+            }
+          />
         ) : null}
 
-        {!compactBadgesMode && activeTab === 'today' ? (
+        {travelMode === 'standard' ? (
+          <PhoneDailyLoopsSection
+            collapsed={isCollapsed('dailyloops')}
+            pinned={isPinned('dailyloops')}
+            dailyLoopSignals={dailyLoopSignals}
+            quickZynStrengthMg={quickZynStrengthMg}
+            quickWegovyDoseMg={quickWegovyDoseMg}
+            quickWegovySite={quickWegovySite}
+            quickFoodMeal={quickFoodMeal}
+            quickFoodBarcode={quickFoodBarcode}
+            quickFoodPhotoName={quickFoodPhotoName}
+            quickFoodText={quickFoodText}
+            quickUndo={quickUndo}
+            onTogglePinned={toggleCardPinned}
+            onToggleCollapsed={toggleCardCollapsed}
+            onLogQuickZyn={logQuickZyn}
+            onLogQuickWegovy={logQuickWegovy}
+            onLogQuickFood={logQuickFood}
+            onUndoQuickLog={undoQuickLog}
+            onQuickZynStrengthChange={setQuickZynStrengthMg}
+            onQuickWegovyDoseChange={setQuickWegovyDoseMg}
+            onQuickWegovySiteChange={setQuickWegovySite}
+            onQuickFoodMealChange={setQuickFoodMeal}
+            onQuickFoodBarcodeChange={setQuickFoodBarcode}
+            onQuickFoodPhotoNameChange={setQuickFoodPhotoName}
+            onQuickFoodTextChange={setQuickFoodText}
+          />
+        ) : null}
+
+        {travelMode === 'standard' ? (
+          <div className="hidden md:block">
+            <PhoneTabsSection
+              activeTab={activeTab}
+              compactBadgesMode={compactBadgesMode}
+              onChange={(tab) => {
+                hapticTap()
+                setActiveTab(tab)
+              }}
+            />
+          </div>
+        ) : null}
+
+        {travelMode === 'standard' && !captureSheetOpen ? (
+          <PhoneThumbControlDock
+            activeTab={activeTab}
+            onChangeTab={(tab) => {
+              hapticTap()
+              setActiveTab(tab)
+            }}
+            onOpenCapture={() => openCapture('note')}
+          />
+        ) : null}
+
+        {travelMode === 'standard' &&
+        !compactBadgesMode &&
+        activeTab === 'today' ? (
           <>
             <Card
               cardId="needs"
@@ -1142,13 +884,20 @@ export function PhoneCockpitScreen() {
                   ))}
                 </ul>
               ) : (
-                <EmptyState>
-                  No urgent meeting, task, mail, or source issues right now.
-                </EmptyState>
+                <>
+                  <p className="rounded-[18px] border border-white/10 bg-white/[0.04] p-3 text-sm font-semibold text-[#b7c6c9] sm:hidden">
+                    Clear.
+                  </p>
+                  <div className="hidden sm:block">
+                    <EmptyState>
+                      No urgent meeting, task, mail, or source issues right now.
+                    </EmptyState>
+                  </div>
+                </>
               )}
             </Card>
 
-            <div className="grid gap-2.5 md:grid-cols-2">
+            <div className="hidden gap-2.5 md:grid md:grid-cols-2">
               <Card
                 cardId="modes"
                 title="Commute mode"
@@ -1257,6 +1006,7 @@ export function PhoneCockpitScreen() {
               }
               freshness="Offline queue"
               icon={Add01Icon}
+              className="hidden md:block"
               collapsed={isCollapsed('capture')}
               pinned={isPinned('capture')}
               onTogglePinned={toggleCardPinned}
@@ -1445,7 +1195,7 @@ export function PhoneCockpitScreen() {
             </Card>
 
             {!lowDataMode ? (
-              <div className="grid gap-2.5 md:grid-cols-2">
+              <div className="hidden gap-2.5 md:grid md:grid-cols-2">
                 <Card
                   cardId="meeting"
                   title="Next meeting"
@@ -1520,6 +1270,7 @@ export function PhoneCockpitScreen() {
               <Card
                 cardId="prep"
                 title="Meeting prep"
+                className="hidden md:block"
                 kicker={`${snapshot?.meetingPrep.openActionItems.length ?? 0} actions`}
                 freshness={formatFreshness(
                   snapshot?.sources.meetingPrep?.checkedAt,
@@ -1567,7 +1318,9 @@ export function PhoneCockpitScreen() {
           </>
         ) : null}
 
-        {!compactBadgesMode && activeTab === 'work' ? (
+        {travelMode === 'standard' &&
+        !compactBadgesMode &&
+        activeTab === 'work' ? (
           <div className="grid gap-2.5 md:grid-cols-2">
             <Card
               cardId="triage"
@@ -1774,340 +1527,187 @@ export function PhoneCockpitScreen() {
           </div>
         ) : null}
 
-        {!compactBadgesMode && activeTab === 'systems' ? (
+        {travelMode === 'standard' &&
+        !compactBadgesMode &&
+        activeTab === 'systems' ? (
           <>
-            <Card
-              cardId="desk"
-              title="Desk mode"
-              kicker={modeReadouts.desk.online ? 'Online' : 'Check'}
+            <PhoneDeskModeSection
+              title={modeReadouts.desk.title}
+              detail={modeReadouts.desk.detail}
+              online={modeReadouts.desk.online}
               freshness={formatFreshness(snapshot?.devices.office.checkedAt)}
-              icon={ComputerIcon}
               collapsed={isCollapsed('desk')}
               pinned={isPinned('desk')}
               onTogglePinned={toggleCardPinned}
               onToggleCollapsed={toggleCardCollapsed}
-            >
-              <div className="space-y-2.5 text-sm leading-6 text-[#d7e2e4]">
-                <div className="rounded-[8px] bg-white/[0.04] px-3 py-2.5">
-                  <p className="font-medium text-white">
-                    {modeReadouts.desk.title}
-                  </p>
-                  <p className="mt-0.5 text-[#b7c6c9]">
-                    {modeReadouts.desk.detail}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('today')
-                    setCaptureMode('note')
-                    setCaptureText(
-                      'Away mode: I am away from desk. Route urgent items to phone/LILY.',
-                    )
-                    hapticTap()
-                  }}
-                  className="min-h-11 w-full rounded-[8px] border border-[#8ee7d5]/40 bg-[#8ee7d5]/10 px-3 text-sm font-medium text-[#b8fff3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70"
-                >
-                  Away mode quick note
-                </button>
-              </div>
-            </Card>
+              onAwayMode={() => {
+                setActiveTab('today')
+                setCaptureMode('note')
+                setCaptureText(
+                  'Away mode: I am away from desk. Route urgent items to phone/LILY.',
+                )
+                hapticTap()
+              }}
+            />
 
-            <Card
-              cardId="status"
-              title="System status / Source health drawer"
-              kicker={
-                sourceWarnings.length
-                  ? `${sourceWarnings.length} warnings`
-                  : 'OK'
-              }
-              freshness={`${formatFreshness(snapshot?.checkedAt)} · Endpoint: /api/phone-cockpit · Install/PWA readiness checklist · Voice-loop status · Browser mic · LiveKit transport · LILY worker · speaking state`}
-              icon={ComputerIcon}
+            <PhoneSystemStatusSection
+              snapshot={snapshot}
+              sourceWarningsCount={sourceWarnings.length}
+              sourceWarningsIgnored={sourceWarningsIgnored}
+              notifications={notifications}
+              standalonePwa={standalonePwa}
               collapsed={isCollapsed('status')}
               pinned={isPinned('status')}
               onTogglePinned={toggleCardPinned}
               onToggleCollapsed={toggleCardCollapsed}
-            >
-              <div className="space-y-2 text-sm text-[#d7e2e4]">
-                <div className="rounded-[8px] bg-white/[0.04] px-3 py-2.5">
-                  <p className="flex items-center gap-2 font-medium text-white">
-                    <HugeiconsIcon
-                      icon={Notification01Icon}
-                      size={15}
-                      aria-hidden="true"
-                    />{' '}
-                    Teams
-                  </p>
-                  <p className="mt-0.5 line-clamp-1 text-[#b7c6c9]">
-                    {snapshot?.presence.activity || 'Unknown'} ·{' '}
-                    {snapshot?.presence.displayName || 'Presence unavailable'}
-                  </p>
-                </div>
-                <div className="rounded-[8px] bg-white/[0.04] px-3 py-2.5">
-                  <p className="flex items-center gap-2 font-medium text-white">
-                    <HugeiconsIcon
-                      icon={ComputerIcon}
-                      size={15}
-                      aria-hidden="true"
-                    />{' '}
-                    Desk device
-                  </p>
-                  <p className="mt-0.5 text-[#b7c6c9]">
-                    {snapshot?.devices.office.status || 'unknown'}
-                    {snapshot?.devices.office.checkedAt
-                      ? ` · ${fmtShortTime(snapshot.devices.office.checkedAt)}`
-                      : ''}
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="rounded-[8px] bg-white/[0.04] px-2 py-2">
-                    <p className="text-[#8ee7d5]">Alerts</p>
-                    <p className="mt-0.5 text-[#b7c6c9]">{notifications}</p>
-                  </div>
-                  <div className="rounded-[8px] bg-white/[0.04] px-2 py-2">
-                    <p className="text-[#8ee7d5]">PWA</p>
-                    <p className="mt-0.5 text-[#b7c6c9]">
-                      {standalonePwa ? 'installed' : 'browser'}
-                    </p>
-                  </div>
-                  <div className="rounded-[8px] bg-white/[0.04] px-2 py-2">
-                    <p className="text-[#8ee7d5]">Shortcuts</p>
-                    <p className="mt-0.5 text-[#b7c6c9]">
-                      {snapshot?.shortcuts.enabled ? 'ready' : 'token needed'}
-                    </p>
-                  </div>
-                </div>
-                <div className="rounded-[8px] bg-white/[0.04] px-3 py-2.5 text-xs leading-5 text-[#d7e2e4]">
-                  <p className="font-medium text-white">Voice-loop status</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {[
-                      [
-                        'Browser mic',
-                        notifications === 'granted'
-                          ? 'ready'
-                          : 'permission needed',
-                      ],
-                      [
-                        'LiveKit transport',
-                        snapshot?.shortcuts.enabled
-                          ? 'configured'
-                          : 'not configured',
-                      ],
-                      [
-                        'LILY worker',
-                        snapshot?.sources.devices?.ok
-                          ? 'reachable'
-                          : 'check source',
-                      ],
-                      ['Speaking state', 'idle'],
-                    ].map(([label, value]) => (
-                      <span
-                        key={label}
-                        className="rounded border border-white/10 bg-black/20 px-2 py-1"
-                      >
-                        {label}: {value}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                {snapshot?.shortcuts.endpoint ? (
-                  <div className="rounded-[8px] bg-white/[0.04] px-3 py-2 text-[11px] leading-5 text-[#b7c6c9]">
-                    <code className="block break-all">
-                      {snapshot.shortcuts.endpoint}
-                    </code>
-                    <code className="mt-1 block break-all">
-                      {'POST {"kind":"note","text":"..."}'}
-                    </code>
-                  </div>
-                ) : null}
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.values(snapshot?.sources || {}).map((source) => (
-                    <div
-                      key={source.label}
-                      className={cx(
-                        'rounded-[8px] border px-3 py-2 text-xs',
-                        sourceTone(source.ok),
-                      )}
-                    >
-                      {source.label}: {source.ok ? 'OK' : 'degraded'}
-                    </div>
-                  ))}
-                </div>
-                <details className="rounded-[8px] border border-white/10 bg-white/[0.035] px-3 py-2 text-xs text-[#d7e2e4]">
-                  <summary className="cursor-pointer font-medium text-white">
-                    Source health drawer
-                  </summary>
-                  <div className="mt-2 space-y-2">
-                    {Object.entries(snapshot?.sources || {}).map(
-                      ([key, source]) => (
-                        <div key={key} className="rounded bg-black/20 p-2">
-                          <div>{source.label}</div>
-                          <div>Endpoint: /api/phone-cockpit#{key}</div>
-                          <div>Checked at: {source.checkedAt}</div>
-                          {source.error ? (
-                            <div>Error: {source.error}</div>
-                          ) : null}
-                        </div>
-                      ),
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => void load()}
-                      className="min-h-10 rounded-[8px] border border-white/10 px-3 font-semibold text-[#dbe7e8]"
-                    >
-                      Retry source refresh
-                    </button>
-                  </div>
-                </details>
-                {sourceWarnings.length ? (
-                  <button
-                    type="button"
-                    onClick={() => setSourceWarningsIgnored((value) => !value)}
-                    className="min-h-11 w-full rounded-[8px] border border-[#f7b267]/35 bg-[#f7b267]/10 px-3 text-sm font-medium text-[#ffd39d]"
-                  >
-                    {sourceWarningsIgnored
-                      ? 'Safe to ignore source warnings: on'
-                      : 'Mark stale source warnings safe to ignore off-hours'}
-                  </button>
-                ) : null}
-                <div className="rounded-[8px] bg-white/[0.04] px-3 py-2.5 text-xs leading-5 text-[#d7e2e4]">
-                  <p className="font-medium text-white">
-                    Install/PWA readiness checklist
-                  </p>
-                  <div className="mt-1">
-                    HTTPS/local route ready · standalone{' '}
-                    {standalonePwa ? 'installed' : 'not installed'} · shortcuts{' '}
-                    {snapshot?.shortcuts.enabled ? 'ready' : 'needs token'} ·
-                    notifications {notifications}
-                  </div>
-                </div>
-                {notifications !== 'granted' &&
-                notifications !== 'unsupported' ? (
-                  <button
-                    type="button"
-                    onClick={() => void enableNotifications()}
-                    className="min-h-11 w-full rounded-[8px] border border-[#8ee7d5]/40 bg-[#8ee7d5]/10 px-3 text-sm font-medium text-[#b8fff3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8ee7d5]/70"
-                  >
-                    Enable critical local alerts
-                  </button>
-                ) : null}
-              </div>
-            </Card>
+              onRetrySources={() => void load()}
+              onToggleSourceWarningsIgnored={() =>
+                setSourceWarningsIgnored((value) => !value)
+              }
+              onEnableNotifications={() => void enableNotifications()}
+            />
 
             {!lowDataMode ? (
-              <Card
-                cardId="shortcuts"
-                title="Workspace shortcuts"
-                kicker="Links"
-                icon={DashboardSquare01Icon}
+              <PhoneWorkspaceShortcutsSection
                 collapsed={isCollapsed('shortcuts')}
                 pinned={isPinned('shortcuts')}
                 onTogglePinned={toggleCardPinned}
                 onToggleCollapsed={toggleCardCollapsed}
-              >
-                <nav
-                  aria-label="Workspace shortcuts"
-                  className="grid grid-cols-3 gap-2 pb-[env(safe-area-inset-bottom)]"
-                >
-                  <ActionLink to="/phone" label="Open today">
-                    <HugeiconsIcon
-                      icon={DashboardSquare01Icon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/lily" label="Open Lily">
-                    <HugeiconsIcon
-                      icon={Chat01Icon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/chat/main" label="Open chat">
-                    <HugeiconsIcon
-                      icon={Chat01Icon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/files" label="Open files">
-                    <HugeiconsIcon
-                      icon={File01Icon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/meetings" label="Open meetings">
-                    <HugeiconsIcon
-                      icon={Clock01Icon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/tasks" label="Open tasks">
-                    <HugeiconsIcon
-                      icon={Task01Icon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/wegovy" label="Open Wegovy shots">
-                    <HugeiconsIcon
-                      icon={InjectionIcon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/zyn-tracker" label="Open Zyn tracker">
-                    <HugeiconsIcon
-                      icon={Target02Icon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/food-log" label="Open food log">
-                    <HugeiconsIcon
-                      icon={Apple01Icon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                  <ActionLink to="/it-ops" label="Open ConnectWise">
-                    <HugeiconsIcon
-                      icon={ComputerIcon}
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </ActionLink>
-                </nav>
-              </Card>
+              />
             ) : null}
           </>
         ) : null}
-        {activeTab !== 'today' ? (
-          <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] z-40 rounded-[10px] border border-[#8ee7d5]/30 bg-[#0d1419]/95 p-2 shadow-[0_14px_34px_rgba(0,0,0,.45)] backdrop-blur">
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8ee7d5]">
-              Quick note
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                value={captureText}
-                onChange={(event) => setCaptureText(event.target.value)}
-                onFocus={() => setCaptureMode('note')}
-                placeholder="Quick note..."
-                className="min-h-10 flex-1 rounded-[8px] border border-white/10 bg-[#080c10] px-3 text-sm text-white outline-none placeholder:text-[#78888c] focus-visible:border-[#8ee7d5]"
-              />
+      </main>
+      {captureSheetOpen ? (
+        <div
+          className="fixed inset-0 z-[90] bg-black/45 backdrop-blur-[2px] md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${captureModeMeta[captureMode].label} capture`}
+          onClick={() => setCaptureSheetOpen(false)}
+        >
+          <div
+            className="absolute inset-x-3 bottom-3 rounded-[28px] border border-white/12 bg-[#0b1218]/96 p-3 shadow-[0_28px_80px_rgba(0,0,0,.58)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-white/25" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="grid size-10 place-items-center rounded-[16px] bg-[#8ee7d5]/15 text-[#8ee7d5]">
+                  <HugeiconsIcon
+                    icon={captureModeMeta[captureMode].icon}
+                    size={19}
+                    aria-hidden="true"
+                  />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8ee7d5]">
+                    Capture
+                  </p>
+                  <p className="truncate text-base font-semibold text-white">
+                    {captureModeMeta[captureMode].label}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => openCapture('note', captureText)}
-                className="min-h-10 rounded-[8px] bg-[#8ee7d5] px-3 text-xs font-semibold text-[#071111]"
+                onClick={() => setCaptureSheetOpen(false)}
+                className="grid size-10 place-items-center rounded-[14px] border border-white/10 text-[#b7c6c9]"
+                aria-label="Close capture"
               >
-                Capture
+                ×
               </button>
             </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-1 rounded-[18px] bg-black/25 p-1">
+              {(['note', 'task', 'draft'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={captureMode === mode}
+                  onClick={() => {
+                    setCaptureMode(mode)
+                    hapticTap()
+                  }}
+                  className={cx(
+                    'min-h-10 rounded-[14px] text-sm font-semibold transition-colors',
+                    captureMode === mode
+                      ? 'bg-white text-[#071111]'
+                      : 'text-[#b7c6c9]',
+                  )}
+                >
+                  {captureModeMeta[mode].label}
+                </button>
+              ))}
+            </div>
+
+            {captureMode === 'draft' ? (
+              <div className="mt-3 grid gap-2">
+                <input
+                  value={draftRecipient}
+                  onChange={(event) => setDraftRecipient(event.target.value)}
+                  placeholder="Recipient"
+                  inputMode="email"
+                  className="min-h-11 rounded-[16px] border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-[#78888c] focus-visible:border-[#8ee7d5]"
+                />
+                <input
+                  value={draftSubject}
+                  onChange={(event) => setDraftSubject(event.target.value)}
+                  placeholder="Subject"
+                  className="min-h-11 rounded-[16px] border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-[#78888c] focus-visible:border-[#8ee7d5]"
+                />
+              </div>
+            ) : null}
+
+            <textarea
+              ref={captureInputRef}
+              value={captureText}
+              onChange={(event) => setCaptureText(event.target.value)}
+              placeholder={
+                captureMode === 'note'
+                  ? 'Remember this...'
+                  : captureMode === 'task'
+                    ? 'Add a task...'
+                    : 'Draft the reply...'
+              }
+              rows={5}
+              className="mt-3 w-full resize-none rounded-[20px] border border-white/10 bg-black/30 px-3 py-3 text-base leading-6 text-white outline-none placeholder:text-[#78888c] focus-visible:border-[#8ee7d5]"
+            />
+
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCaptureSheetOpen(false)}
+                className="min-h-12 flex-1 rounded-[18px] border border-white/10 text-sm font-semibold text-[#dbe7e8]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitCapture()}
+                disabled={saving || !captureText.trim()}
+                className="min-h-12 flex-[1.4] rounded-[18px] bg-[#8ee7d5] text-sm font-semibold text-[#071111] disabled:opacity-50"
+              >
+                {saving
+                  ? 'Saving...'
+                  : captureMode === 'draft'
+                    ? 'Queue'
+                    : 'Save'}
+              </button>
+            </div>
+
+            {queuedCaptures.length ? (
+              <button
+                type="button"
+                onClick={() => void retryQueuedCaptures()}
+                className="mt-2 min-h-10 w-full rounded-[16px] border border-[#f7b267]/35 bg-[#f7b267]/10 text-xs font-semibold text-[#ffd39d]"
+              >
+                Retry {queuedCaptures.length} offline
+              </button>
+            ) : null}
           </div>
-        ) : null}
-      </main>
+        </div>
+      ) : null}
     </div>
   )
 }

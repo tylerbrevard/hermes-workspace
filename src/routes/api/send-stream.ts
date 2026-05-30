@@ -643,7 +643,7 @@ export const Route = createFileRoute('/api/send-stream')({
                           })
                           const argsForCard =
                             ev.args && typeof ev.args === 'object'
-                              ? (ev.args)
+                              ? ev.args
                               : undefined
                           persistActiveRun((runSessionKey, activeId) =>
                             upsertRunToolCall(runSessionKey, activeId, {
@@ -677,7 +677,7 @@ export const Route = createFileRoute('/api/send-stream')({
                           const state = toolStateByCallId.get(ev.callId)
                           const argsForCard =
                             state?.args && typeof state.args === 'object'
-                              ? (state.args)
+                              ? state.args
                               : undefined
                           const name = state?.name || 'tool'
                           persistActiveRun((runSessionKey, activeId) =>
@@ -1420,9 +1420,7 @@ export const Route = createFileRoute('/api/send-stream')({
                                 Math.max(0, persistedMessages.length - 1),
                               ),
                             )
-                            const recent = persistedMessages.slice(
-                              sliceFrom,
-                            )
+                            const recent = persistedMessages.slice(sliceFrom)
                             let lastAssistantIndex = -1
                             for (let i = recent.length - 1; i >= 0; i--) {
                               const m = recent[i]
@@ -1432,9 +1430,7 @@ export const Route = createFileRoute('/api/send-stream')({
                               }
                             }
                             if (lastAssistantIndex >= 0) {
-                              const lastAssistant = recent[
-                                lastAssistantIndex
-                              ]
+                              const lastAssistant = recent[lastAssistantIndex]
                               const rawToolCalls = (lastAssistant.tool_calls ??
                                 (lastAssistant as any).toolCalls) as
                                 | Array<Record<string, unknown>>

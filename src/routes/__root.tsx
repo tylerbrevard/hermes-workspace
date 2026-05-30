@@ -499,8 +499,8 @@ function RootLayout() {
           <WorkspaceShell>
             <ErrorBoundary
               className="h-full min-h-0 flex-1"
-              title="Something went wrong"
-              description="This page failed to render. Reload to try again."
+              title="Page failed"
+              description="Reload to retry."
             >
               <Suspense fallback={<RouteLoadingSkeleton />}>
                 <Outlet />

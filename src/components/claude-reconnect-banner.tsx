@@ -114,8 +114,7 @@ export function ClaudeReconnectBanner({
           } else {
             wasDisconnectedRef.current = true
             setBannerState('disconnected')
-            const sinceLastTry =
-              Date.now() - autoRestartTriedAtRef.current
+            const sinceLastTry = Date.now() - autoRestartTriedAtRef.current
             if (sinceLastTry > AUTO_RESTART_COOLDOWN_MS) {
               autoRestartTriedAtRef.current = Date.now()
               void fetch(apiPath('/api/start-claude'), {
@@ -132,8 +131,7 @@ export function ClaudeReconnectBanner({
                   }
                   if (res.ok && data.ok) {
                     setMessage(
-                      data.message ||
-                        'Auto-restarting Hermes Agent gateway…',
+                      data.message || 'Auto-restarting Hermes Agent gateway…',
                     )
                     // Probe again shortly so the banner clears as soon as
                     // the gateway answers /health.

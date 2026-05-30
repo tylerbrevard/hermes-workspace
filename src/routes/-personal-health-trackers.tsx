@@ -8,6 +8,13 @@ import {
   Target02Icon,
 } from '@hugeicons/core-free-icons'
 import { useEffect, useState } from 'react'
+import {
+  InjectionSiteMap,
+  MacroRings,
+  MiniBars,
+  TriggerHeatmap,
+} from '@/components/health/health-visuals'
+import { ToolsStatusRail } from '@/components/tools-action-dock'
 import { usePageTitle } from '@/hooks/use-page-title'
 import {
   HealthTrackersClientConflictError,
@@ -40,16 +47,16 @@ function TrackerShell({
 }: TrackerShellProps) {
   return (
     <main className="flex h-full min-h-0 flex-col overflow-y-auto bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-4 px-4 py-4 pb-[calc(var(--tabbar-h,0px)+24px)] sm:px-5 lg:px-6">
-        <header className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-4 shadow-sm">
+      <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-3 px-3 py-3 pb-[calc(var(--tabbar-h,0px)+16px)] sm:gap-4 sm:px-5 sm:py-4 sm:pb-[calc(var(--tabbar-h,0px)+24px)] lg:px-6">
+        <header className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-3 shadow-sm sm:px-4 sm:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)]">
+            <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)] sm:size-11">
                 <HugeiconsIcon icon={icon} size={22} strokeWidth={1.8} />
               </span>
               <div className="min-w-0">
                 <h1 className="text-xl font-semibold">{title}</h1>
-                <p className="mt-1 max-w-[760px] text-sm text-[var(--theme-muted)]">
+                <p className="mt-1 line-clamp-1 max-w-[760px] text-xs text-[var(--theme-muted)] sm:text-sm">
                   {description}
                 </p>
               </div>
@@ -67,11 +74,11 @@ function TrackerShell({
 
 function SyncPill({ status, detail }: { status: SyncStatus; detail?: string }) {
   const meta = {
-    loading: ['bg-slate-500', 'Loading'],
-    synced: ['bg-emerald-500', 'Synced'],
-    syncing: ['bg-sky-500', 'Syncing'],
-    offline: ['bg-amber-500', 'Offline cache'],
-    conflict: ['bg-violet-500', 'Merged update'],
+    loading: ['bg-slate-500', 'Load'],
+    synced: ['bg-emerald-500', 'Saved'],
+    syncing: ['bg-sky-500', 'Sync'],
+    offline: ['bg-amber-500', 'Offline'],
+    conflict: ['bg-violet-500', 'Merged'],
   } satisfies Record<SyncStatus, [string, string]>
   const [dot, label] = meta[status]
   return (
@@ -98,32 +105,69 @@ function mergeById<T extends { id: string }>(
 }
 
 function syncDetail(updatedAt: string | null) {
-  if (!updatedAt) return 'Not synced yet'
+  if (!updatedAt) return 'No sync'
   const date = new Date(updatedAt)
   if (Number.isNaN(date.getTime())) return undefined
-  return `Updated ${date.toLocaleTimeString([], {
+  return `Upd ${date.toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
   })}`
 }
 
-function MetricCard({
-  label,
-  value,
-  detail,
-}: {
+type TrackerDashboardTile = {
   label: string
   value: string
   detail: string
+  trend: Array<number>
+  tone?: 'accent' | 'warn' | 'good'
+}
+
+function clampTrend(value: number) {
+  return Math.max(8, Math.min(100, value))
+}
+
+function TrendStrip({
+  values,
+  tone = 'accent',
+}: {
+  values: Array<number>
+  tone?: 'accent' | 'warn' | 'good'
 }) {
+  const barClass =
+    tone === 'warn'
+      ? 'bg-rose-500'
+      : tone === 'good'
+        ? 'bg-emerald-500'
+        : 'bg-[var(--theme-accent)]'
   return (
-    <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3">
+    <div className="mt-3 flex h-9 items-end gap-1" aria-hidden="true">
+      {values.map((value, index) => (
+        <span
+          key={`${value}-${index}`}
+          className={cn('w-full rounded-t-sm opacity-85', barClass)}
+          style={{ height: `${clampTrend(value)}%` }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function DashboardTile({ tile }: { tile: TrackerDashboardTile }) {
+  return (
+    <article className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 shadow-sm sm:p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-        {label}
+        {tile.label}
       </p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
-      <p className="mt-1 text-xs text-[var(--theme-muted)]">{detail}</p>
-    </section>
+      <p className="mt-1 text-xl font-semibold tabular-nums sm:mt-2 sm:text-2xl">
+        {tile.value}
+      </p>
+      <p className="mt-1 truncate text-xs text-[var(--theme-muted)]">
+        {tile.detail}
+      </p>
+      <div className="hidden sm:block">
+        <TrendStrip values={tile.trend} tone={tile.tone} />
+      </div>
+    </article>
   )
 }
 
@@ -143,30 +187,10 @@ function Field({
 }
 
 const inputClass =
-  'min-h-11 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]'
+  'min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]'
 
 const smallButtonClass =
   'min-h-9 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-[var(--theme-text)]'
-
-function InsightCard({
-  label,
-  value,
-  detail,
-}: {
-  label: string
-  value: string
-  detail: string
-}) {
-  return (
-    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-semibold">{value}</p>
-      <p className="mt-1 text-xs text-[var(--theme-muted)]">{detail}</p>
-    </div>
-  )
-}
 
 function ProgressBar({
   value,
@@ -188,6 +212,73 @@ function ProgressBar({
         )}
         style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
       />
+    </div>
+  )
+}
+
+function DoseLadder({
+  plan,
+  current,
+  next,
+}: {
+  plan: Array<number>
+  current: number
+  next: number
+}) {
+  return (
+    <div className="grid gap-2">
+      {plan.map((dose) => {
+        const isCurrent = dose === current
+        const isNext = dose === next && next !== current
+        return (
+          <div key={dose} className="grid grid-cols-[52px_minmax(0,1fr)] gap-2">
+            <span className="text-xs font-semibold tabular-nums text-[var(--theme-muted)]">
+              {dose}mg
+            </span>
+            <span
+              className={cn(
+                'h-3 rounded-full border',
+                isCurrent
+                  ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]'
+                  : isNext
+                    ? 'border-emerald-400/50 bg-emerald-500/30'
+                    : 'border-[var(--theme-border)] bg-[var(--theme-bg)]',
+              )}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function MealTimeline({
+  entries,
+}: {
+  entries: Array<{ meal: string; time?: string }>
+}) {
+  const meals = ['Breakfast', 'Lunch', 'Dinner', 'Snack']
+  return (
+    <div className="grid gap-2 sm:grid-cols-4">
+      {meals.map((meal) => {
+        const match = entries.find((entry) => entry.meal === meal)
+        return (
+          <div
+            key={meal}
+            className={cn(
+              'rounded-lg border p-3 text-sm',
+              match
+                ? 'border-emerald-400/40 bg-emerald-500/10'
+                : 'border-[var(--theme-border)] bg-[var(--theme-bg)]',
+            )}
+          >
+            <span className="block font-semibold">{meal}</span>
+            <span className="text-xs text-[var(--theme-muted)]">
+              {match?.time ?? 'Open'}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -316,6 +407,56 @@ export function getWegovySideEffectSummary(shots: Array<WegovyShot>) {
   }
 }
 
+export function getWegovyDashboardTiles(
+  summary: ReturnType<typeof getWegovySummary>,
+  sideEffectSummary: ReturnType<typeof getWegovySideEffectSummary>,
+  penSupply: number,
+): Array<TrackerDashboardTile> {
+  const duePressure =
+    summary.daysUntilDue < 0 ? 95 : summary.daysUntilDue === 0 ? 72 : 34
+  const effectPressure =
+    sideEffectSummary.severity === 0
+      ? 14
+      : Math.min(100, 24 + sideEffectSummary.severity * 14)
+  const weightPressure = Math.min(100, 30 + Math.abs(summary.weightChange) * 16)
+  const supplyPressure = Math.min(100, Math.max(12, (penSupply / 4) * 100))
+  return [
+    {
+      label: 'Shot runway',
+      value:
+        summary.daysUntilDue > 0
+          ? `${summary.daysUntilDue}d`
+          : summary.daysUntilDue === 0
+            ? 'Today'
+            : `${Math.abs(summary.daysUntilDue)}d late`,
+      detail: `Next shot ${summary.nextDue}`,
+      trend: [18, 28, 42, duePressure],
+      tone: summary.daysUntilDue < 0 ? 'warn' : 'accent',
+    },
+    {
+      label: 'Effect load',
+      value: sideEffectSummary.label,
+      detail: `${sideEffectSummary.nausea} nausea · ${sideEffectSummary.constipation} constipation`,
+      trend: [12, 22, 36, effectPressure],
+      tone: sideEffectSummary.severity >= 5 ? 'warn' : 'good',
+    },
+    {
+      label: 'Weight delta',
+      value: formatSigned(summary.weightChange, ' lb'),
+      detail: 'Latest shot versus prior shot',
+      trend: [26, 34, 42, weightPressure],
+      tone: summary.weightChange > 0 ? 'warn' : 'good',
+    },
+    {
+      label: 'Pen supply',
+      value: `${penSupply}`,
+      detail: 'Pens remaining before refill',
+      trend: [100, 76, 52, supplyPressure],
+      tone: penSupply <= 1 ? 'warn' : 'accent',
+    },
+  ]
+}
+
 export function WegovyTrackerPage() {
   usePageTitle('Wegovy Shots')
   const [shots, setShots] = useState<Array<WegovyShot>>([])
@@ -347,6 +488,21 @@ export function WegovyTrackerPage() {
   const dosePlan = getWegovyDosePlan(summary.currentDose || Number(doseMg))
   const sideEffectSummary = getWegovySideEffectSummary(shots)
   const suggestedSite = getWegovySiteSuggestion(shots)
+  const dashboardTiles = getWegovyDashboardTiles(
+    summary,
+    sideEffectSummary,
+    penSupply,
+  )
+  const latestProtein = summary.latest?.proteinG ?? Number(proteinG)
+  const latestHydration = summary.latest?.hydrationOz ?? Number(hydrationOz)
+  const doseHold =
+    sideEffectSummary.severity >= 5 ||
+    latestProtein < 80 ||
+    latestHydration < 60
+  const shotTrend = [...shots]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-8)
+    .map((shot) => shot.weightLb || null)
   const doctorSummary = `Wegovy summary: ${shots.length} shot${shots.length === 1 ? '' : 's'} logged. Current dose ${summary.currentDose || Number(doseMg)} mg. Next due ${summary.nextDue}. Weight delta ${formatSigned(summary.weightChange, ' lb')}. Side-effect load ${sideEffectSummary.label}.`
 
   useEffect(() => {
@@ -483,45 +639,84 @@ export function WegovyTrackerPage() {
 
   return (
     <TrackerShell
-      title="Wegovy Shots"
-      description="Weekly dose log with injection site rotation, weight trend, next due date, and side-effect notes."
+      title="Wegovy"
+      description="Dose, site, effects."
       icon={InjectionIcon}
       syncStatus={syncStatus}
       syncDetail={syncDetail(serverUpdatedAt)}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Next shot"
-          value={summary.nextDue}
-          detail={
-            summary.daysUntilDue > 0
-              ? `${summary.daysUntilDue} day${summary.daysUntilDue === 1 ? '' : 's'} out`
-              : summary.daysUntilDue === 0
-                ? 'Due today'
-                : `${Math.abs(summary.daysUntilDue)} day${Math.abs(summary.daysUntilDue) === 1 ? '' : 's'} overdue`
-          }
-        />
-        <MetricCard
-          label="Current dose"
-          value={`${summary.currentDose || Number(doseMg)} mg`}
-          detail="Most recent logged dose"
-        />
-        <MetricCard
-          label="Logged shots"
-          value={String(summary.totalShots)}
-          detail="Stored locally in this browser"
-        />
-        <MetricCard
-          label="Weight delta"
-          value={formatSigned(summary.weightChange, ' lb')}
-          detail="Compared with previous shot"
-        />
-      </div>
+      <section aria-label="Wegovy dashboard">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {dashboardTiles.map((tile) => (
+            <DashboardTile key={tile.label} tile={tile} />
+          ))}
+        </div>
+      </section>
+
+      <section
+        aria-label="Wegovy visual plan"
+        className="grid gap-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.9fr)]"
+      >
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+            Rotation
+          </h2>
+          <p className="mt-1 text-sm text-[var(--theme-muted)]">
+            Current and next safest site.
+          </p>
+          <div className="mt-3">
+            <InjectionSiteMap selected={site} suggested={suggestedSite} />
+          </div>
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+            Dose ladder
+          </h2>
+          <p className="mt-1 text-sm text-[var(--theme-muted)]">
+            Hold when effects or intake are off.
+          </p>
+          <div className="mt-3">
+            <DoseLadder
+              plan={dosePlan.plan}
+              current={dosePlan.current}
+              next={dosePlan.next}
+            />
+          </div>
+        </div>
+        <div className="grid gap-3">
+          <div
+            className={cn(
+              'rounded-lg border p-3',
+              doseHold
+                ? 'border-amber-400/40 bg-amber-500/10'
+                : 'border-emerald-400/40 bg-emerald-500/10',
+            )}
+          >
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-semibold">Next dose call</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.12em]">
+                {doseHold ? 'Hold' : 'Clear'}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-[var(--theme-muted)]">
+              Protein {latestProtein}g · water {latestHydration}oz · effects{' '}
+              {sideEffectSummary.label.toLowerCase()}.
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-semibold">Weight trace</span>
+              <span className="text-xs text-[var(--theme-muted)]">last 8</span>
+            </div>
+            <MiniBars values={shotTrend} tone="neutral" />
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 sm:p-4">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-            Log shot
+            Log
           </h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Field label="Date">
@@ -545,7 +740,7 @@ export function WegovyTrackerPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Injection site">
+            <Field label="Site">
               <select
                 className={inputClass}
                 value={site}
@@ -603,7 +798,7 @@ export function WegovyTrackerPage() {
             </Field>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Field label={`Appetite before shot: ${appetiteBefore}/10`}>
+            <Field label={`Appetite before: ${appetiteBefore}/10`}>
               <input
                 type="range"
                 min={1}
@@ -615,7 +810,7 @@ export function WegovyTrackerPage() {
                 className="accent-[var(--theme-accent)]"
               />
             </Field>
-            <Field label={`Appetite after shot: ${appetiteAfter}/10`}>
+            <Field label={`Appetite after: ${appetiteAfter}/10`}>
               <input
                 type="range"
                 min={1}
@@ -659,7 +854,7 @@ export function WegovyTrackerPage() {
               Headache
             </label>
           </div>
-          <Field label="Side effects">
+          <Field label="Effects">
             <input
               className={cn(inputClass, 'mt-1')}
               placeholder="Nausea, headache, none"
@@ -670,7 +865,7 @@ export function WegovyTrackerPage() {
           <Field label="Notes">
             <textarea
               className={cn(inputClass, 'mt-1 min-h-24 py-2')}
-              placeholder="Meal timing, appetite, sleep, hydration"
+              placeholder="Meals, sleep, hydration"
               value={notes}
               onChange={(e) => setNotes(e.currentTarget.value)}
             />
@@ -680,13 +875,13 @@ export function WegovyTrackerPage() {
             onClick={addShot}
             className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--theme-accent)] px-4 text-sm font-semibold text-white sm:w-auto"
           >
-            <HugeiconsIcon icon={PlusSignIcon} size={17} /> Add shot
+            <HugeiconsIcon icon={PlusSignIcon} size={17} /> Add
           </button>
         </section>
 
-        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+        <section className="hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 md:block">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-            Shot history
+            History
           </h2>
           <div className="mt-4 grid gap-3">
             {shots.length ? (
@@ -706,7 +901,7 @@ export function WegovyTrackerPage() {
                       }
                       className="min-h-8 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-[var(--theme-muted)]"
                     >
-                      Remove
+                      Del
                     </button>
                   </div>
                   <div className="mt-2 grid gap-2 text-sm text-[var(--theme-muted)] sm:grid-cols-3">
@@ -715,7 +910,7 @@ export function WegovyTrackerPage() {
                     <span>{shot.weightLb || '-'} lb</span>
                   </div>
                   <p className="mt-2 text-sm">
-                    {shot.sideEffects || 'No side effects logged.'}
+                    {shot.sideEffects || 'No effects.'}
                   </p>
                   {shot.notes ? (
                     <p className="mt-1 text-sm text-[var(--theme-muted)]">
@@ -726,22 +921,21 @@ export function WegovyTrackerPage() {
               ))
             ) : (
               <p className="rounded-lg border border-dashed border-[var(--theme-border)] p-4 text-sm text-[var(--theme-muted)]">
-                No shots logged yet.
+                No shots.
               </p>
             )}
           </div>
         </section>
       </div>
 
-      <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+      <section className="hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 md:block">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-              Shot planning
+              Plan
             </h2>
             <p className="mt-1 text-sm text-[var(--theme-muted)]">
-              Reminder, escalation, supply, refill, rotation, and visit-summary
-              tools.
+              Reminder, supply, rotation.
             </p>
           </div>
           <button
@@ -749,53 +943,54 @@ export function WegovyTrackerPage() {
             onClick={() => void navigator.clipboard?.writeText(doctorSummary)}
             className={smallButtonClass}
           >
-            Copy doctor summary
+            Copy
           </button>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <InsightCard
-            label="Reminder"
-            value={`${summary.nextDue} at ${reminderTime}`}
-            detail="Weekly shot reminder target"
-          />
-          <InsightCard
-            label="Escalation"
-            value={`${dosePlan.current} -> ${dosePlan.next} mg`}
-            detail="Dose ladder reference only"
-          />
-          <InsightCard
-            label="Site rotation"
-            value={suggestedSite}
-            detail="Suggested next injection site"
-          />
-          <InsightCard
-            label="Supply"
-            value={`${penSupply} pen${penSupply === 1 ? '' : 's'}`}
-            detail={`Refill target ${refillDate}`}
-          />
-          <InsightCard
-            label="Side effects"
-            value={sideEffectSummary.label}
-            detail={`${sideEffectSummary.nausea} nausea, ${sideEffectSummary.constipation} constipation, ${sideEffectSummary.headache} headache in recent shots`}
-          />
-          <InsightCard
-            label="Appetite"
-            value={formatSigned(summary.appetiteChange, ' pts')}
-            detail="Latest before/after shot change"
-          />
-          <InsightCard
-            label="Waist"
-            value={formatSigned(summary.waistChange, ' in')}
-            detail="Compared with previous shot"
-          />
-          <InsightCard
-            label="Cross-check"
-            value="Food + Zyn"
-            detail="Review food log and Zyn cravings against shot week"
-          />
-        </div>
+        <ToolsStatusRail
+          label="Wegovy plan"
+          className="mt-4"
+          items={[
+            {
+              id: 'reminder',
+              label: 'Reminder',
+              value: `${summary.nextDue} ${reminderTime}`,
+              tone: summary.daysUntilDue < 0 ? 'warning' : 'neutral',
+            },
+            {
+              id: 'dose',
+              label: 'Dose',
+              value: `${dosePlan.current}->${dosePlan.next} mg`,
+            },
+            { id: 'site', label: 'Site', value: suggestedSite },
+            {
+              id: 'supply',
+              label: 'Supply',
+              value: `${penSupply}`,
+              tone: penSupply <= 1 ? 'warning' : 'neutral',
+              progress: (penSupply / 4) * 100,
+            },
+            {
+              id: 'effects',
+              label: 'Effects',
+              value: sideEffectSummary.label,
+              tone: sideEffectSummary.severity >= 5 ? 'warning' : 'good',
+            },
+            {
+              id: 'appetite',
+              label: 'Appetite',
+              value: formatSigned(summary.appetiteChange, ' pts'),
+              progress: Math.abs(summary.appetiteChange) * 10,
+            },
+            {
+              id: 'waist',
+              label: 'Waist',
+              value: formatSigned(summary.waistChange, ' in'),
+            },
+            { id: 'check', label: 'Check', value: 'Food + Zyn' },
+          ]}
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <Field label="Reminder time">
+          <Field label="Time">
             <input
               type="time"
               className={inputClass}
@@ -803,7 +998,7 @@ export function WegovyTrackerPage() {
               onChange={(event) => setReminderTime(event.currentTarget.value)}
             />
           </Field>
-          <Field label="Pens on hand">
+          <Field label="Pens">
             <input
               type="number"
               min={0}
@@ -814,7 +1009,7 @@ export function WegovyTrackerPage() {
               }
             />
           </Field>
-          <Field label="Refill date">
+          <Field label="Refill">
             <input
               type="date"
               className={inputClass}
@@ -921,6 +1116,48 @@ export function getZynInsights(entries: Array<ZynEntry>, dailyLimit = 8) {
   }
 }
 
+export function getZynDashboardTiles(
+  summary: ReturnType<typeof getZynDailySummary>,
+  insights: ReturnType<typeof getZynInsights>,
+  dailyLimit: number,
+): Array<TrackerDashboardTile> {
+  const pace = Math.min(100, (summary.count / Math.max(1, dailyLimit)) * 100)
+  const averagePace = Math.min(
+    100,
+    (insights.weeklyAverage / Math.max(1, dailyLimit)) * 100,
+  )
+  return [
+    {
+      label: 'Today pace',
+      value: `${summary.count}/${dailyLimit}`,
+      detail: `${summary.remaining} remaining before cap`,
+      trend: [18, 36, 58, pace],
+      tone: summary.overLimit ? 'warn' : 'accent',
+    },
+    {
+      label: 'Nicotine load',
+      value: `${summary.nicotineMg} mg`,
+      detail: 'Estimated intake today',
+      trend: [12, 26, 44, Math.min(100, summary.nicotineMg * 3)],
+      tone: summary.overLimit ? 'warn' : 'accent',
+    },
+    {
+      label: '7d average',
+      value: `${insights.weeklyAverage}/day`,
+      detail: `Reduction target ${insights.reductionTarget}/day`,
+      trend: [averagePace + 18, averagePace + 8, averagePace, averagePace],
+      tone: insights.weeklyAverage > dailyLimit ? 'warn' : 'good',
+    },
+    {
+      label: 'Risk trigger',
+      value: insights.riskiestTrigger,
+      detail: `Common hour ${insights.riskiestHour}`,
+      trend: [24, 46, 32, 64],
+      tone: 'accent',
+    },
+  ]
+}
+
 export function ZynTrackerPage() {
   usePageTitle('Zyn Tracker')
   const [entries, setEntries] = useState<Array<ZynEntry>>([])
@@ -939,9 +1176,16 @@ export function ZynTrackerPage() {
   const summary = getZynDailySummary(entries, todayKey(), dailyLimit)
   const todayEntries = entries.filter((entry) => entry.date === todayKey())
   const insights = getZynInsights(entries, dailyLimit)
+  const dashboardTiles = getZynDashboardTiles(summary, insights, dailyLimit)
   const lastEntry = [...entries].sort((a, b) =>
     `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`),
   )[0]
+  const dayProgress = (new Date().getHours() + 1) / 24
+  const paceForecast = Math.max(
+    summary.count,
+    Math.ceil(summary.count / Math.max(0.1, dayProgress)),
+  )
+  const substitutionNotes = ['Water', 'Walk', 'Gum', 'Breathe']
 
   useEffect(() => {
     let cancelled = false
@@ -1074,44 +1318,84 @@ export function ZynTrackerPage() {
 
   return (
     <TrackerShell
-      title="Zyn Tracker"
-      description="Daily pouch count, nicotine estimate, trigger notes, and limit pacing."
+      title="Zyn"
+      description="Pouches, triggers, pace."
       icon={Target02Icon}
       syncStatus={syncStatus}
       syncDetail={syncDetail(serverUpdatedAt)}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Today"
-          value={`${summary.count}/${dailyLimit}`}
-          detail="Pouches logged"
-        />
-        <MetricCard
-          label="Nicotine"
-          value={`${summary.nicotineMg} mg`}
-          detail="Estimated from selected strength"
-        />
-        <MetricCard
-          label="Remaining"
-          value={String(summary.remaining)}
-          detail={
-            summary.overLimit ? 'Daily limit exceeded' : 'Before daily cap'
-          }
-        />
-        <MetricCard
-          label="Entries"
-          value={String(todayEntries.length)}
-          detail="Separate moments today"
-        />
-      </div>
+      <section aria-label="Zyn dashboard">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {dashboardTiles.map((tile) => (
+            <DashboardTile key={tile.label} tile={tile} />
+          ))}
+        </div>
+      </section>
+
+      <section
+        aria-label="Zyn visual plan"
+        className="grid gap-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+      >
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+                Pace forecast
+              </h2>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                {paceForecast}/{dailyLimit}
+              </p>
+            </div>
+            <span
+              className={cn(
+                'rounded-lg border px-3 py-1 text-xs font-semibold',
+                paceForecast > dailyLimit
+                  ? 'border-rose-400/40 bg-rose-500/10 text-rose-600'
+                  : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-600',
+              )}
+            >
+              {paceForecast > dailyLimit ? 'Over pace' : 'On pace'}
+            </span>
+          </div>
+          <div className="mt-3">
+            <ProgressBar
+              value={(paceForecast / Math.max(1, dailyLimit)) * 100}
+              tone={paceForecast > dailyLimit ? 'warn' : 'good'}
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            {substitutionNotes.map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setNote(item)}
+                className={smallButtonClass}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+            Trigger heatmap
+          </h2>
+          <p className="mt-1 text-sm text-[var(--theme-muted)]">
+            Darker cells show repeat pouch windows.
+          </p>
+          <div className="mt-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+            <TriggerHeatmap entries={entries} />
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 sm:p-4">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-            Quick log
+            Log
           </h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Field label="Daily cap">
+            <Field label="Cap">
               <input
                 className={inputClass}
                 type="number"
@@ -1188,26 +1472,24 @@ export function ZynTrackerPage() {
               onClick={() => setDelayStartedAt(new Date().toLocaleTimeString())}
               className={smallButtonClass}
             >
-              Delay 10 minutes
+              Delay
             </button>
             <button
               type="button"
               onClick={logAvoidedCraving}
               className={smallButtonClass}
             >
-              Log avoided craving
+              Avoided
             </button>
           </div>
-          <p className="mt-3 text-sm text-[var(--theme-muted)]">
-            {delayStartedAt
-              ? `Delay mode started at ${delayStartedAt}. Try water, a walk, or a two-minute breathing reset before logging.`
-              : 'Craving mode is ready when you want to delay instead of logging.'}
-          </p>
+          <div className="mt-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm font-semibold text-[var(--theme-muted)]">
+            {delayStartedAt ? `Delay ${delayStartedAt}` : 'Ready'}
+          </div>
         </section>
 
-        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+        <section className="hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 md:block">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-            Today timeline
+            Timeline
           </h2>
           <div className="mt-4 grid gap-3">
             {todayEntries.length ? (
@@ -1233,72 +1515,72 @@ export function ZynTrackerPage() {
                     }
                     className="min-h-8 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-[var(--theme-muted)]"
                   >
-                    Remove
+                    Del
                   </button>
                 </article>
               ))
             ) : (
               <p className="rounded-lg border border-dashed border-[var(--theme-border)] p-4 text-sm text-[var(--theme-muted)]">
-                No Zyn logged today.
+                No Zyn today.
               </p>
             )}
           </div>
         </section>
       </div>
 
-      <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+      <section className="hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 md:block">
         <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-          Reduction plan
+          Plan
         </h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <InsightCard
-            label="Weekly average"
-            value={`${insights.weeklyAverage}/day`}
-            detail="Rolling average across logged days"
-          />
-          <InsightCard
-            label="Under-limit streak"
-            value={`${insights.streak} day${insights.streak === 1 ? '' : 's'}`}
-            detail="Days at or under the current cap"
-          />
-          <InsightCard
-            label="Risk window"
-            value={insights.riskiestHour}
-            detail="Most common logged hour"
-          />
-          <InsightCard
-            label="Top trigger"
-            value={insights.riskiestTrigger}
-            detail="Highest pouch-count tag"
-          />
-          <InsightCard
-            label="Next cap"
-            value={`${insights.reductionTarget}/day`}
-            detail="Monthly reduction target"
-          />
-          <InsightCard
-            label="Cost"
-            value={`$${insights.cost}`}
-            detail="Estimated at $0.28 per pouch"
-          />
-          <InsightCard
-            label="Last pouch"
-            value={lastEntry ? `${lastEntry.date} ${lastEntry.time}` : 'None'}
-            detail="Timer anchor for spacing"
-          />
-          <InsightCard
-            label="Workday compare"
-            value="Weekday / weekend"
-            detail="Use triggers to compare stress and social patterns"
-          />
-        </div>
+        <ToolsStatusRail
+          label="Zyn plan"
+          className="mt-4"
+          items={[
+            {
+              id: 'average',
+              label: '7d avg',
+              value: `${insights.weeklyAverage}/day`,
+              tone: insights.weeklyAverage > dailyLimit ? 'warning' : 'good',
+              progress:
+                (insights.weeklyAverage / Math.max(1, dailyLimit)) * 100,
+            },
+            {
+              id: 'streak',
+              label: 'Streak',
+              value: `${insights.streak}d`,
+              tone: insights.streak > 0 ? 'good' : 'neutral',
+            },
+            {
+              id: 'window',
+              label: 'Window',
+              value: insights.riskiestHour,
+            },
+            {
+              id: 'trigger',
+              label: 'Trigger',
+              value: insights.riskiestTrigger,
+            },
+            {
+              id: 'next',
+              label: 'Next',
+              value: `${insights.reductionTarget}/day`,
+            },
+            { id: 'cost', label: 'Cost', value: `$${insights.cost}` },
+            {
+              id: 'last',
+              label: 'Last',
+              value: lastEntry ? lastEntry.time : 'None',
+            },
+            { id: 'compare', label: 'Compare', value: 'Weekday' },
+          ]}
+        />
         <div className="mt-4 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
-          <h3 className="text-sm font-semibold">Avoided cravings</h3>
+          <h3 className="text-sm font-semibold">Avoided</h3>
           <div className="mt-2 grid gap-1 text-sm text-[var(--theme-muted)]">
             {avoided.length ? (
               avoided.map((entry) => <span key={entry}>{entry}</span>)
             ) : (
-              <span>No avoided cravings logged yet.</span>
+              <span>No avoids.</span>
             )}
           </div>
         </div>
@@ -1413,6 +1695,57 @@ export function getFoodCoaching(summary: ReturnType<typeof getFoodSummary>) {
   return { proteinScore, calorieRemaining, lateNightFlag, glpSuggestion }
 }
 
+export function getFoodDashboardTiles(
+  summary: ReturnType<typeof getFoodSummary>,
+  coaching: ReturnType<typeof getFoodCoaching>,
+  calorieTarget = 2200,
+  proteinTarget = 150,
+): Array<TrackerDashboardTile> {
+  const caloriePace = Math.min(
+    100,
+    (summary.calories / Math.max(1, calorieTarget)) * 100,
+  )
+  const proteinPace = Math.min(
+    100,
+    (summary.protein / Math.max(1, proteinTarget)) * 100,
+  )
+  return [
+    {
+      label: 'Calorie runway',
+      value: String(Math.max(0, calorieTarget - summary.calories)),
+      detail: `${summary.calories} logged of ${calorieTarget}`,
+      trend: [18, 32, 54, caloriePace],
+      tone: summary.calories > calorieTarget ? 'warn' : 'accent',
+    },
+    {
+      label: 'Protein score',
+      value: `${Math.round(proteinPace)}%`,
+      detail: `${summary.protein} g of ${proteinTarget} g`,
+      trend: [20, 38, 56, proteinPace],
+      tone: proteinPace >= 70 ? 'good' : 'accent',
+    },
+    {
+      label: 'Fiber + water',
+      value: `${summary.fiber}g / ${summary.waterOz}oz`,
+      detail: 'GLP-1 comfort guardrail',
+      trend: [
+        10,
+        Math.min(100, summary.fiber * 3),
+        Math.min(100, summary.waterOz),
+        Math.min(100, summary.fiber * 3 + summary.waterOz / 2),
+      ],
+      tone: summary.fiber >= 20 && summary.waterOz >= 64 ? 'good' : 'accent',
+    },
+    {
+      label: 'Meal count',
+      value: String(summary.count),
+      detail: coaching.glpSuggestion,
+      trend: [14, 28, 42, Math.min(100, summary.count * 24)],
+      tone: 'accent',
+    },
+  ]
+}
+
 export function FoodLogPage() {
   usePageTitle('Food Log')
   const [entries, setEntries] = useState<Array<FoodEntry>>([])
@@ -1435,7 +1768,17 @@ export function FoodLogPage() {
   const proteinTargetKey = 'workspace.health.food.protein-target'
   const summary = getFoodSummary(entries)
   const coaching = getFoodCoaching(summary)
+  const dashboardTiles = getFoodDashboardTiles(
+    summary,
+    coaching,
+    calorieTarget,
+    proteinTarget,
+  )
   const todayEntries = entries.filter((entry) => entry.date === todayKey())
+  const macroWatch =
+    summary.count > 0 &&
+    (summary.protein < proteinTarget * 0.5 ||
+      summary.calories < calorieTarget * 0.35)
 
   useEffect(() => {
     let cancelled = false
@@ -1595,48 +1938,77 @@ export function FoodLogPage() {
 
   return (
     <TrackerShell
-      title="Food Log"
-      description="Cal AI-style meal capture with natural-language estimates, macro review, daily totals, and editable meal cards."
+      title="Food"
+      description="Meals, macros, totals."
       icon={Apple01Icon}
       syncStatus={syncStatus}
       syncDetail={syncDetail(serverUpdatedAt)}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricCard
-          label="Calories"
-          value={String(summary.calories)}
-          detail="Today total"
-        />
-        <MetricCard
-          label="Protein"
-          value={`${summary.protein} g`}
-          detail="Today total"
-        />
-        <MetricCard
-          label="Carbs"
-          value={`${summary.carbs} g`}
-          detail="Today total"
-        />
-        <MetricCard
-          label="Fat"
-          value={`${summary.fat} g`}
-          detail="Today total"
-        />
-        <MetricCard
-          label="Meals"
-          value={String(summary.count)}
-          detail="Logged today"
-        />
-      </div>
+      <section aria-label="Food dashboard">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {dashboardTiles.map((tile) => (
+            <DashboardTile key={tile.label} tile={tile} />
+          ))}
+        </div>
+      </section>
+
+      <section
+        aria-label="Food visual targets"
+        className="grid gap-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+      >
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+            Macro rings
+          </h2>
+          <p className="mt-1 text-sm text-[var(--theme-muted)]">
+            Calories, protein, fiber against targets.
+          </p>
+          <div className="mt-3">
+            <MacroRings
+              calories={summary.calories}
+              calorieTarget={calorieTarget}
+              protein={summary.protein}
+              proteinTarget={proteinTarget}
+              fiber={summary.fiber}
+            />
+          </div>
+        </div>
+        <div className="grid gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+              Meal timing
+            </h2>
+            <p className="mt-1 text-sm text-[var(--theme-muted)]">
+              One glance at today&apos;s intake gaps.
+            </p>
+          </div>
+          <MealTimeline entries={todayEntries} />
+          <div
+            className={cn(
+              'rounded-lg border p-3 text-sm',
+              macroWatch
+                ? 'border-amber-400/40 bg-amber-500/10'
+                : 'border-[var(--theme-border)] bg-[var(--theme-bg)]',
+            )}
+          >
+            <span className="font-semibold">
+              {macroWatch ? 'Low intake watch' : 'GLP-1 guardrail'}
+            </span>
+            <p className="mt-1 text-xs text-[var(--theme-muted)]">
+              {coaching.glpSuggestion}
+            </p>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 sm:p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-              Capture meal
+              Capture
             </h2>
             <span className="inline-flex items-center gap-2 rounded-full border border-[var(--theme-border)] px-3 py-1 text-xs font-semibold text-[var(--theme-muted)]">
-              <HugeiconsIcon icon={AiScanIcon} size={15} /> Estimate
+              <HugeiconsIcon icon={AiScanIcon} size={15} /> AI est.
             </span>
           </div>
           <div className="mt-4 grid gap-3">
@@ -1653,12 +2025,12 @@ export function FoodLogPage() {
                 ))}
               </select>
             </Field>
-            <Field label="What did you eat?">
+            <Field label="Food">
               <textarea
                 className={cn(inputClass, 'min-h-28 py-2')}
                 value={description}
                 onChange={(e) => setDescription(e.currentTarget.value)}
-                placeholder="Example: grilled chicken bowl with rice, avocado, peppers, and salsa"
+                placeholder="Chicken bowl, rice, avocado, salsa"
               />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1672,7 +2044,10 @@ export function FoodLogPage() {
               </Field>
               <Field label="Photo">
                 <input
-                  className={inputClass}
+                  className={cn(
+                    inputClass,
+                    'max-w-full file:mr-2 file:rounded-md file:border-0 file:bg-[var(--theme-card)] file:px-2 file:py-1 file:text-xs file:font-semibold file:text-[var(--theme-text)]',
+                  )}
                   type="file"
                   accept="image/*"
                   onChange={(event) =>
@@ -1683,7 +2058,7 @@ export function FoodLogPage() {
             </div>
             {photoName ? (
               <p className="text-sm text-[var(--theme-muted)]">
-                Photo ready for meal review: {photoName}
+                Photo ready: {photoName}
               </p>
             ) : null}
           </div>
@@ -1717,28 +2092,29 @@ export function FoodLogPage() {
           </div>
           <div className="mt-3 flex items-center gap-2 text-sm text-[var(--theme-muted)]">
             <HugeiconsIcon icon={ChartAverageIcon} size={17} />
-            {estimate.confidence}% estimate confidence. Adjust text detail to
-            improve the estimate.
+            {estimate.confidence}% confidence
           </div>
-          <button
-            type="button"
-            onClick={addFood}
-            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--theme-accent)] px-4 text-sm font-semibold text-white sm:w-auto"
-          >
-            <HugeiconsIcon icon={PlusSignIcon} size={17} /> Add meal
-          </button>
-          <button
-            type="button"
-            onClick={() => saveFavorite(description)}
-            className={cn(smallButtonClass, 'ml-0 mt-2 sm:ml-2')}
-          >
-            Save favorite
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={addFood}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--theme-accent)] px-4 text-sm font-semibold text-white sm:w-auto"
+            >
+              <HugeiconsIcon icon={PlusSignIcon} size={17} /> Add
+            </button>
+            <button
+              type="button"
+              onClick={() => saveFavorite(description)}
+              className={smallButtonClass}
+            >
+              Favorite
+            </button>
+          </div>
         </section>
 
-        <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+        <section className="hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 md:block">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-            Today meals
+            Meals
           </h2>
           <div className="mt-4 grid gap-3">
             {todayEntries.length ? (
@@ -1763,7 +2139,7 @@ export function FoodLogPage() {
                       }
                       className="min-h-8 rounded-lg border border-[var(--theme-border)] px-3 text-xs font-semibold text-[var(--theme-muted)]"
                     >
-                      Remove
+                      Del
                     </button>
                   </div>
                   <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs">
@@ -1784,41 +2160,51 @@ export function FoodLogPage() {
               ))
             ) : (
               <p className="rounded-lg border border-dashed border-[var(--theme-border)] p-4 text-sm text-[var(--theme-muted)]">
-                No food logged today.
+                No food today.
               </p>
             )}
           </div>
         </section>
       </div>
 
-      <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
+      <section className="hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 md:block">
         <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-          Nutrition targets
+          Targets
         </h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <InsightCard
-            label="Calories left"
-            value={String(Math.max(0, calorieTarget - summary.calories))}
-            detail={`Target ${calorieTarget} calories`}
-          />
-          <InsightCard
-            label="Protein score"
-            value={`${Math.min(100, Math.round((summary.protein / proteinTarget) * 100))}%`}
-            detail={`Target ${proteinTarget} g`}
-          />
-          <InsightCard
-            label="Fiber"
-            value={`${summary.fiber} g`}
-            detail="Daily fiber total"
-          />
-          <InsightCard
-            label="Water"
-            value={`${summary.waterOz} oz`}
-            detail="Water logged with meals"
-          />
-        </div>
+        <ToolsStatusRail
+          label="Food targets"
+          className="mt-4"
+          items={[
+            {
+              id: 'left',
+              label: 'Left',
+              value: String(Math.max(0, calorieTarget - summary.calories)),
+              tone: summary.calories > calorieTarget ? 'warning' : 'neutral',
+              progress: (summary.calories / Math.max(1, calorieTarget)) * 100,
+            },
+            {
+              id: 'protein',
+              label: 'Protein',
+              value: `${Math.min(100, Math.round((summary.protein / proteinTarget) * 100))}%`,
+              tone: summary.protein >= proteinTarget * 0.7 ? 'good' : 'neutral',
+              progress: (summary.protein / Math.max(1, proteinTarget)) * 100,
+            },
+            {
+              id: 'fiber',
+              label: 'Fiber',
+              value: `${summary.fiber}g`,
+              progress: (summary.fiber / 25) * 100,
+            },
+            {
+              id: 'water',
+              label: 'Water',
+              value: `${summary.waterOz}oz`,
+              progress: (summary.waterOz / 80) * 100,
+            },
+          ]}
+        />
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Field label="Calorie target">
+          <Field label="Cal goal">
             <input
               className={inputClass}
               type="number"
@@ -1828,7 +2214,7 @@ export function FoodLogPage() {
               }
             />
           </Field>
-          <Field label="Protein target">
+          <Field label="Protein goal">
             <input
               className={inputClass}
               type="number"
@@ -1841,7 +2227,7 @@ export function FoodLogPage() {
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
-            <h3 className="text-sm font-semibold">Meal templates</h3>
+            <h3 className="text-sm font-semibold">Templates</h3>
             <div className="mt-2 grid gap-2">
               {[
                 'grilled chicken bowl with rice, avocado, peppers, and salsa',
@@ -1853,7 +2239,7 @@ export function FoodLogPage() {
                   key={template}
                   type="button"
                   onClick={() => applyTemplate(template)}
-                  className="rounded-lg border border-[var(--theme-border)] px-3 py-2 text-left text-xs text-[var(--theme-muted)]"
+                  className="rounded-lg border border-[var(--theme-border)] px-3 py-2 text-left text-xs leading-snug text-[var(--theme-muted)] [overflow-wrap:anywhere]"
                 >
                   {template}
                 </button>
@@ -1869,25 +2255,25 @@ export function FoodLogPage() {
                     key={favorite}
                     type="button"
                     onClick={() => applyTemplate(favorite)}
-                    className="rounded-lg border border-[var(--theme-border)] px-3 py-2 text-left text-xs text-[var(--theme-muted)]"
+                    className="truncate rounded-lg border border-[var(--theme-border)] px-3 py-2 text-left text-xs text-[var(--theme-muted)]"
                   >
                     {favorite}
                   </button>
                 ))
               ) : (
                 <p className="text-sm text-[var(--theme-muted)]">
-                  Save frequent meals here.
+                  Save frequent meals.
                 </p>
               )}
             </div>
           </div>
           <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
-            <h3 className="text-sm font-semibold">GLP-1 meal coach</h3>
-            <p className="mt-2 text-sm text-[var(--theme-muted)]">
+            <h3 className="text-sm font-semibold">Coach</h3>
+            <p className="mt-2 line-clamp-2 text-sm text-[var(--theme-muted)]">
               {coaching.glpSuggestion}
             </p>
-            <p className="mt-2 text-sm text-[var(--theme-muted)]">
-              Late-night flag: review any meal logged after 9 PM.
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+              Late meal: 9 PM
             </p>
             <ProgressBar value={coaching.proteinScore} tone="good" />
           </div>

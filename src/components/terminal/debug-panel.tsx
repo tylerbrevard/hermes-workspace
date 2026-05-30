@@ -39,10 +39,10 @@ export function DebugPanel({
       <div className="flex items-center gap-2 border-b border-primary-700/40 px-4 py-3">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium text-primary-100 text-balance">
-            Debug Analyzer
+            Debug
           </h3>
           <p className="text-xs text-primary-400 text-pretty">
-            AI-assisted issue diagnosis for the active terminal
+            Active terminal diagnosis
           </p>
         </div>
         <Button
@@ -127,7 +127,7 @@ export function DebugPanel({
                 </ul>
               ) : (
                 <p className="mt-2 text-xs text-primary-500 text-pretty">
-                  No command suggestions were returned.
+                  No suggestions.
                 </p>
               )}
             </section>
@@ -152,7 +152,7 @@ export function DebugPanel({
 
         {!isLoading && !analysis ? (
           <p className="text-sm text-primary-500 text-pretty">
-            Click Debug to analyze the most recent terminal output.
+            Debug analyzes recent output.
           </p>
         ) : null}
       </div>

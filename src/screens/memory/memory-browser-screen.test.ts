@@ -123,7 +123,7 @@ describe('MemoryBrowserScreen operators', () => {
       freshness: 'fresh today',
       content: 'A'.repeat(1300),
     })
-    expect(context).toContain('Use this memory in the current task')
+    expect(context).toContain('Use memory after verifying drift-prone facts.')
     expect(context).toContain('Path: MEMORY.md')
     expect(context.length).toBeLessThan(1400)
   })

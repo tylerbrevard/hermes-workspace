@@ -34,7 +34,7 @@ const TABS: Array<{ id: TabId; label: string; icon: string }> = [
   { id: 'skills', label: 'Skills', icon: '✨' },
   { id: 'quests', label: 'Quests', icon: '📜' },
   { id: 'worlds', label: 'Worlds', icon: '🗺️' },
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
+  { id: 'settings', label: 'World', icon: '⚙️' },
 ]
 
 const SLOT_LABELS: Array<{ slot: EquipmentSlot; label: string }> = [
@@ -118,15 +118,22 @@ export function PlaygroundSidePanel({
         <div
           className="pointer-events-auto fixed right-3 top-[356px] z-[76] rounded-2xl border-2 bg-gradient-to-b from-[#0b1320]/92 to-black/86 p-3 text-white shadow-2xl backdrop-blur-xl md:w-[280px]"
           hidden={!questRailOpen}
-
           style={{
             borderColor: `${worldAccent}55`,
             boxShadow: `0 0 16px ${worldAccent}33, 0 8px 22px rgba(0,0,0,.55)`,
           }}
         >
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/55">Quest Tracker</span>
-            <button type="button" onClick={() => setQuestRailOpen(false)} className="rounded border border-white/20 bg-white/5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-white/55">Hide</button>
+            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/55">
+              Quest
+            </span>
+            <button
+              type="button"
+              onClick={() => setQuestRailOpen(false)}
+              className="rounded border border-white/20 bg-white/5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-white/55"
+            >
+              -
+            </button>
           </div>
           <div className="flex items-start gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-lg">
@@ -141,7 +148,7 @@ export function PlaygroundSidePanel({
               </div>
               {tutorialStep && (
                 <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
-                  Step {tutorialStep} of 5
+                  {tutorialStep}/5
                 </div>
               )}
             </div>
@@ -170,9 +177,9 @@ export function PlaygroundSidePanel({
           type="button"
           onClick={() => setQuestRailOpen(true)}
           className="pointer-events-auto fixed right-3 top-[356px] z-[76] rounded-full border border-amber-200/35 bg-black/70 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-amber-100 shadow-xl backdrop-blur-xl"
-          title="Open quest tracker"
+          title="Quest"
         >
-          📜 Quest
+          📜
         </button>
       )}
 
@@ -185,14 +192,14 @@ export function PlaygroundSidePanel({
         >
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 md:hidden">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/55">
-              HermesWorld Menu
+              World menu
             </div>
             <button
               type="button"
               onClick={() => onOpenChange?.(false)}
               className="rounded-md border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-white/60"
             >
-              Close
+              Esc
             </button>
           </div>
           <div className="flex items-center justify-between gap-1 border-b border-white/10 px-1.5 py-1.5">
@@ -390,7 +397,7 @@ function InventoryTab({
                         <div className="text-[8px] text-white/45">
                           {item?.stat
                             ? `${item.stat.label} +${item.stat.value}`
-                            : 'Click item below to equip'}
+                            : 'Pick item'}
                         </div>
                       </div>
                     </div>
@@ -475,11 +482,10 @@ function FoundersVaultPlaceholder({
             Founders' Vault
           </div>
           <div className="mt-1 text-[14px] font-semibold text-white">
-            Locked for v0.3 preview
+            Locked v0.3
           </div>
           <div className="mt-1 text-[10px] leading-relaxed text-white/72">
-            Early supporters will receive claimable gifts here once
-            server-authoritative granting ships in v0.4.
+            Gifts land here after v0.4 grant sync.
           </div>
         </div>
         <div
@@ -522,8 +528,7 @@ function FoundersVaultPlaceholder({
           color: FOUNDERS_PALETTE.gold,
         }}
       >
-        {foundersVaultUnclaimed} unclaimed founder gift queued • claiming
-        disabled in v0.3
+        {foundersVaultUnclaimed} queued · claiming off
       </div>
     </div>
   )
@@ -716,16 +721,15 @@ function SettingsTab({
     <div className="space-y-2 text-[10px] text-white/70">
       <div>
         <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/55">
-          Controls
+          Keys
         </div>
         <ul className="mt-1 space-y-0.5">
           <li>WASD move · Shift sprint</li>
-          <li>E talk · T chat · J journal · M world map · C avatar</li>
-          <li>Drag with mouse to rotate camera · wheel to zoom</li>
-          <li>Arrow keys still orbit view · 1 Strike · 2 Dash · 3 Bolt</li>
+          <li>E talk · T chat · J journal · M map · C avatar</li>
+          <li>Drag rotate · wheel zoom</li>
+          <li>Arrows orbit · 1 Strike · 2 Dash · 3 Bolt</li>
           <li>
-            <strong>F focus mode</strong> (hide rail) · Esc closes panels +
-            focus
+            <strong>F focus</strong> · Esc close
           </li>
         </ul>
       </div>
@@ -734,7 +738,7 @@ function SettingsTab({
           onClick={onReset}
           className="rounded-lg border border-rose-400/35 bg-rose-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-rose-100 hover:bg-rose-500/20"
         >
-          Reset local profile
+          Reset
         </button>
       )}
       {onReplayTutorial && (
@@ -742,7 +746,7 @@ function SettingsTab({
           onClick={onReplayTutorial}
           className="w-full rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-400/20"
         >
-          Replay tutorial
+          Replay
         </button>
       )}
     </div>

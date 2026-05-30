@@ -22,7 +22,15 @@ import {
 } from '@/lib/typed-storage'
 
 export type CaptureMode = 'note' | 'task' | 'draft'
+export type NotificationState = NotificationPermission | 'unsupported'
 export type PhoneTab = 'today' | 'work' | 'systems'
+export type PhoneTravelMode = 'standard' | 'driving' | 'walking'
+export type PhoneSignalRailItem = {
+  id: string
+  label: string
+  value: string
+  tone: 'ok' | 'warn' | 'bad' | 'muted'
+}
 export type PhoneCardId =
   | 'needs'
   | 'modes'
@@ -49,6 +57,10 @@ export type QueuedCapture = {
   payload: PhoneCockpitAction
   error?: string
 }
+export type QuickUndo = {
+  label: string
+  action: () => void
+}
 
 type HugeIcon = typeof Note01Icon
 
@@ -73,10 +85,15 @@ export const PHONE_CARD_IDS = [
 export const PHONE_LOW_DATA_KEY = 'hermes-phone-low-data-v1'
 export const PHONE_HIGH_CONTRAST_KEY = 'hermes-phone-high-contrast-v1'
 export const PHONE_COMPACT_BADGES_KEY = 'hermes-phone-compact-badges-v1'
+export const PHONE_TRAVEL_MODE_KEY = 'hermes-phone-travel-mode-v1'
 
 const PHONE_CAPTURE_QUEUE_KEY = 'hermes-phone-capture-queue-v1'
 const PHONE_COLLAPSED_CARDS_KEY = 'hermes-phone-collapsed-cards-v1'
 const PHONE_PINNED_CARDS_KEY = 'hermes-phone-pinned-cards-v1'
+export const DEFAULT_PHONE_COLLAPSED_CARDS: Array<PhoneCardId> = [
+  'dailyloops',
+  'modes',
+]
 
 const PHONE_SOURCE_STALE_MINUTES: Partial<
   Record<keyof PhoneCockpitSnapshot['sources'], number>
@@ -188,10 +205,27 @@ export function writeBooleanPreference(key: string, value: boolean) {
   window.localStorage.setItem(key, value ? '1' : '0')
 }
 
+export function readPhoneTravelMode(): PhoneTravelMode {
+  if (typeof window === 'undefined') return 'standard'
+  const value = window.localStorage.getItem(PHONE_TRAVEL_MODE_KEY)
+  return value === 'driving' || value === 'walking' ? value : 'standard'
+}
+
+export function writePhoneTravelMode(value: PhoneTravelMode) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(PHONE_TRAVEL_MODE_KEY, value)
+}
+
 export function readCollapsedCards(): Set<PhoneCardId> {
+  if (
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem(PHONE_COLLAPSED_CARDS_KEY) === null
+  ) {
+    return new Set(DEFAULT_PHONE_COLLAPSED_CARDS)
+  }
   const value = readJsonStorage(
     PHONE_COLLAPSED_CARDS_KEY,
-    [],
+    DEFAULT_PHONE_COLLAPSED_CARDS,
     isPhoneCardIdArray,
   ).value
   return new Set(value)
@@ -255,7 +289,7 @@ export function buildPhoneModeReadouts(snapshot: PhoneCockpitSnapshot | null): {
   meeting: { title: string; detail: string; active: boolean }
   desk: { title: string; detail: string; online: boolean }
 } {
-  const urgent = snapshot?.tasks.urgent ?? 0
+  const overdue = snapshot?.tasks.overdue ?? 0
   const unread = snapshot?.inbox.unread ?? 0
   const attention = snapshot?.attention.length ?? 0
   const nextMeeting = snapshot?.schedule.nextMeeting
@@ -268,7 +302,7 @@ export function buildPhoneModeReadouts(snapshot: PhoneCockpitSnapshot | null): {
         : attention
           ? `${attention} item${attention === 1 ? '' : 's'} need Tyler`
           : 'No urgent blockers',
-      detail: `${unread} unread mail, ${urgent} urgent tasks, ${attention} attention item${attention === 1 ? '' : 's'}.`,
+      detail: `${unread} unread mail, ${overdue} overdue tasks, ${attention} attention item${attention === 1 ? '' : 's'}.`,
     },
     meeting: {
       title: nextMeeting
@@ -281,8 +315,8 @@ export function buildPhoneModeReadouts(snapshot: PhoneCockpitSnapshot | null): {
           : 'Meeting mode will wake up before the next calendar event.',
       active: Boolean(
         nextMeeting &&
-          nextMeeting.minutesUntil >= -5 &&
-          nextMeeting.minutesUntil <= 30,
+        nextMeeting.minutesUntil >= -5 &&
+        nextMeeting.minutesUntil <= 30,
       ),
     },
     desk: {
@@ -290,7 +324,7 @@ export function buildPhoneModeReadouts(snapshot: PhoneCockpitSnapshot | null): {
         office?.status === 'online'
           ? 'Office bridge online'
           : office?.status === 'stale'
-            ? 'Office bridge stale'
+            ? 'Office bridge idle'
             : 'Office bridge unknown',
       detail:
         [
@@ -316,35 +350,41 @@ export function buildPhoneAtAGlance(snapshot: PhoneCockpitSnapshot | null) {
       0) + (snapshot?.tasks.overdue ?? 0)
   const waitingOnOthers = snapshot?.inbox.focused.length ?? 0
 
-  return [
+  const signals = [
     {
       label: 'Next event',
       value: nextMeeting
         ? `${nextMeeting.title} ${relativeMinutes(nextMeeting.minutesUntil)}`
         : 'No meeting',
     },
-    { label: 'Urgent tasks', value: String(snapshot?.tasks.urgent ?? 0) },
+    { label: 'Tasks', value: String(snapshot?.tasks.total ?? 0) },
     {
       label: 'Waiting',
       value: `${waitingOnMe} me / ${waitingOnOthers} others`,
     },
     {
       label: 'Desk state',
-      value: snapshot?.devices.office.status ?? 'unknown',
+      value:
+        snapshot?.devices.office.status === 'stale'
+          ? 'idle'
+          : (snapshot?.devices.office.status ?? 'unknown'),
     },
     {
       label: 'Source health',
       value: sourceWarnings.length ? `${sourceWarnings.length} degraded` : 'OK',
     },
   ]
+  return signals
 }
 
-export function buildPhoneSignalRail(snapshot: PhoneCockpitSnapshot | null) {
+export function buildPhoneSignalRail(
+  snapshot: PhoneCockpitSnapshot | null,
+): Array<PhoneSignalRailItem> {
   const degradedSources = Object.values(snapshot?.sources || {}).filter(
     (source) => !source.ok,
   ).length
   const nextMeeting = snapshot?.schedule.nextMeeting
-  return [
+  const signals: Array<PhoneSignalRailItem> = [
     {
       id: 'meeting',
       label: 'Meeting',
@@ -359,13 +399,8 @@ export function buildPhoneSignalRail(snapshot: PhoneCockpitSnapshot | null) {
     {
       id: 'tasks',
       label: 'Tasks',
-      value: String(snapshot?.tasks.overdue || snapshot?.tasks.urgent || 0),
-      tone:
-        (snapshot?.tasks.overdue ?? 0) > 0
-          ? 'bad'
-          : (snapshot?.tasks.urgent ?? 0) > 0
-            ? 'warn'
-            : 'ok',
+      value: String(snapshot?.tasks.overdue || 0),
+      tone: (snapshot?.tasks.overdue ?? 0) > 0 ? 'bad' : 'ok',
     },
     {
       id: 'mail',
@@ -376,8 +411,11 @@ export function buildPhoneSignalRail(snapshot: PhoneCockpitSnapshot | null) {
     {
       id: 'desk',
       label: 'Desk',
-      value: snapshot?.devices.office.status ?? 'unknown',
-      tone: snapshot?.devices.office.status === 'online' ? 'ok' : 'warn',
+      value:
+        snapshot?.devices.office.status === 'stale'
+          ? 'idle'
+          : (snapshot?.devices.office.status ?? 'unknown'),
+      tone: snapshot?.devices.office.status === 'online' ? 'ok' : 'muted',
     },
     {
       id: 'sources',
@@ -385,21 +423,179 @@ export function buildPhoneSignalRail(snapshot: PhoneCockpitSnapshot | null) {
       value: degradedSources ? String(degradedSources) : 'OK',
       tone: degradedSources ? 'warn' : 'ok',
     },
-  ] as const
+  ]
+  return signals
 }
 
-type DailyLoopSignal = {
+export function buildPhoneTravelGlance(
+  snapshot: PhoneCockpitSnapshot | null,
+  mode: PhoneTravelMode,
+) {
+  const nextMeeting = snapshot?.schedule.nextMeeting
+  const overdue = snapshot?.tasks.overdue ?? 0
+  const focused = snapshot?.inbox.focused.length ?? 0
+  const nextEvent = nextMeeting
+    ? `${nextMeeting.title} ${relativeMinutes(nextMeeting.minutesUntil)}`
+    : 'No meeting'
+  const blockerCount =
+    (snapshot?.attention.filter((item) => item.severity !== 'info').length ??
+      0) + overdue
+  const modeLabel =
+    mode === 'driving' ? 'Driving' : mode === 'walking' ? 'Walking' : 'Standard'
+  return {
+    modeLabel,
+    title:
+      mode === 'driving'
+        ? blockerCount
+          ? `${blockerCount} blocker${blockerCount === 1 ? '' : 's'}`
+          : nextEvent
+        : nextEvent,
+    urgentCount: overdue,
+    nextEvent,
+    captureLabel: mode === 'driving' ? 'Voice note' : 'Capture',
+    lilyLabel: mode === 'driving' ? 'Hands-free LILY' : 'LILY mic',
+    detail:
+      mode === 'driving'
+        ? `${overdue} overdue, ${focused} focused mail.`
+        : `${overdue} overdue tasks, ${focused} focused mail, ${blockerCount} blockers.`,
+  }
+}
+
+export type DailyLoopSignal = {
   id: string
   label: string
   value: string
   detail: string
   href: string
   icon: HugeIcon
-  tone: 'ok' | 'warn' | 'muted'
+  tone: 'ok' | 'warn' | 'bad' | 'muted'
   priority: number
 }
 
-function readLocalJson(key: string): unknown {
+export type PhoneDashboardTile = {
+  id: string
+  label: string
+  value: string
+  detail: string
+  tone: 'ok' | 'warn' | 'bad' | 'muted'
+  progress: number
+}
+
+export function buildPhoneCommandDashboard(
+  snapshot: PhoneCockpitSnapshot | null,
+  dailyLoopSignals: Array<DailyLoopSignal>,
+): {
+  posture: string
+  nextAction: string
+  nextDetail: string
+  tiles: Array<PhoneDashboardTile>
+  mix: Array<{ label: string; value: number; tone: PhoneDashboardTile['tone'] }>
+  loopPercent: number
+} {
+  const overdue = snapshot?.tasks.overdue ?? 0
+  const focusedMail = snapshot?.inbox.focused.length ?? 0
+  const attention =
+    snapshot?.attention.filter((item) => item.severity !== 'info').length ?? 0
+  const degradedSources = Object.values(snapshot?.sources || {}).filter(
+    (source) => !source.ok,
+  ).length
+  const nextMeeting = snapshot?.schedule.nextMeeting
+  const openLoops = dailyLoopSignals.filter((signal) => signal.tone !== 'ok')
+  const completedLoops = dailyLoopSignals.length - openLoops.length
+  const loopPercent = dailyLoopSignals.length
+    ? Math.round((completedLoops / dailyLoopSignals.length) * 100)
+    : 0
+  const totalWork = overdue + focusedMail + attention
+  const posture =
+    overdue || degradedSources >= 2
+      ? 'Stabilize'
+      : attention || focusedMail
+        ? 'Triage'
+        : openLoops.length
+          ? 'Loop check'
+          : 'Clear'
+  const nextAction =
+    overdue > 0
+      ? 'Clear overdue task'
+      : attention > 0
+        ? (snapshot?.attention.find((item) => item.severity !== 'info')
+            ?.title ?? 'Review attention item')
+        : nextMeeting
+          ? `Prep ${nextMeeting.title}`
+          : openLoops[0]
+            ? `Finish ${openLoops[0].label}`
+            : 'Capture loose note'
+  const nextDetail =
+    overdue > 0
+      ? `${overdue} overdue`
+      : nextMeeting
+        ? `${relativeMinutes(nextMeeting.minutesUntil)} · ${focusedMail} focused mail`
+        : `${openLoops.length} health loops open · ${degradedSources} degraded sources`
+
+  return {
+    posture,
+    nextAction,
+    nextDetail,
+    loopPercent,
+    mix: [
+      { label: 'Tasks', value: overdue, tone: overdue ? 'bad' : 'ok' },
+      { label: 'Mail', value: focusedMail, tone: focusedMail ? 'warn' : 'ok' },
+      { label: 'Needs', value: attention, tone: attention ? 'warn' : 'ok' },
+      {
+        label: 'Sources',
+        value: degradedSources,
+        tone: degradedSources ? 'warn' : 'ok',
+      },
+    ],
+    tiles: [
+      {
+        id: 'workload',
+        label: 'Workload',
+        value: String(totalWork),
+        detail: `${overdue} overdue · ${focusedMail} mail`,
+        tone: overdue ? 'bad' : totalWork ? 'warn' : 'ok',
+        progress: Math.min(100, totalWork * 18),
+      },
+      {
+        id: 'loops',
+        label: 'Loops',
+        value: `${completedLoops}/${dailyLoopSignals.length || 0}`,
+        detail: openLoops[0]?.label
+          ? `${openLoops[0].label} next`
+          : 'Daily loops clear',
+        tone: openLoops.length ? 'warn' : 'ok',
+        progress: loopPercent,
+      },
+      {
+        id: 'meeting',
+        label: 'Meeting',
+        value: nextMeeting
+          ? relativeMinutes(nextMeeting.minutesUntil)
+          : 'Clear',
+        detail: nextMeeting?.title ?? 'No meeting window',
+        tone:
+          nextMeeting &&
+          nextMeeting.minutesUntil >= -5 &&
+          nextMeeting.minutesUntil <= 20
+            ? 'warn'
+            : 'ok',
+        progress: nextMeeting
+          ? Math.max(8, Math.min(100, 100 - nextMeeting.minutesUntil * 2))
+          : 8,
+      },
+      {
+        id: 'sources',
+        label: 'Sources',
+        value: degradedSources ? String(degradedSources) : 'OK',
+        detail: degradedSources ? 'Refresh before trusting' : 'Fresh enough',
+        tone: degradedSources ? 'warn' : 'ok',
+        progress: degradedSources ? Math.min(100, degradedSources * 24) : 100,
+      },
+    ],
+  }
+}
+
+export function readLocalJson(key: string): unknown {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(key)
@@ -409,7 +605,7 @@ function readLocalJson(key: string): unknown {
   }
 }
 
-function writeLocalJson(key: string, value: unknown) {
+export function writeLocalJson(key: string, value: unknown) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(key, JSON.stringify(value))
 }
@@ -485,7 +681,8 @@ export function buildPhoneDailyLoopSignals(): Array<DailyLoopSignal> {
   const habitComplete =
     Boolean(habitState) &&
     typeof habitState === 'object' &&
-    Object.values(habitState).filter(Boolean).length >= 6
+    Object.values(habitState as Record<string, unknown>).filter(Boolean)
+      .length >= 6
   const wegovyShots = readLocalJson('workspace.health.wegovy.shots')
   const zynEntries = readLocalJson('workspace.health.zyn.entries')
   const foodEntries = readLocalJson('workspace.health.food.entries')
@@ -503,7 +700,7 @@ export function buildPhoneDailyLoopSignals(): Array<DailyLoopSignal> {
       )[0]
     : null
 
-  return [
+  const signals: Array<DailyLoopSignal> = [
     {
       id: '75',
       label: '75',
@@ -556,7 +753,8 @@ export function buildPhoneDailyLoopSignals(): Array<DailyLoopSignal> {
       tone: 'muted',
       priority: 70,
     },
-  ].sort((a, b) => a.priority - b.priority)
+  ]
+  return signals.sort((a, b) => a.priority - b.priority)
 }
 
 export function quickLogPhoneZyn(now = new Date(), strengthMg = 3) {

@@ -99,7 +99,9 @@ export function buildWeeklyWorkspaceUtilizationReport(
     0,
   )
   const topSessions = [...weeklySessions]
-    .sort((a, b) => Math.max(0, b.tokenCount || 0) - Math.max(0, a.tokenCount || 0))
+    .sort(
+      (a, b) => Math.max(0, b.tokenCount || 0) - Math.max(0, a.tokenCount || 0),
+    )
     .slice(0, 5)
   const recommendedActions =
     input.actionItems.length > 0
@@ -107,7 +109,8 @@ export function buildWeeklyWorkspaceUtilizationReport(
       : [
           {
             label: 'Plan next week',
-            detail: 'No urgent workspace recovery actions are currently queued.',
+            detail:
+              'No urgent workspace recovery actions are currently queued.',
           },
         ]
   const metrics: Array<WeeklyUtilizationMetric> = [
@@ -150,8 +153,9 @@ export function buildWeeklyWorkspaceUtilizationReport(
     `**Generated:** ${formatFreshness(end.getTime())}`,
     '',
     '## Metrics',
-    ...metrics.map((metric) =>
-      `- **${metric.label}:** ${metric.value}${metric.detail ? ` (${metric.detail})` : ''}`,
+    ...metrics.map(
+      (metric) =>
+        `- **${metric.label}:** ${metric.value}${metric.detail ? ` (${metric.detail})` : ''}`,
     ),
     '',
     '## Top Sessions',
@@ -163,7 +167,9 @@ export function buildWeeklyWorkspaceUtilizationReport(
       : ['- No sessions were reported in the last seven days.']),
     '',
     '## Recommended Actions',
-    ...recommendedActions.map((action) => `- **${action.label}:** ${action.detail}`),
+    ...recommendedActions.map(
+      (action) => `- **${action.label}:** ${action.detail}`,
+    ),
     '',
   ].join('\n')
 

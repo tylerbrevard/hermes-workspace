@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildLilyCockpitTiles,
   buildLilyDiagnostics,
   buildLilySessionSummary,
+  buildLilyVoiceLoopStages,
   extractWakeCommand,
   getBrowserVoiceSupportForUserAgent,
   getLilyFailureCta,
@@ -72,7 +74,7 @@ describe('LILY LiveKit voice helpers', () => {
       }),
     ).toMatchObject({
       supported: true,
-      label: 'Safari speech recognition available',
+      label: 'Safari ready',
     })
   })
 
@@ -85,7 +87,7 @@ describe('LILY LiveKit voice helpers', () => {
       }),
     ).toMatchObject({
       supported: true,
-      label: 'Chrome speech recognition ready',
+      label: 'Chrome ready',
     })
   })
 
@@ -98,7 +100,7 @@ describe('LILY LiveKit voice helpers', () => {
       }),
     ).toMatchObject({
       supported: false,
-      label: 'Speech recognition missing',
+      label: 'Speech missing',
     })
   })
 
@@ -106,13 +108,82 @@ describe('LILY LiveKit voice helpers', () => {
     expect(
       buildLilyDiagnostics({
         micPermission: 'granted',
-        browserVoiceLabel: 'Chrome speech recognition ready',
+        browserVoiceLabel: 'Chrome ready',
         liveKitConnected: true,
+        realtimeConnected: false,
+        geminiConnected: false,
         tokenStatus: 'Token valid until 5:00 PM',
         workerStatus: 'online',
+        voiceMode: 'connected',
         status: 'Ready',
       }),
-    ).toContain('[network] livekit=connected; token=Token valid until 5:00 PM')
+    ).toContain(
+      '[transport] livekit=connected; realtime=not connected; gemini=not connected; token=Token valid until 5:00 PM',
+    )
+  })
+
+  it('separates browser loop, transport, and actual speaking stages', () => {
+    const stages = buildLilyVoiceLoopStages({
+      handsFreeEnabled: true,
+      pushToTalkActive: false,
+      browserVoiceLabel: 'Chrome ready',
+      micPermission: 'granted',
+      liveKitConnected: true,
+      realtimeConnected: false,
+      geminiConnected: false,
+      workerStatus: 'online',
+      tokenStatus: 'LiveKit token active',
+      voiceMode: 'speaking',
+      isSending: false,
+      lastTestStage: 'passed: browser, worker, LiveKit, and speaker checked',
+    })
+
+    expect(stages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'browser',
+          value: 'Hands-free',
+          tone: 'ready',
+        }),
+        expect.objectContaining({
+          id: 'transport',
+          value: 'LiveKit transport connected',
+          tone: 'ready',
+        }),
+        expect.objectContaining({
+          id: 'agent',
+          value: 'Speaking now',
+          tone: 'ready',
+        }),
+        expect.objectContaining({
+          id: 'test',
+          value: 'Passed',
+          tone: 'ready',
+        }),
+      ]),
+    )
+  })
+
+  it('reports exact degraded voice-loop blockers for smoke coverage', () => {
+    expect(
+      buildLilyVoiceLoopStages({
+        handsFreeEnabled: false,
+        pushToTalkActive: false,
+        browserVoiceLabel: 'Speech missing',
+        micPermission: 'denied',
+        liveKitConnected: false,
+        workerStatus: 'offline',
+        tokenStatus: 'No LiveKit token',
+        voiceMode: 'idle',
+        isSending: false,
+        lastTestStage: 'failed at worker online: offline',
+      }).map((stage) => [stage.id, stage.value, stage.detail]),
+    ).toEqual([
+      ['browser', 'Manual', 'Mic blocked'],
+      ['transport', 'Browser fallback only', 'No LiveKit token'],
+      ['agent', 'Not speaking', 'idle'],
+      ['test', 'Failed', 'failed at worker online: offline'],
+    ])
   })
 
   it('chooses failure-specific CTAs for common voice-loop blockers', () => {
@@ -142,20 +213,43 @@ describe('LILY LiveKit voice helpers', () => {
         workerStatus: 'offline',
         tokenStatus: 'No LiveKit token',
       }),
-    ).toBe('Start worker')
+    ).toBe('Use Chrome loop')
   })
 
   it('classifies voice readiness and setup blockers', () => {
     expect(
       getLilyVoiceReadiness({
         configured: true,
+        geminiConfigured: true,
+        realtimeConfigured: true,
         micPermission: 'granted',
         browserSupported: true,
         workerStatus: 'online',
         tokenStatus: 'LiveKit token active',
-        liveKitConnected: true,
+        liveKitConnected: false,
       }),
-    ).toMatchObject({ state: 'ready', canStart: true })
+    ).toMatchObject({
+      state: 'ready',
+      label: 'Gemini',
+      canStart: true,
+    })
+
+    expect(
+      getLilyVoiceReadiness({
+        configured: true,
+        geminiConfigured: false,
+        realtimeConfigured: true,
+        micPermission: 'granted',
+        browserSupported: true,
+        workerStatus: 'offline',
+        tokenStatus: 'No LiveKit token',
+        liveKitConnected: false,
+      }),
+    ).toMatchObject({
+      state: 'ready',
+      label: 'Realtime',
+      canStart: true,
+    })
 
     expect(
       getLilyVoiceReadiness({
@@ -168,7 +262,7 @@ describe('LILY LiveKit voice helpers', () => {
       }),
     ).toMatchObject({
       state: 'unavailable',
-      blocker: 'Microphone permission is blocked',
+      blocker: 'Mic permission blocked',
       canStart: false,
     })
 
@@ -180,7 +274,67 @@ describe('LILY LiveKit voice helpers', () => {
         workerStatus: 'offline',
         liveKitConnected: false,
       }).map((item) => item.status),
-    ).toEqual(['needs action', 'degraded', 'blocked', 'degraded'])
+    ).toEqual(['needs action', 'degraded', 'blocked'])
+
+    expect(
+      getLilyVoiceReadiness({
+        configured: true,
+        micPermission: 'granted',
+        browserSupported: true,
+        workerStatus: 'offline',
+        tokenStatus: 'No LiveKit token',
+        liveKitConnected: false,
+      }),
+    ).toMatchObject({
+      state: 'degraded',
+      canStart: true,
+    })
+  })
+
+  it('builds compact voice cockpit tiles for the app-like LILY shell', () => {
+    const readiness = getLilyVoiceReadiness({
+      configured: true,
+      geminiConfigured: true,
+      realtimeConfigured: false,
+      micPermission: 'granted',
+      browserSupported: true,
+      workerStatus: 'online',
+      tokenStatus: 'LiveKit token active',
+      liveKitConnected: false,
+    })
+
+    expect(
+      buildLilyCockpitTiles({
+        readiness,
+        micPermission: 'granted',
+        browserVoiceLabel: 'Chrome ready',
+        tokenStatus: 'LiveKit token active',
+        workerStatus: 'online',
+        wakeLockStatus: 'active',
+        memoryEnabled: true,
+        conversationMemoryEnabled: true,
+        timelineCount: 2,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'readiness',
+          label: 'Voice',
+          value: 'Gemini',
+          tone: 'ready',
+        }),
+        expect.objectContaining({
+          id: 'transport',
+          value: 'Worker',
+          tone: 'ready',
+        }),
+        expect.objectContaining({
+          id: 'memory',
+          value: 'Full',
+          detail: '2 recent events · wake active',
+        }),
+      ]),
+    )
   })
 
   it('normalizes permission and LiveKit errors for actionable copy', () => {
@@ -190,7 +344,7 @@ describe('LILY LiveKit voice helpers', () => {
         userAgent:
           'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36',
       }),
-    ).toContain('Chrome')
+    ).toBe('Chrome site settings: Mic Allow, then retry.')
     expect(normalizeLiveKitError('token expired')).toBe(
       'LiveKit token expired or invalid',
     )

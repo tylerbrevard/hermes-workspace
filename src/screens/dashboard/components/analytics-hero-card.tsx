@@ -11,10 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  CancelIcon,
-  ChartLineData01Icon,
-} from '@hugeicons/core-free-icons'
+import { CancelIcon, ChartLineData01Icon } from '@hugeicons/core-free-icons'
 import type { DashboardOverview } from '@/server/dashboard-aggregator'
 import { formatModelName } from '@/screens/dashboard/lib/formatters'
 
@@ -151,7 +148,12 @@ export function AnalyticsHeroCard({
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
             <div className="lg:col-span-8">
               <div className="h-[180px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                  minWidth={1}
+                  minHeight={1}
+                >
                   <AreaChart
                     data={data}
                     margin={{ top: 8, right: 4, left: -22, bottom: 0 }}
@@ -240,10 +242,7 @@ export function AnalyticsHeroCard({
                 </ResponsiveContainer>
               </div>
               <div className="mt-1 flex items-center gap-4 text-[10px]">
-                <LegendDot
-                  tone="var(--theme-accent)"
-                  label="tokens (in+out)"
-                />
+                <LegendDot tone="var(--theme-accent)" label="tokens (in+out)" />
                 <LegendDot
                   tone="var(--theme-accent-secondary)"
                   label="cache reads"
@@ -414,7 +413,12 @@ function AnalyticsModal({
               Daily token mix
             </h3>
             <div className="h-[260px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={1}
+                minHeight={1}
+              >
                 <BarChart
                   data={data}
                   margin={{ top: 8, right: 8, left: -10, bottom: 0 }}

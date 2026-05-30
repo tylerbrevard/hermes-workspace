@@ -15,7 +15,7 @@ open http://localhost:3000
 
 That's it. The repo's `docker-compose.yml` runs:
 
-- `hermes-agent` (port `8642`, internal only)
+- `hermes-agent` (port `8642`, published on host loopback for local diagnostics)
 - `hermes-workspace` (port `3000`, bound to `127.0.0.1`)
 
 The workspace waits for the agent's `/health` to return `200` before starting (via `depends_on: condition: service_healthy`). On a fresh laptop this takes about 15 seconds.
@@ -50,7 +50,7 @@ Inside docker compose on the same host, `<agent-host-or-service>` is the service
 
 ### 3. Workspace gets a password
 
-The workspace bind is non-loopback in Docker (`0.0.0.0:3000`). It refuses to start in production mode without a password to prevent accidental open exposure:
+The default compose file binds the workspace to host loopback (`127.0.0.1:3000`). If you change that bind to a LAN/Tailscale address or `0.0.0.0:3000`, set a password so the workspace does not start as an open control plane:
 
 ```bash
 HERMES_PASSWORD=<a long random string different from API_SERVER_KEY>
@@ -113,13 +113,13 @@ A failing log usually shows `core=[]` and `missing=[health,...]` — that means 
 
 ### Common causes
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `core=[]` and `missing=[health,...]` | Workspace probed before agent was ready | Wait 30s and reload, or `POST /api/gateway-reprobe`. Cache TTL drops to 15s in disconnected state. |
-| `core=[health,chatCompletions]` but no `models` | Older agent image (pre-`/v1/models`) | Update: `docker compose pull && docker compose up -d` |
-| All probes 401 | `HERMES_API_TOKEN` doesn't match agent's `API_SERVER_KEY` | Check both `.env` values are the same. They must match exactly. |
-| Workspace UI shows "Connection refused" | Workspace using `127.0.0.1` instead of the service name | Set `HERMES_API_URL=http://hermes-agent:8642` (or whichever service name). |
-| Agent restart loops with `API_SERVER_KEY required` | Agent bound to 0.0.0.0 without a key | Set `API_SERVER_KEY` in `.env` (mandatory for non-loopback bind). |
+| Symptom                                            | Cause                                                     | Fix                                                                                                |
+| -------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `core=[]` and `missing=[health,...]`               | Workspace probed before agent was ready                   | Wait 30s and reload, or `POST /api/gateway-reprobe`. Cache TTL drops to 15s in disconnected state. |
+| `core=[health,chatCompletions]` but no `models`    | Older agent image (pre-`/v1/models`)                      | Update: `docker compose pull && docker compose up -d`                                              |
+| All probes 401                                     | `HERMES_API_TOKEN` doesn't match agent's `API_SERVER_KEY` | Check both `.env` values are the same. They must match exactly.                                    |
+| Workspace UI shows "Connection refused"            | Workspace using `127.0.0.1` instead of the service name   | Set `HERMES_API_URL=http://hermes-agent:8642` (or whichever service name).                         |
+| Agent restart loops with `API_SERVER_KEY required` | Agent bound to 0.0.0.0 without a key                      | Set `API_SERVER_KEY` in `.env` (mandatory for non-loopback bind).                                  |
 
 ## Synology NAS / external host setups
 

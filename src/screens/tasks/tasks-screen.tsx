@@ -16,16 +16,26 @@ import {
   Download01Icon,
   RefreshIcon,
 } from '@hugeicons/core-free-icons'
-import { TaskCard, formatTaskAssigneeLabel } from './task-card'
+import {
+  TaskCard,
+  formatTaskAssigneeLabel,
+  formatTaskCardText,
+} from './task-card'
 import { TaskDialog } from './task-dialog'
 import type {
   ClaudeTask,
   CreateTaskInput,
   TaskAssignee,
   TaskColumn,
+  UpdateTaskInput,
 } from '@/lib/tasks-api'
+import type { ToolsStatusRailItem } from '@/components/tools-action-dock'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
+import {
+  ToolsActionDock,
+  ToolsStatusRail,
+} from '@/components/tools-action-dock'
 import { readJsonStorage, writeJsonStorage } from '@/lib/typed-storage'
 import {
   COLUMN_COLORS,
@@ -35,7 +45,6 @@ import {
   deleteTask,
   fetchAssignees,
   fetchTasks,
-  getActiveBackend,
   isOverdue,
   launchSession,
   linkSession,
@@ -55,6 +64,35 @@ type TaskSavedFilter =
   | 'today'
   | 'waiting'
   | 'delegated'
+type TasksRouteSearch = {
+  assignee?: string
+  filter?: TaskSavedFilter
+  create?: 'task'
+  column?: TaskColumn
+}
+
+function cleanTasksSearch(
+  current: Record<string, unknown>,
+  updates: TasksRouteSearch,
+): TasksRouteSearch {
+  const currentSearch = getInitialTasksSearchState(current)
+  return {
+    assignee: Object.prototype.hasOwnProperty.call(updates, 'assignee')
+      ? updates.assignee
+      : (currentSearch.assignee ?? undefined),
+    filter: Object.prototype.hasOwnProperty.call(updates, 'filter')
+      ? updates.filter
+      : currentSearch.filter,
+    create: Object.prototype.hasOwnProperty.call(updates, 'create')
+      ? updates.create
+      : currentSearch.createTask
+        ? 'task'
+        : undefined,
+    column: Object.prototype.hasOwnProperty.call(updates, 'column')
+      ? updates.column
+      : currentSearch.column,
+  }
+}
 
 export function getInitialTasksSearchState(search: {
   assignee?: string
@@ -79,6 +117,12 @@ type TasksViewPreferences = {
   showDone: boolean
   searchText: string
   savedFilter: TaskSavedFilter
+}
+
+const DEFAULT_TASKS_VIEW_PREFERENCES: TasksViewPreferences = {
+  showDone: false,
+  searchText: '',
+  savedFilter: 'all',
 }
 
 function isTaskSavedFilter(value: unknown): value is TaskSavedFilter {
@@ -109,7 +153,7 @@ export function readTasksViewPreferences(
 ): TasksViewPreferences {
   return readJsonStorage(
     TASKS_VIEW_STORAGE_KEY,
-    { showDone: false, searchText: '', savedFilter: 'all' },
+    DEFAULT_TASKS_VIEW_PREFERENCES,
     isTasksViewPreferences,
     storage,
   ).value
@@ -123,7 +167,7 @@ export function writeTasksViewPreferences(
 }
 
 export const TASKS_BOARD_HELP_TEXT =
-  'Active work, blockers, follow-ups, and review handoffs in one board.'
+  'Active work, blockers, follow-ups, and review in one board.'
 
 export function serializeTasksCsv(tasks: Array<ClaudeTask>): string {
   const headers = [
@@ -355,6 +399,106 @@ export function getTodayPromiseTask(
   )
 }
 
+export function buildCompactTaskGlance(tasks: Array<ClaudeTask>): {
+  todayPromise: ClaudeTask | null
+  urgent: number
+  overdue: number
+  waiting: number
+  delegated: number
+  nextTasks: Array<ClaudeTask>
+} {
+  const activeTasks = tasks.filter(
+    (task) => !['done', 'deleted'].includes(task.column),
+  )
+  const todayPromise = getTodayPromiseTask(activeTasks)
+  const priorityRank: Record<ClaudeTask['priority'], number> = {
+    high: 0,
+    medium: 1,
+    low: 2,
+  }
+  return {
+    todayPromise,
+    urgent: activeTasks.filter((task) => task.priority === 'high').length,
+    overdue: activeTasks.filter(isOverdue).length,
+    waiting: activeTasks.filter(isWaitingTask).length,
+    delegated: activeTasks.filter(isDelegatedTask).length,
+    nextTasks: activeTasks
+      .slice()
+      .sort((a, b) => {
+        const dueRank =
+          getTaskDueLane(a) === 'today' && getTaskDueLane(b) !== 'today'
+            ? -1
+            : getTaskDueLane(a) !== 'today' && getTaskDueLane(b) === 'today'
+              ? 1
+              : 0
+        if (dueRank !== 0) return dueRank
+        const priority = priorityRank[a.priority] - priorityRank[b.priority]
+        if (priority !== 0) return priority
+        return (a.due_date ?? '9999-12-31').localeCompare(
+          b.due_date ?? '9999-12-31',
+        )
+      })
+      .slice(0, 3),
+  }
+}
+
+export function getTaskCockpitTiles(tasks: Array<ClaudeTask>): Array<{
+  id: 'open' | 'today' | 'blocked' | 'waiting'
+  label: string
+  value: number
+  detail: string
+  filter: TaskSavedFilter
+  tone: 'neutral' | 'warning' | 'danger' | 'info'
+}> {
+  const activeTasks = tasks.filter(
+    (task) => !['done', 'deleted'].includes(task.column),
+  )
+  const today = activeTasks.filter(isDueToday)
+  const overdue = activeTasks.filter(isOverdue)
+  const blocked = activeTasks.filter((task) => task.column === 'blocked')
+  const waiting = activeTasks.filter(isWaitingTask)
+
+  return [
+    {
+      id: 'open',
+      label: 'Open work',
+      value: activeTasks.length,
+      detail: `${activeTasks.filter((task) => task.column === 'in_progress').length} running`,
+      filter: 'active',
+      tone: 'neutral',
+    },
+    {
+      id: 'today',
+      label: 'Today',
+      value: today.length,
+      detail: `${overdue.length} overdue`,
+      filter: overdue.length > 0 ? 'overdue' : 'today',
+      tone:
+        overdue.length > 0
+          ? 'danger'
+          : today.length > 0
+            ? 'warning'
+            : 'neutral',
+    },
+    {
+      id: 'blocked',
+      label: 'Blocked',
+      value: blocked.length,
+      detail: blocked.length ? 'Needs unstick' : 'Clear',
+      filter: 'blocked',
+      tone: blocked.length > 0 ? 'danger' : 'neutral',
+    },
+    {
+      id: 'waiting',
+      label: 'Waiting',
+      value: waiting.length,
+      detail: waiting.length ? 'Follow-up queue' : 'No waiting copy',
+      filter: 'waiting',
+      tone: waiting.length > 0 ? 'info' : 'neutral',
+    },
+  ]
+}
+
 export function getOwnerWorkload(
   tasks: Array<ClaudeTask>,
 ): Array<{ owner: string; count: number; blocked: number }> {
@@ -574,6 +718,38 @@ export function TasksScreen() {
   const ownerWorkload = useMemo(() => getOwnerWorkload(tasks), [tasks])
   const sourceGroups = useMemo(() => getTaskSourceGroups(tasks), [tasks])
   const todayPromiseTask = useMemo(() => getTodayPromiseTask(tasks), [tasks])
+  const compactTaskGlance = useMemo(
+    () => buildCompactTaskGlance(tasks),
+    [tasks],
+  )
+  const taskCockpitTiles = useMemo(() => getTaskCockpitTiles(tasks), [tasks])
+  const taskStatusItems = useMemo<Array<ToolsStatusRailItem>>(
+    () =>
+      taskCockpitTiles.map((tile) => ({
+        id: tile.id,
+        label: tile.label,
+        value: String(tile.value),
+        tone:
+          tile.tone === 'danger'
+            ? 'danger'
+            : tile.tone === 'warning'
+              ? 'warning'
+              : tile.tone === 'info'
+                ? 'primary'
+                : tile.id === 'blocked' && tile.value === 0
+                  ? 'good'
+                  : 'neutral',
+        progress:
+          tile.id === 'open'
+            ? Math.min(100, tile.value * 8)
+            : tile.id === 'today'
+              ? Math.min(100, tile.value * 20)
+              : tile.id === 'blocked'
+                ? Math.min(100, tile.value * 25)
+                : Math.min(100, tile.value * 18),
+      })),
+    [taskCockpitTiles],
+  )
   const dueRiskCounts = useMemo(() => {
     return tasks.reduce<Record<TaskDueRisk['severity'], number>>(
       (counts, task) => {
@@ -597,11 +773,19 @@ export function TasksScreen() {
       ).length,
     [tasks],
   )
+  const wipColumnCounts = useMemo(
+    () => ({
+      todo: tasks.filter((task) => task.column === 'todo').length,
+      doing: tasks.filter((task) => task.column === 'in_progress').length,
+      review: tasks.filter((task) => task.column === 'review').length,
+      blocked: tasks.filter((task) => task.column === 'blocked').length,
+    }),
+    [tasks],
+  )
 
   const visibleColumns = showDone
     ? COLUMN_ORDER
     : COLUMN_ORDER.filter((c) => c !== 'done')
-  const activeBackend = getActiveBackend()
   const hasActiveFilter = Boolean(
     searchText.trim() || savedFilter !== 'all' || assigneeFilter,
   )
@@ -668,7 +852,7 @@ export function TasksScreen() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: CreateTaskInput }) =>
+    mutationFn: ({ id, input }: { id: string; input: UpdateTaskInput }) =>
       updateTask(id, input),
     onSuccess: () => {
       invalidate()
@@ -762,11 +946,11 @@ export function TasksScreen() {
       setShowCreate(true)
       void navigate({
         to: '/tasks',
-        search: (current) => ({
-          ...current,
-          create: undefined,
-          column: undefined,
-        }),
+        search: (current) =>
+          cleanTasksSearch(current, {
+            create: undefined,
+            column: undefined,
+          }),
         replace: true,
       })
     }
@@ -878,15 +1062,38 @@ export function TasksScreen() {
   const colMaxWidth = Math.floor(1200 / visibleColumns.length)
 
   return (
-    <div className="min-h-full overflow-y-auto bg-surface text-ink">
-      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 pb-[calc(var(--tabbar-h,80px)+1.5rem)] sm:px-6 lg:px-8">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface text-ink">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 flex-col gap-3 px-3 py-3 pb-[calc(var(--tabbar-h,80px)+0.75rem)] sm:gap-5 sm:px-6 sm:py-6 sm:pb-[calc(var(--tabbar-h,80px)+1.5rem)] lg:px-8">
         {/* Header */}
-        <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl">
+        <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-3 backdrop-blur-xl sm:p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <h1 className="text-2xl font-medium leading-none text-ink">
-                Tasks
-              </h1>
+              <div className="flex items-center justify-between gap-3">
+                <h1 className="text-2xl font-medium leading-none text-ink">
+                  Tasks
+                </h1>
+                <div className="flex items-center gap-1 sm:hidden">
+                  <button
+                    type="button"
+                    onClick={invalidate}
+                    className="grid size-10 place-items-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-muted)]"
+                    aria-label="Refresh tasks"
+                  >
+                    <HugeiconsIcon icon={RefreshIcon} size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreateColumn('backlog')
+                      setShowCreate(true)
+                    }}
+                    className="grid size-10 place-items-center rounded-full bg-[var(--theme-accent)] text-white"
+                    aria-label="New task"
+                  >
+                    <HugeiconsIcon icon={Add01Icon} size={18} />
+                  </button>
+                </div>
+              </div>
               {assigneeFilter && (
                 <div className="flex items-center gap-2 text-xs text-[var(--theme-muted)]">
                   <span>
@@ -901,10 +1108,10 @@ export function TasksScreen() {
                       setAssigneeFilter(null)
                       void navigate({
                         to: '/tasks',
-                        search: (current) => ({
-                          ...current,
-                          assignee: undefined,
-                        }),
+                        search: (current) =>
+                          cleanTasksSearch(current, {
+                            assignee: undefined,
+                          }),
                       })
                     }}
                     className="text-[var(--theme-muted)] hover:text-[var(--theme-text)] transition-colors"
@@ -914,7 +1121,7 @@ export function TasksScreen() {
                 </div>
               )}
               {/* Stats */}
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--theme-muted)]">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--theme-muted)] sm:flex">
                 <span>{stats.total} total</span>
                 <span className="hidden sm:inline">·</span>
                 <span className="hidden sm:inline">
@@ -965,7 +1172,7 @@ export function TasksScreen() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:items-center">
+            <div className="hidden grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:items-center">
               <button
                 onClick={() => setShowDone((v) => !v)}
                 className={cn(
@@ -1012,39 +1219,85 @@ export function TasksScreen() {
               </button>
             </div>
           </div>
-          <p className="mt-3 text-xs text-[var(--theme-muted)]">
-            {TASKS_BOARD_HELP_TEXT}
-          </p>
-          <div
-            className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--theme-muted)]"
-            aria-label="Task board runtime metadata"
-          >
-            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
-              Source:{' '}
-              {activeBackend
-                ? `${activeBackend} tasks API`
-                : 'probing task backend'}
-            </span>
-            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
-              Last fetched: {formatQueryFreshness(tasksQuery.dataUpdatedAt)}
-            </span>
-            {assigneesQuery.isError ? (
-              <span className="rounded-md border border-red-300/40 bg-red-500/10 px-2 py-1 text-red-400">
-                Assignees unavailable
-              </span>
-            ) : (
-              <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1">
-                Owners: {assignees.length || 'none configured'}
-              </span>
-            )}
-          </div>
+          <ToolsActionDock
+            className="mt-3 hidden sm:flex"
+            label="Task quick actions"
+            items={[
+              {
+                id: 'new',
+                label: 'New',
+                icon: 'add',
+                tone: 'primary',
+                onClick: () => {
+                  setCreateColumn('backlog')
+                  setShowCreate(true)
+                },
+                meta: 'Task',
+              },
+              {
+                id: 'today',
+                label: 'Today',
+                icon: 'calendar',
+                onClick: () => {
+                  setSavedFilter('today')
+                  void navigate({
+                    to: '/tasks',
+                    search: (current) =>
+                      cleanTasksSearch(current, {
+                        filter: 'today',
+                        assignee: assigneeFilter ?? undefined,
+                      }),
+                  })
+                },
+                meta: `${stats.today} due`,
+              },
+              {
+                id: 'blocked',
+                label: 'Blocked',
+                icon: 'shield',
+                tone: stats.blocked > 0 ? 'warning' : 'good',
+                onClick: () => {
+                  setSavedFilter('blocked')
+                  void navigate({
+                    to: '/tasks',
+                    search: (current) =>
+                      cleanTasksSearch(current, {
+                        filter: 'blocked',
+                        assignee: assigneeFilter ?? undefined,
+                      }),
+                  })
+                },
+                meta: `${stats.blocked} open`,
+              },
+              {
+                id: 'export',
+                label: 'Export',
+                icon: 'download',
+                onClick: exportTasksCsv,
+                disabled: filteredTaskCount === 0,
+                meta: 'CSV',
+              },
+              {
+                id: 'refresh',
+                label: 'Refresh',
+                icon: 'refresh',
+                onClick: invalidate,
+                meta: formatQueryFreshness(tasksQuery.dataUpdatedAt),
+              },
+            ]}
+          />
+          <ToolsStatusRail
+            className="mt-3 hidden sm:block"
+            label="Task status"
+            items={taskStatusItems}
+          />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <input
               type="search"
               value={searchText}
               onChange={(event) => setSearchText(event.currentTarget.value)}
               placeholder="Search tasks"
-              className="min-w-[220px] flex-1 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none"
+              className="min-h-11 min-w-[220px] flex-1 rounded-full border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 text-sm text-[var(--theme-text)] outline-none sm:min-h-0 sm:rounded-lg sm:px-3 sm:py-2"
             />
             {[
               ['all', 'All'],
@@ -1063,15 +1316,15 @@ export function TasksScreen() {
                   setSavedFilter(nextFilter)
                   void navigate({
                     to: '/tasks',
-                    search: (current) => ({
-                      ...current,
-                      filter: nextFilter === 'all' ? undefined : nextFilter,
-                      assignee: assigneeFilter ?? undefined,
-                    }),
+                    search: (current) =>
+                      cleanTasksSearch(current, {
+                        filter: nextFilter === 'all' ? undefined : nextFilter,
+                        assignee: assigneeFilter ?? undefined,
+                      }),
                   })
                 }}
                 className={cn(
-                  'rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
+                  'rounded-full border px-3 py-2 text-xs transition-colors sm:rounded-lg sm:px-2.5 sm:py-1.5',
                   savedFilter === value
                     ? 'border-[var(--theme-accent)] bg-[var(--theme-hover)] text-[var(--theme-accent)]'
                     : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:text-[var(--theme-text)]',
@@ -1083,8 +1336,155 @@ export function TasksScreen() {
           </div>
         </header>
 
-        <section className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 text-xs text-[var(--theme-muted)]">
-          <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">
+        <section aria-label="Mobile task queue" className="md:hidden">
+          <div className="rounded-[24px] border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  compactTaskGlance.todayPromise
+                    ? setEditingTask(compactTaskGlance.todayPromise)
+                    : setShowCreate(true)
+                }
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--theme-accent)]">
+                  Focus
+                </p>
+                <h2 className="mt-1 line-clamp-1 text-base font-semibold text-[var(--theme-text)]">
+                  {compactTaskGlance.todayPromise
+                    ? formatTaskCardText(
+                        compactTaskGlance.todayPromise.title,
+                        40,
+                      )
+                    : 'No focus task'}
+                </h2>
+              </button>
+              <div className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--theme-bg)] px-2 py-1 text-[11px] text-[var(--theme-muted)]">
+                <span className="font-semibold text-[var(--theme-text)]">
+                  {stats.total - stats.done}
+                </span>
+                open
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-4 gap-1.5">
+              {[
+                ['today', 'Today', dueLaneCounts.today],
+                ['overdue', 'Late', compactTaskGlance.overdue],
+                ['waiting', 'Wait', compactTaskGlance.waiting],
+                ['delegated', 'Out', compactTaskGlance.delegated],
+              ].map(([filter, label, value]) => (
+                <button
+                  key={String(filter)}
+                  type="button"
+                  onClick={() => {
+                    const nextFilter = filter as TaskSavedFilter
+                    setSavedFilter(nextFilter)
+                    void navigate({
+                      to: '/tasks',
+                      search: (current) =>
+                        cleanTasksSearch(current, {
+                          filter: nextFilter,
+                          assignee: assigneeFilter ?? undefined,
+                        }),
+                    })
+                  }}
+                  className={cn(
+                    'min-h-14 rounded-[18px] px-1 text-center',
+                    savedFilter === filter
+                      ? 'bg-[var(--theme-accent)] text-white'
+                      : 'bg-[var(--theme-bg)] text-[var(--theme-muted)]',
+                  )}
+                >
+                  <span className="block text-base font-semibold tabular-nums">
+                    {value}
+                  </span>
+                  <span className="block truncate text-[10px]">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3 overflow-hidden rounded-[24px] border border-[var(--theme-border)] bg-[var(--theme-card)] shadow-sm">
+            <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-3 py-2">
+              <h2 className="text-sm font-semibold text-[var(--theme-text)]">
+                Next
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowDone((value) => !value)}
+                className="rounded-full bg-[var(--theme-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--theme-muted)]"
+              >
+                {showDone ? 'Hide done' : 'Done'}
+              </button>
+            </div>
+            {compactTaskGlance.nextTasks.length ? (
+              <div className="divide-y divide-[var(--theme-border)]">
+                {compactTaskGlance.nextTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    type="button"
+                    onClick={() => setEditingTask(task)}
+                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-left"
+                  >
+                    <span className="min-w-0">
+                      <span className="block line-clamp-1 text-sm font-medium text-[var(--theme-text)]">
+                        {formatTaskCardText(task.title, 44)}
+                      </span>
+                      <span className="mt-1 block truncate text-[11px] text-[var(--theme-muted)]">
+                        {getTaskDueRisk(task).label} ·{' '}
+                        {formatTaskAssigneeLabel(task.assignee, assigneeLabels)}
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        'size-2.5 rounded-full',
+                        task.priority === 'high'
+                          ? 'bg-red-400'
+                          : task.priority === 'medium'
+                            ? 'bg-amber-400'
+                            : 'bg-[var(--theme-muted)]',
+                      )}
+                      aria-hidden="true"
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="w-full px-3 py-5 text-center text-sm font-medium text-[var(--theme-muted)]"
+              >
+                Add first task
+              </button>
+            )}
+          </div>
+        </section>
+
+        <details className="hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 text-xs text-[var(--theme-muted)] md:block">
+          <summary className="cursor-pointer list-none">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--theme-text)]">
+                  Insights
+                </h2>
+                <p className="mt-1">Promise, owners, sources, exports.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1">
+                  {dueLaneCounts.today} today
+                </span>
+                <span className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1">
+                  {ownerWorkload.length} owners
+                </span>
+                <span className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1">
+                  {sourceGroups.length} sources
+                </span>
+              </div>
+            </div>
+          </summary>
+          <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">
             <div>
               <h2 className="text-sm font-semibold text-[var(--theme-text)]">
                 Daily queue
@@ -1099,7 +1499,7 @@ export function TasksScreen() {
                     Today's promise
                   </span>
                   <span className="mt-1 block line-clamp-1 text-sm font-semibold text-[var(--theme-text)]">
-                    {todayPromiseTask.title}
+                    {formatTaskCardText(todayPromiseTask.title, 32)}
                   </span>
                   <span className="mt-1 block text-[11px] text-[var(--theme-muted)]">
                     {getTaskDueRisk(todayPromiseTask).label} ·{' '}
@@ -1111,7 +1511,7 @@ export function TasksScreen() {
                 </button>
               ) : (
                 <p className="mt-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-muted)]">
-                  No high-priority or due-today task is asking for a promise.
+                  No promise task.
                 </p>
               )}
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1170,7 +1570,7 @@ export function TasksScreen() {
                     }}
                     className="rounded-lg border border-[var(--theme-border)] px-2 py-1 text-[var(--theme-text)] hover:bg-[var(--theme-hover)]"
                   >
-                    Quick task from {source}
+                    + {source}
                   </button>
                 ))}
               </div>
@@ -1195,10 +1595,27 @@ export function TasksScreen() {
                   </div>
                 ))}
               </div>
-              <p className="mt-2">
-                WIP limits: backlog unlimited, todo 12, in progress 5, review 8,
-                blocked 10. Review with Tyler lane: {reviewWithTylerCount}.
-              </p>
+              <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] sm:grid-cols-5">
+                {[
+                  ['Todo', wipColumnCounts.todo],
+                  ['Doing', wipColumnCounts.doing],
+                  ['Review', wipColumnCounts.review],
+                  ['Blocked', wipColumnCounts.blocked],
+                  ['Tyler', reviewWithTylerCount],
+                ].map(([label, value]) => (
+                  <span
+                    key={label}
+                    className="min-w-0 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-center"
+                  >
+                    <span className="block font-semibold text-[var(--theme-text)]">
+                      {value}
+                    </span>
+                    <span className="block break-words text-[10px] uppercase tracking-normal [overflow-wrap:anywhere]">
+                      {label}
+                    </span>
+                  </span>
+                ))}
+              </div>
               <h3 className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
                 Sources
               </h3>
@@ -1231,7 +1648,7 @@ export function TasksScreen() {
                   onClick={copyVisibleTaskSummary}
                   className="rounded-lg border border-[var(--theme-border)] px-2 py-1 text-[var(--theme-text)] hover:bg-[var(--theme-hover)]"
                 >
-                  Copy task summary
+                  Copy summary
                 </button>
                 <button
                   type="button"
@@ -1239,7 +1656,7 @@ export function TasksScreen() {
                   disabled={filteredTaskCount === 0}
                   className="rounded-lg border border-[var(--theme-border)] px-2 py-1 text-[var(--theme-text)] hover:bg-[var(--theme-hover)] disabled:opacity-50"
                 >
-                  Export with IDs and provenance
+                  Export JSON
                 </button>
               </div>
               {humanReviewer ? (
@@ -1250,93 +1667,116 @@ export function TasksScreen() {
               ) : null}
             </div>
           </div>
-        </section>
+        </details>
 
-        <section
+        <details
           aria-label="Blocked and waiting task focus"
-          className="grid gap-3 md:grid-cols-2"
+          className="hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 text-xs text-[var(--theme-muted)] md:block"
         >
-          {focusSections.map((section) => {
-            const previewTasks = section.tasks.slice(0, 3)
-            return (
-              <article
-                key={section.id}
-                className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
-                      Task focus
-                    </p>
-                    <h2 className="mt-1 text-base font-semibold text-[var(--theme-text)]">
-                      {section.title}
-                    </h2>
-                    <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                      {section.description}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSavedFilter(section.filter)
-                      void navigate({
-                        to: '/tasks',
-                        search: (current) => ({
-                          ...current,
-                          filter: section.filter,
-                          assignee: assigneeFilter ?? undefined,
-                        }),
-                      })
-                    }}
-                    className={cn(
-                      'min-h-10 shrink-0 rounded-lg border px-3 text-xs font-semibold transition-colors',
-                      savedFilter === section.filter
-                        ? 'border-[var(--theme-accent)] bg-[var(--theme-hover)] text-[var(--theme-accent)]'
-                        : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:text-[var(--theme-text)]',
-                    )}
+          <summary className="cursor-pointer list-none">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--theme-text)]">
+                  Focus
+                </h2>
+                <p className="mt-1">Blocked and waiting work.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {focusSections.map((section) => (
+                  <span
+                    key={section.id}
+                    className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1"
                   >
-                    {section.tasks.length} open
-                  </button>
-                </div>
-                {previewTasks.length ? (
-                  <ul className="mt-3 space-y-2">
-                    {previewTasks.map((task) => (
-                      <li
-                        key={task.id}
-                        className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setEditingTask(task)}
-                          className="block w-full text-left"
+                    {section.tasks.length}{' '}
+                    {section.id === 'blocked-by-me' ? 'blocked' : 'waiting'}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </summary>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {focusSections.map((section) => {
+              const previewTasks = section.tasks.slice(0, 3)
+              return (
+                <article
+                  key={section.id}
+                  className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--theme-muted)]">
+                        Task focus
+                      </p>
+                      <h2 className="mt-1 text-base font-semibold text-[var(--theme-text)]">
+                        {section.title}
+                      </h2>
+                      <p className="mt-1 text-xs text-[var(--theme-muted)]">
+                        {section.description}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSavedFilter(section.filter)
+                        void navigate({
+                          to: '/tasks',
+                          search: (current) =>
+                            cleanTasksSearch(current, {
+                              filter: section.filter,
+                              assignee: assigneeFilter ?? undefined,
+                            }),
+                        })
+                      }}
+                      className={cn(
+                        'min-h-10 shrink-0 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                        savedFilter === section.filter
+                          ? 'border-[var(--theme-accent)] bg-[var(--theme-hover)] text-[var(--theme-accent)]'
+                          : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:text-[var(--theme-text)]',
+                      )}
+                    >
+                      {section.tasks.length} open
+                    </button>
+                  </div>
+                  {previewTasks.length ? (
+                    <ul className="mt-3 space-y-2">
+                      {previewTasks.map((task) => (
+                        <li
+                          key={task.id}
+                          className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2"
                         >
-                          <span className="block line-clamp-1 text-sm font-medium text-[var(--theme-text)]">
-                            {task.title}
-                          </span>
-                          <span className="mt-1 block text-xs text-[var(--theme-muted)]">
-                            {formatTaskAssigneeLabel(
-                              task.assignee,
-                              assigneeLabels,
-                            )}
-                            {task.due_date ? ` · Due ${task.due_date}` : ''}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3 text-sm text-[var(--theme-muted)]">
-                    Nothing in this lane.
-                  </p>
-                )}
-              </article>
-            )
-          })}
-        </section>
+                          <button
+                            type="button"
+                            onClick={() => setEditingTask(task)}
+                            className="block w-full text-left"
+                          >
+                            <span className="block line-clamp-1 text-sm font-medium text-[var(--theme-text)]">
+                              {formatTaskCardText(task.title, 34)}
+                            </span>
+                            <span className="mt-1 block text-xs text-[var(--theme-muted)]">
+                              {formatTaskAssigneeLabel(
+                                task.assignee,
+                                assigneeLabels,
+                              )}
+                              {task.due_date ? ` · Due ${task.due_date}` : ''}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-3 text-sm text-[var(--theme-muted)]">
+                      Nothing in this lane.
+                    </p>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+        </details>
 
         {/* Board */}
         <div
-          className="mx-auto flex w-full max-w-[1200px] flex-1 gap-3 overflow-x-auto overflow-y-hidden p-4 min-h-0"
+          className="mx-auto hidden w-full max-w-[1200px] flex-1 gap-3 overflow-x-auto overflow-y-hidden p-4 min-h-0 md:flex"
           style={{ boxShadow: 'inset 0 8px 24px rgba(0,0,0,0.2)' }}
         >
           {visibleColumns.map((col) => {

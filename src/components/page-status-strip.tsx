@@ -1,19 +1,17 @@
 import type React from 'react'
+import type { WorkspaceStatusTone } from '@/lib/source-freshness'
+import {
+  formatWorkspaceFreshness,
+  workspaceStatusClass,
+} from '@/lib/source-freshness'
 import { cn } from '@/lib/utils'
 
-type PageStatusTone = 'ok' | 'warn' | 'error' | 'info'
+type PageStatusTone = WorkspaceStatusTone
 
 export type PageStatusItem = {
   label: string
   value: React.ReactNode
   tone?: PageStatusTone
-}
-
-const toneClass: Record<PageStatusTone, string> = {
-  ok: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100',
-  warn: 'border-amber-300/30 bg-amber-300/10 text-amber-100',
-  error: 'border-rose-300/30 bg-rose-300/10 text-rose-100',
-  info: 'border-cyan-300/25 bg-cyan-300/10 text-cyan-100',
 }
 
 export function PageStatusStrip({
@@ -31,7 +29,7 @@ export function PageStatusStrip({
           key={item.label}
           className={cn(
             'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium',
-            toneClass[item.tone ?? 'info'],
+            workspaceStatusClass(item.tone ?? 'info', 'dark'),
           )}
         >
           <span className="opacity-70">{item.label}</span>
@@ -45,9 +43,5 @@ export function PageStatusStrip({
 export function formatStatusTime(
   timestamp: number | string | null | undefined,
 ) {
-  if (!timestamp) return 'never'
-  const date =
-    typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return 'unknown'
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return formatWorkspaceFreshness(timestamp)
 }

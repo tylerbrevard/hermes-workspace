@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from 'react'
-import { Cancel01Icon, Settings01Icon } from '@hugeicons/core-free-icons'
+import { Cancel01Icon, SlidersHorizontalIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { AgentProgress } from '@/components/agent-view/agent-progress'
 import { PixelAvatar } from '@/components/agent-swarm/pixel-avatar'
@@ -13,15 +13,15 @@ const ChatScreen = lazy(() =>
 const ORCHESTRATOR_NAME_KEY = 'operations:orchestrator:name'
 const DEFAULT_ORCHESTRATOR_NAME = 'Main Agent'
 
-export function OrchestratorCard({
-  totalAgents,
-}: {
-  totalAgents: number
-}) {
+export function OrchestratorCard({ totalAgents }: { totalAgents: number }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const [orchestratorName, setOrchestratorName] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_ORCHESTRATOR_NAME
-    return window.localStorage.getItem(ORCHESTRATOR_NAME_KEY) || DEFAULT_ORCHESTRATOR_NAME
+    return (
+      window.localStorage.getItem(ORCHESTRATOR_NAME_KEY) ||
+      DEFAULT_ORCHESTRATOR_NAME
+    )
   })
   const [draftName, setDraftName] = useState(orchestratorName)
 
@@ -40,9 +40,9 @@ export function OrchestratorCard({
 
   return (
     <>
-      <article className="flex h-[720px] min-h-[720px] flex-col rounded-[1.75rem] border border-[var(--theme-border)] border-l-4 border-l-[var(--theme-accent)] bg-[var(--theme-card)] p-4 shadow-[0_24px_80px_var(--theme-shadow)] lg:h-[800px] lg:min-h-[800px]">
-        <div className="flex flex-col items-center gap-2 px-3 pt-1 text-center lg:gap-3">
-          <div className="relative flex min-h-8 w-full items-center justify-center">
+      <article className="flex flex-col rounded-xl border border-[var(--theme-border)] border-l-4 border-l-[var(--theme-accent)] bg-[var(--theme-card)] p-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="relative flex min-h-8 min-w-0 flex-1 items-center">
             <h2 className="text-base font-semibold text-[var(--theme-text)]">
               <span className="inline-flex items-center justify-center gap-2">
                 <span>{orchestratorName}</span>
@@ -56,45 +56,53 @@ export function OrchestratorCard({
                 />
               </span>
             </h2>
-
-            <div className="absolute right-0 flex items-center">
-              <button
-                type="button"
-                onClick={openSettings}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--theme-muted)] transition-colors hover:text-[var(--theme-text)]"
-                aria-label="Orchestrator settings"
-                title="Orchestrator settings"
-              >
-                <HugeiconsIcon icon={Settings01Icon} size={16} strokeWidth={1.8} />
-              </button>
-            </div>
           </div>
-
-          <div className="relative flex size-[56px] shrink-0 items-center justify-center">
+          <div className="relative flex size-11 shrink-0 items-center justify-center">
             <AgentProgress
               value={82}
               status="running"
-              size={56}
+              size={44}
               strokeWidth={3}
               className="text-emerald-500"
             />
             <div className="absolute inset-0 flex items-center justify-center">
               <PixelAvatar
-                size={44}
+                size={34}
                 color="#f59e0b"
                 accentColor="#fbbf24"
                 status="running"
               />
             </div>
           </div>
-
-          <p className="text-sm text-[var(--theme-muted)]">
-            Orchestrator · {totalAgents} agents reporting
+          <p className="text-xs text-[var(--theme-muted)]">
+            {totalAgents} agents
           </p>
-
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-[var(--theme-border)] px-3 text-xs text-[var(--theme-muted)] transition-colors hover:text-[var(--theme-text)]"
+            >
+              {expanded ? 'Close' : 'Open'}
+            </button>
+              <button
+                type="button"
+                onClick={openSettings}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--theme-muted)] transition-colors hover:text-[var(--theme-text)]"
+                aria-label="Edit orchestrator"
+                title="Edit orchestrator"
+              >
+                <HugeiconsIcon
+                  icon={SlidersHorizontalIcon}
+                  size={16}
+                  strokeWidth={1.8}
+                />
+              </button>
+          </div>
         </div>
 
-        <div className="mt-3 flex min-h-0 flex-1 w-full flex-col overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)]">
+        {expanded ? (
+        <div className="mt-3 flex h-[620px] min-h-0 w-full flex-col overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)]">
           <div className="flex-1 min-h-0 overflow-hidden">
             <Suspense
               fallback={
@@ -114,6 +122,7 @@ export function OrchestratorCard({
             </Suspense>
           </div>
         </div>
+        ) : null}
       </article>
 
       {settingsOpen ? (
@@ -128,24 +137,29 @@ export function OrchestratorCard({
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="flex size-11 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)]">
-                  <HugeiconsIcon icon={Settings01Icon} size={20} strokeWidth={1.8} />
+                  <HugeiconsIcon
+                    icon={SlidersHorizontalIcon}
+                    size={20}
+                    strokeWidth={1.8}
+                  />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-[var(--theme-text)]">
-                    Orchestrator Settings
+                    Orchestrator
                   </h2>
-                  <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                    Update the display name used on this card.
-                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
                 className="inline-flex size-10 items-center justify-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card2)] text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent-strong)]"
-                aria-label="Close orchestrator settings"
+                aria-label="Close orchestrator editor"
               >
-                <HugeiconsIcon icon={Cancel01Icon} size={18} strokeWidth={1.8} />
+                <HugeiconsIcon
+                  icon={Cancel01Icon}
+                  size={18}
+                  strokeWidth={1.8}
+                />
               </button>
             </div>
 
@@ -162,7 +176,11 @@ export function OrchestratorCard({
             </label>
 
             <div className="mt-6 flex items-center justify-end gap-3">
-              <Button type="button" variant="secondary" onClick={() => setSettingsOpen(false)}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setSettingsOpen(false)}
+              >
                 Close
               </Button>
               <Button type="button" onClick={saveSettings}>

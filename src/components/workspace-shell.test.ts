@@ -42,11 +42,11 @@ describe('swarm2 navigation alias handling', () => {
     expect(swarm2).toBeUndefined()
   })
 
-  it('keeps /swarm as the only user-visible swarm tab', () => {
+  it('keeps swarm drawer-only on the compact mobile dock', () => {
     const swarm = MOBILE_NAV_TABS.find((item) => item.id === 'swarm')
     const swarm2 = MOBILE_NAV_TABS.find((item) => item.id === 'swarm2')
 
-    expect(swarm?.to).toBe('/swarm')
+    expect(swarm).toBeUndefined()
     expect(swarm2).toBeUndefined()
   })
 
@@ -55,59 +55,80 @@ describe('swarm2 navigation alias handling', () => {
       'phone',
       'chat',
       'lily',
-      'files',
-      'terminal',
-      'swarm',
+      'tasks',
+      'run',
     ])
     expect(MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'files')).toBe(
       true,
     )
-    expect(
-      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === '75-tracker'),
-    ).toBe(true)
+    expect(MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'tasks')).toBe(
+      true,
+    )
     expect(
       MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'pto-tracker'),
     ).toBe(true)
     expect(
-      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'wegovy'),
+      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'apple-health'),
     ).toBe(true)
+    expect(
+      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'wegovy'),
+    ).toBe(false)
+    expect(
+      MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === '75-tracker'),
+    ).toBe(false)
     expect(
       MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'zyn-tracker'),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       MOBILE_HAMBURGER_NAV_ITEMS.some((item) => item.id === 'food-log'),
-    ).toBe(true)
+    ).toBe(false)
   })
 
-  it('groups drawer navigation around Tyler workflow modes with five pinned pages', () => {
+  it('groups drawer navigation around Tyler workflow modes with gateway and built tools split', () => {
     expect(Array.from(MOBILE_PINNED_NAV_IDS)).toEqual([
-      'dashboard',
       'phone',
       'chat',
       'lily',
-      'tasks',
+      'dashboard',
     ])
 
     const groups = groupMobileNavItems(MOBILE_HAMBURGER_NAV_ITEMS)
     expect(groups.map((group) => group.label)).toEqual([
-      'Pinned',
-      'Daily',
-      'Agent Ops',
-      'Knowledge',
-      'Systems',
-      'Settings',
+      'Core',
+      'Work',
+      'Run',
+      'Know',
+      'System',
+      'Setup',
     ])
     expect(groups[0]?.items.map((item) => item.id)).toEqual([
+      'phone',
       'chat',
       'lily',
       'dashboard',
-      'phone',
-      'tasks',
     ])
     expect(
       groups
-        .find((group) => group.label === 'Agent Ops')
+        .find((group) => group.label === 'Run')
         ?.items.map((item) => item.id),
     ).toContain('conductor')
+    expect(
+      groups
+        .find((group) => group.label === 'Work')
+        ?.items.map((item) => item.id),
+    ).toEqual(expect.arrayContaining(['tasks', 'apple-health', 'it-ops']))
+  })
+
+  it('keeps compact mobile drawer labels app-like', () => {
+    const labelById = Object.fromEntries(
+      MOBILE_HAMBURGER_NAV_ITEMS.map((item) => [item.id, item.label]),
+    )
+
+    expect(labelById.phone).toBe('Phone')
+    expect(labelById.dashboard).toBe('Home')
+    expect(labelById['pto-tracker']).toBe('PTO')
+    expect(labelById['chief-of-staff-mailbox']).toBe('Mailbox')
+    expect(labelById['apple-health']).toBe('Health')
+    expect(labelById['it-ops']).toBe('CW')
   })
 })

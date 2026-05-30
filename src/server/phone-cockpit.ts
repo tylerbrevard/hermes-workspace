@@ -396,9 +396,7 @@ function buildAttention(input: {
   checkedAt: string
   sources: Record<SourceKey, DataSourceStatus>
   next: PhoneCockpitSnapshot['schedule']['nextMeeting']
-  urgentTasks: PhoneCockpitSnapshot['tasks']['items']
   overdueTasks: PhoneCockpitSnapshot['tasks']['items']
-  todayTasks: PhoneCockpitSnapshot['tasks']['items']
   inbox: PhoneCockpitSnapshot['inbox']
   devices: PhoneCockpitSnapshot['devices']
 }): Array<PhoneAttentionItem> {
@@ -438,36 +436,6 @@ function buildAttention(input: {
       source: 'tasks',
       observedAt: input.checkedAt,
     })
-  } else if (input.urgentTasks.length > 0) {
-    items.push({
-      id: 'tasks:urgent',
-      kind: 'task',
-      severity: 'warning',
-      title: `${input.urgentTasks.length} urgent task${input.urgentTasks.length === 1 ? '' : 's'}`,
-      body: input.urgentTasks
-        .slice(0, 2)
-        .map((task) => task.title)
-        .join(' · '),
-      href: '/tasks',
-      actionLabel: 'Review',
-      source: 'tasks',
-      observedAt: input.checkedAt,
-    })
-  } else if (input.todayTasks.length > 0) {
-    items.push({
-      id: 'tasks:today',
-      kind: 'task',
-      severity: 'info',
-      title: `${input.todayTasks.length} due today`,
-      body: input.todayTasks
-        .slice(0, 2)
-        .map((task) => task.title)
-        .join(' · '),
-      href: '/tasks',
-      actionLabel: 'Open',
-      source: 'tasks',
-      observedAt: input.checkedAt,
-    })
   }
   const importantUnread = input.inbox.focused.filter(
     (message) => !message.isRead && message.importance === 'high',
@@ -488,11 +456,11 @@ function buildAttention(input: {
       observedAt: input.checkedAt,
     })
   }
-  if (input.devices.office.status !== 'online') {
+  if (input.devices.office.status === 'unknown') {
     items.push({
       id: `device:office:${input.devices.office.status}`,
       kind: 'device',
-      severity: input.devices.office.status === 'stale' ? 'warning' : 'info',
+      severity: 'info',
       title: `Desk device ${input.devices.office.status}`,
       body: input.devices.office.checkedAt
         ? `Last seen ${new Date(input.devices.office.checkedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
@@ -671,9 +639,7 @@ export async function buildPhoneCockpitSnapshot(): Promise<PhoneCockpitSnapshot>
     checkedAt,
     sources,
     next: snapshot.schedule.nextMeeting,
-    urgentTasks,
     overdueTasks,
-    todayTasks,
     inbox,
     devices,
   })

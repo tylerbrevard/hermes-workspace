@@ -6,12 +6,17 @@ import {
   SWARM2_REAL_API_ENDPOINTS,
   SWARM2_SURFACE_CONTRACT,
   buildActiveMissionQueue,
+  buildSwarm2CockpitTiles,
   buildWorkerOperatorStates,
   chooseRecommendedWorker,
+  commandForRuntime,
+  displayTaskTitle,
+  formatAssignedModel,
   getSwarmSurfaceDistinction,
+  isRuntimeActive,
+  progressForRuntime,
+  recentRuntimeLines,
 } from './lib/swarm2-workflow'
-import { __runtimeTabInternals } from './swarm2-screen'
-
 
 describe('Swarm2 surface contract', () => {
   it('keeps Aurora as the primary hub above wired operational worker cards', () => {
@@ -125,9 +130,7 @@ describe('Swarm2 surface contract', () => {
         ],
       })
 
-      expect(getSwarmSurfaceDistinction()).toContain(
-        'Swarm coordinates live workers',
-      )
+      expect(getSwarmSurfaceDistinction()).toContain('Workers live here')
       expect(states[0]).toMatchObject({
         id: 'swarm1',
         status: 'active',
@@ -223,11 +226,36 @@ describe('Swarm2 surface contract', () => {
     expect(rows[0]?.blockedCount).toBe(1)
     expect(rows[0]?.nextAction).toContain('Missing token')
   })
+
+  it('builds cockpit tiles for workers, runtime, review, mission, and router lanes', () => {
+    const tiles = buildSwarm2CockpitTiles({
+      memberCount: 6,
+      activeRuntimeCount: 3,
+      blockedWorkerCount: 1,
+      reviewWorkerCount: 2,
+      staleWorkerCount: 1,
+      terminalTargetCount: 2,
+      notificationCount: 1,
+      recommendedWorker: 'swarm4',
+      latestMission: {
+        title: 'Ship dashboard cockpit',
+        state: 'running',
+        assignmentCount: 4,
+        checkpointedCount: 2,
+      },
+    })
+
+    expect(tiles).toMatchObject([
+      { id: 'workers', label: 'Worker map', value: '6', tone: 'warning' },
+      { id: 'runtime', label: 'Runtime lane', value: '3/6' },
+      { id: 'review', label: 'Review queue', value: '3', tone: 'danger' },
+      { id: 'mission', label: 'Latest mission', value: 'running' },
+      { id: 'router', label: 'Router pick', value: 'swarm4' },
+    ])
+  })
 })
 
 describe('Swarm2 runtime tab command resolution', () => {
-  const { commandForRuntime } = __runtimeTabInternals
-
   it('prefers tmux attach when an attachable session exists', () => {
     const result = commandForRuntime({
       workerId: 'swarm4',
@@ -355,5 +383,42 @@ describe('Swarm2 runtime tab command resolution', () => {
     )
     expect(result.kind).toBe('shell')
     expect(result.command[0]).toBe('zsh')
+  })
+
+  it('keeps runtime display helpers deterministic after route extraction', () => {
+    const originalNow = Date.now
+    Date.now = () => 1_800_000
+    try {
+      const runtime = {
+        workerId: 'swarm4',
+        currentTask: 'Implement billing patch',
+        recentLogTail: 'one\n\ntwo\nthree\nfour\nfive',
+        pid: 456,
+        startedAt: null,
+        lastOutputAt: 1_790_000,
+        cwd: '/tmp/work',
+        tmuxSession: null,
+        tmuxAttachable: false,
+        checkpointStatus: 'running',
+        phase: 'implement',
+      }
+
+      expect(recentRuntimeLines(runtime)).toEqual([
+        'two',
+        'three',
+        'four',
+        'five',
+      ])
+      expect(isRuntimeActive(runtime)).toBe(true)
+      expect(progressForRuntime(runtime)).toBe(64)
+      expect(displayTaskTitle(runtime, 'Fallback')).toBe(
+        'Implement billing patch',
+      )
+      expect(formatAssignedModel('claude-opus-4-7', 'anthropic')).toBe(
+        'Opus 4.7',
+      )
+    } finally {
+      Date.now = originalNow
+    }
   })
 })

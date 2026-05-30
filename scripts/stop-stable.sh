@@ -21,6 +21,10 @@ stop_pid() {
   fi
 }
 
+pid_command() {
+  ps -p "$1" -o command= 2>/dev/null || true
+}
+
 if [[ -f "$PID_FILE" ]]; then
   pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   if [[ -n "$pid" ]]; then
@@ -30,7 +34,15 @@ if [[ -f "$PID_FILE" ]]; then
 fi
 
 for pid in $(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true); do
-  stop_pid "$pid"
+  command="$(pid_command "$pid")"
+  if [[ "$command" == *"server-entry.js"* && "$command" == *"$ROOT"* ]]; then
+    stop_pid "$pid"
+  elif [[ "${FORCE_PORT_KILL:-0}" == "1" ]]; then
+    echo "[stable] FORCE_PORT_KILL=1 stopping pid=$pid command=$command" >&2
+    stop_pid "$pid"
+  else
+    echo "[stable] leaving unowned listener on port $PORT: pid=$pid command=$command" >&2
+  fi
 done
 
 echo "[stable] stopped Hermes Workspace on port $PORT"

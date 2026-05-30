@@ -1,9 +1,12 @@
+import { appendFileSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import { BEARER_TOKEN, CLAUDE_API } from '../../../server/gateway-capabilities'
 import { readLilyRuntimeSecret } from '../../../server/lily-livekit'
+import { getStateDir } from '../../../server/workspace-state-dir'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -29,6 +32,19 @@ export type LilyChatOptions = {
   personality: keyof typeof LILY_PERSONALITIES
   useWorkspaceMemory: boolean
   useConversationMemory: boolean
+}
+
+export type LilyMemoryEventInput = {
+  kind: 'transcript' | 'decision' | 'task' | 'memory'
+  label: string
+  detail: string
+  source:
+    | 'typed'
+    | 'hands-free'
+    | 'push-to-talk'
+    | 'realtime'
+    | 'gemini'
+    | 'test'
 }
 
 function cleanMessages(value: unknown): Array<ChatMessage> {
@@ -84,6 +100,69 @@ function buildLilySystemPrompt(options: LilyChatOptions): string {
   return `${LILY_PERSONALITIES[options.personality]} ${memoryRules.join(' ')}`
 }
 
+export function sanitizeLilyMemoryEvents(
+  value: unknown,
+): Array<LilyMemoryEventInput> {
+  if (!Array.isArray(value)) return []
+  const allowedKinds = new Set(['transcript', 'decision', 'task', 'memory'])
+  const allowedSources = new Set([
+    'typed',
+    'hands-free',
+    'push-to-talk',
+    'realtime',
+    'gemini',
+    'test',
+  ])
+  return value
+    .map((entry): LilyMemoryEventInput | null => {
+      if (!entry || typeof entry !== 'object') return null
+      const record = entry as Record<string, unknown>
+      const kind = typeof record.kind === 'string' ? record.kind : ''
+      const source = typeof record.source === 'string' ? record.source : ''
+      const label = typeof record.label === 'string' ? record.label.trim() : ''
+      const detail =
+        typeof record.detail === 'string' ? record.detail.trim() : ''
+      if (
+        !allowedKinds.has(kind) ||
+        !allowedSources.has(source) ||
+        !label ||
+        !detail
+      ) {
+        return null
+      }
+      return {
+        kind: kind as LilyMemoryEventInput['kind'],
+        source: source as LilyMemoryEventInput['source'],
+        label: label.slice(0, 120),
+        detail: detail.slice(0, 2000),
+      }
+    })
+    .filter((entry): entry is LilyMemoryEventInput => Boolean(entry))
+    .slice(0, 12)
+}
+
+export function persistLilyMemoryEvents(
+  events: Array<LilyMemoryEventInput>,
+  now = new Date(),
+): { count: number; path: string } {
+  const cleanEvents = sanitizeLilyMemoryEvents(events)
+  const memoryDir = join(getStateDir(), 'memory', 'lily')
+  const day = now.toISOString().slice(0, 10)
+  const target = join(memoryDir, `${day}.jsonl`)
+  if (cleanEvents.length === 0) return { count: 0, path: target }
+  mkdirSync(memoryDir, { recursive: true })
+  const writtenAt = now.toISOString()
+  const lines = cleanEvents.map((event) =>
+    JSON.stringify({
+      ...event,
+      surface: 'hermes-workspace-memory',
+      writtenAt,
+    }),
+  )
+  appendFileSync(target, `${lines.join('\n')}\n`, 'utf-8')
+  return { count: cleanEvents.length, path: target }
+}
+
 function getHermesBearerToken(): string {
   return (
     process.env.HERMES_API_TOKEN ||
@@ -136,6 +215,8 @@ export const Route = createFileRoute('/api/lily/hermes-chat')({
             personality?: unknown
             useWorkspaceMemory?: unknown
             useConversationMemory?: unknown
+            persistOnly?: unknown
+            memoryEvents?: unknown
           }
           const messages = cleanMessages(body.messages)
           if (messages.length === 0) {
@@ -145,6 +226,17 @@ export const Route = createFileRoute('/api/lily/hermes-chat')({
             )
           }
           const options = normalizeLilyChatOptions(body)
+          const memoryEvents = sanitizeLilyMemoryEvents(body.memoryEvents)
+          if (options.useWorkspaceMemory && memoryEvents.length > 0) {
+            persistLilyMemoryEvents(memoryEvents)
+          }
+          if (body.persistOnly === true) {
+            return json({
+              ok: true,
+              reply: '',
+              persisted: memoryEvents.length,
+            })
+          }
           const scopedMessages = options.useConversationMemory
             ? messages
             : messages.slice(-1)

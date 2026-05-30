@@ -16,7 +16,10 @@ import {
   getDiscoveredModels,
 } from '../../server/local-provider-discovery'
 
-const CLAUDE_HOME = process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? path.join(os.homedir(), '.hermes')
+const CLAUDE_HOME =
+  process.env.HERMES_HOME ??
+  process.env.CLAUDE_HOME ??
+  path.join(os.homedir(), '.hermes')
 const MODELS_PATH = path.join(CLAUDE_HOME, 'models.json')
 const CONFIG_PATH = path.join(CLAUDE_HOME, 'config.yaml')
 
@@ -66,7 +69,9 @@ function normalizeModel(entry: unknown): ModelEntry | null {
   }
 }
 
-export function mergeModelEntries(...sources: Array<Array<unknown>>): Array<ModelEntry> {
+export function mergeModelEntries(
+  ...sources: Array<Array<unknown>>
+): Array<ModelEntry> {
   const merged: Array<ModelEntry> = []
   const seen = new Set<string>()
 
@@ -112,19 +117,33 @@ function readClaudeModelsJson(): Array<ModelEntry> {
 const DEFAULT_ACCEPTED_TIMEOUT_S = 120
 const DEFAULT_HANDOFF_TIMEOUT_S = 300
 
-function readStreamTimeouts(): { streamAcceptedTimeoutMs: number; streamHandoffTimeoutMs: number } {
+function readStreamTimeouts(): {
+  streamAcceptedTimeoutMs: number
+  streamHandoffTimeoutMs: number
+} {
   let acceptedS = DEFAULT_ACCEPTED_TIMEOUT_S
   let handoffS = DEFAULT_HANDOFF_TIMEOUT_S
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const parsed = YAML.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'))
       const ws =
-        parsed && typeof parsed === 'object' && typeof (parsed as Record<string, unknown>).workspace === 'object'
-          ? ((parsed as Record<string, unknown>).workspace as Record<string, unknown>)
+        parsed &&
+        typeof parsed === 'object' &&
+        typeof (parsed as Record<string, unknown>).workspace === 'object'
+          ? ((parsed as Record<string, unknown>).workspace as Record<
+              string,
+              unknown
+            >)
           : {}
-      if (typeof ws.stream_accepted_timeout === 'number' && ws.stream_accepted_timeout > 0)
+      if (
+        typeof ws.stream_accepted_timeout === 'number' &&
+        ws.stream_accepted_timeout > 0
+      )
         acceptedS = ws.stream_accepted_timeout
-      if (typeof ws.stream_handoff_timeout === 'number' && ws.stream_handoff_timeout > 0)
+      if (
+        typeof ws.stream_handoff_timeout === 'number' &&
+        ws.stream_handoff_timeout > 0
+      )
         handoffS = ws.stream_handoff_timeout
     }
   } catch {
@@ -133,8 +152,14 @@ function readStreamTimeouts(): { streamAcceptedTimeoutMs: number; streamHandoffT
   const envAccepted = parseInt(process.env.STREAM_ACCEPTED_TIMEOUT_MS ?? '', 10)
   const envHandoff = parseInt(process.env.STREAM_HANDOFF_TIMEOUT_MS ?? '', 10)
   return {
-    streamAcceptedTimeoutMs: Number.isFinite(envAccepted) && envAccepted > 0 ? envAccepted : acceptedS * 1000,
-    streamHandoffTimeoutMs: Number.isFinite(envHandoff) && envHandoff > 0 ? envHandoff : handoffS * 1000,
+    streamAcceptedTimeoutMs:
+      Number.isFinite(envAccepted) && envAccepted > 0
+        ? envAccepted
+        : acceptedS * 1000,
+    streamHandoffTimeoutMs:
+      Number.isFinite(envHandoff) && envHandoff > 0
+        ? envHandoff
+        : handoffS * 1000,
   }
 }
 
@@ -217,7 +242,10 @@ export const Route = createFileRoute('/api/models')({
           if (getGatewayCapabilities().models) {
             const hermesModels = await fetchClaudeModels()
             models = mergeModelEntries(models, hermesModels)
-            source = source === 'models.json' ? 'models.json+hermes-agent' : 'hermes-agent'
+            source =
+              source === 'models.json'
+                ? 'models.json+hermes-agent'
+                : 'hermes-agent'
           }
 
           // Merge auto-discovered local models (Ollama, Atomic Chat, etc.)

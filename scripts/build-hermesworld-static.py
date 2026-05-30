@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import shutil
 import subprocess
 
@@ -41,7 +42,7 @@ for f in (root / 'public/assets/hermesworld/video').glob('*'):
 for f in (root / 'public/assets/hermesworld/zones').glob('*'):
     shutil.copy2(f, out / 'assets/hermesworld/zones' / f.name)
 
-world_ref = Path('/Users/aurora/Downloads/world.png')
+world_ref = Path(os.environ.get('HERMESWORLD_WORLD_REF', root / 'public/assets/hermesworld/art/world.png'))
 if world_ref.exists():
     shutil.copy2(world_ref, out / 'assets/hermesworld/art/world.png')
 

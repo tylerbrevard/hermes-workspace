@@ -6,7 +6,10 @@ import {
   inferImprovementCategory,
   serializeImprovementPlan,
 } from './workspace-improvement-progress'
-import { findWorkspaceImprovementPage } from './workspace-improvements'
+import {
+  countWorkspaceRecommendations,
+  findWorkspaceImprovementPage,
+} from './workspace-improvements'
 import type { CompletedMap } from './workspace-improvement-progress'
 
 describe('workspace improvement progress helpers', () => {
@@ -17,10 +20,12 @@ describe('workspace improvement progress helpers', () => {
       [improvementItemKey('tasks', 0)]: true,
     }
 
+    const total = countWorkspaceRecommendations()
+
     expect(getImprovementStats(completed)).toMatchObject({
       done: 3,
-      open: 457,
-      total: 460,
+      open: total - 3,
+      total,
       percent: 1,
     })
     expect(getImprovementStats(completed, 'dashboard')).toMatchObject({

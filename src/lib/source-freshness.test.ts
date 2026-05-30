@@ -3,6 +3,10 @@ import {
   formatWorkspaceFreshness,
   freshnessTimestampMs,
   isWorkspaceSourceStale,
+  normalizeWorkspaceStatusTone,
+  workspaceFreshnessTone,
+  workspaceStatusClass,
+  workspaceStatusToneRank,
 } from './source-freshness'
 
 describe('source freshness', () => {
@@ -53,5 +57,22 @@ describe('source freshness', () => {
     expect(freshnessTimestampMs('2026-05-27T15:00:00.000Z')).toBe(now)
     expect(freshnessTimestampMs('bad')).toBeNull()
     expect(freshnessTimestampMs(undefined)).toBeNull()
+  })
+
+  it('classifies freshness and status tones for shared page chips', () => {
+    expect(workspaceFreshnessTone(now - 30_000, 120_000, now)).toBe('ok')
+    expect(workspaceFreshnessTone(now - 300_000, 120_000, now)).toBe('warn')
+    expect(normalizeWorkspaceStatusTone('critical')).toBe('error')
+    expect(normalizeWorkspaceStatusTone('stale')).toBe('warn')
+    expect(normalizeWorkspaceStatusTone('live')).toBe('ok')
+    expect(normalizeWorkspaceStatusTone(undefined)).toBe('info')
+  })
+
+  it('provides stable tone rank and surface classes', () => {
+    expect(workspaceStatusToneRank('error')).toBeLessThan(
+      workspaceStatusToneRank('warn'),
+    )
+    expect(workspaceStatusClass('warn')).toContain('amber')
+    expect(workspaceStatusClass('ok', 'dark')).toContain('emerald')
   })
 })

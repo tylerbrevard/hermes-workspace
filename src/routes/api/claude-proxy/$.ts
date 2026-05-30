@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { BEARER_TOKEN, CLAUDE_API } from '../../../server/gateway-capabilities'
 import { isAuthenticated } from '../../../server/auth-middleware'
+import { assertAllowedHermesServiceUrl } from '../../../server/service-url-guard'
 
 /**
  * Vanilla hermes-agent (any version through 2026-05) does not expose
@@ -28,8 +29,11 @@ async function fallbackAvailableModels(
       .map((m) => {
         const id = typeof m.id === 'string' ? m.id : ''
         if (!id) return null
-        const owned = typeof m.owned_by === 'string' ? m.owned_by.toLowerCase() : ''
-        const idProvider = id.includes('/') ? id.split('/')[0].toLowerCase() : owned
+        const owned =
+          typeof m.owned_by === 'string' ? m.owned_by.toLowerCase() : ''
+        const idProvider = id.includes('/')
+          ? id.split('/')[0].toLowerCase()
+          : owned
         if (wanted && idProvider !== wanted) return null
         return { id }
       })
@@ -47,14 +51,15 @@ async function fallbackAvailableModels(
 }
 
 async function proxyRequest(request: Request, splat: string) {
+  await assertAllowedHermesServiceUrl(CLAUDE_API, 'gateway')
   const incomingUrl = new URL(request.url)
   const targetPath = splat.startsWith('/') ? splat : `/${splat}`
   const targetUrl = new URL(`${CLAUDE_API}${targetPath}`)
   targetUrl.search = incomingUrl.search
 
-  const headers = new Headers(request.headers)
-  headers.delete('host')
-  headers.delete('content-length')
+  const headers = new Headers()
+  const incomingContentType = request.headers.get('content-type')
+  if (incomingContentType) headers.set('content-type', incomingContentType)
   // Read at request time — follows the same fix as PR #234.
   const bearer =
     process.env.HERMES_API_TOKEN || process.env.CLAUDE_API_TOKEN || BEARER_TOKEN

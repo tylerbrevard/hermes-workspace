@@ -12,6 +12,16 @@ const CLIENT_DIR = join(__dirname, 'dist', 'client')
 const PTO_TRACKER_REPORT_DIR =
   process.env.PTO_TRACKER_REPORT_DIR ||
   join(homedir(), '.hermes', 'workspace', 'runtime', 'reports', 'pto-tracker')
+const CHIEF_OF_STAFF_MAILBOX_REPORT_DIR =
+  process.env.CHIEF_OF_STAFF_MAILBOX_REPORT_DIR ||
+  join(
+    homedir(),
+    '.hermes',
+    'workspace',
+    'runtime',
+    'reports',
+    'chief-of-staff-mailbox',
+  )
 const HERMES_WORKSPACE_DIR =
   process.env.HERMES_WORKSPACE || join(homedir(), '.hermes', 'workspace')
 const M5_DISPLAY_DB =
@@ -329,12 +339,16 @@ async function maybeProxyClawos(req, res, incomingUrl) {
     CLAWOS_PROXY_ORIGIN,
   )
   const headers = new Headers()
+  const forwardedRequestHeaders = new Set([
+    'accept',
+    'accept-language',
+    'content-type',
+    'user-agent',
+  ])
   for (const [key, value] of Object.entries(req.headers)) {
     if (!value) continue
-    if (
-      key.toLowerCase() === 'host' ||
-      key.toLowerCase() === 'content-length'
-    ) {
+    const lowerKey = key.toLowerCase()
+    if (!forwardedRequestHeaders.has(lowerKey)) {
       continue
     }
     headers.set(key, Array.isArray(value) ? value.join(', ') : value)
@@ -359,8 +373,6 @@ async function maybeProxyClawos(req, res, incomingUrl) {
 
   const contentType = response.headers.get('content-type') || ''
   const proxiedHeaders = new Headers(response.headers)
-  proxiedHeaders.delete('x-frame-options')
-  proxiedHeaders.delete('content-security-policy')
   proxiedHeaders.delete('content-length')
 
   if (contentType.includes('text/html')) {
@@ -390,11 +402,16 @@ async function maybeProxyClawos(req, res, incomingUrl) {
   return true
 }
 
-async function maybeServePtoTrackerReport(req, res, incomingUrl) {
+async function maybeServeReportDirectory(
+  req,
+  res,
+  incomingUrl,
+  route,
+  rootDir,
+) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false
 
-  const reportPrefix =
-    basePath === '/' ? '/reports/pto-tracker' : `${basePath}/reports/pto-tracker`
+  const reportPrefix = basePath === '/' ? route : `${basePath}${route}`
   const incomingPathname = decodeURIComponent(incomingUrl.pathname)
   if (
     !incomingPathname.startsWith(reportPrefix) ||
@@ -415,7 +432,7 @@ async function maybeServePtoTrackerReport(req, res, incomingUrl) {
   const relativePath =
     incomingPathname.slice(reportPrefix.length).replace(/^\/+/, '') ||
     'latest.html'
-  const reportRoot = resolve(PTO_TRACKER_REPORT_DIR)
+  const reportRoot = resolve(rootDir)
   const filePath = resolve(reportRoot, relativePath)
   if (filePath !== reportRoot && !filePath.startsWith(`${reportRoot}/`)) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' })
@@ -453,6 +470,26 @@ async function maybeServePtoTrackerReport(req, res, incomingUrl) {
   }
 }
 
+async function maybeServePtoTrackerReport(req, res, incomingUrl) {
+  return maybeServeReportDirectory(
+    req,
+    res,
+    incomingUrl,
+    '/reports/pto-tracker',
+    PTO_TRACKER_REPORT_DIR,
+  )
+}
+
+async function maybeServeChiefOfStaffMailboxReport(req, res, incomingUrl) {
+  return maybeServeReportDirectory(
+    req,
+    res,
+    incomingUrl,
+    '/reports/chief-of-staff-mailbox',
+    CHIEF_OF_STAFF_MAILBOX_REPORT_DIR,
+  )
+}
+
 function sqliteJson(sql) {
   if (!existsSync(M5_DISPLAY_DB)) return []
   const output = execFileSync('sqlite3', ['-json', M5_DISPLAY_DB, sql], {
@@ -475,7 +512,8 @@ function sqlString(value) {
 
 async function maybeServeM5Ota(req, res, incomingUrl) {
   const incomingPathname = decodeURIComponent(incomingUrl.pathname)
-  const routePath = basePath === '/' ? '/api/iot/m5-ota' : `${basePath}/api/iot/m5-ota`
+  const routePath =
+    basePath === '/' ? '/api/iot/m5-ota' : `${basePath}/api/iot/m5-ota`
   if (incomingPathname !== routePath) return false
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { 'Content-Type': 'application/json' })
@@ -543,7 +581,9 @@ async function maybeServeM5Ota(req, res, incomingUrl) {
             uploaded_at: latest.uploaded_at,
           }
         : null,
-      available: Boolean(latest && currentVersion && latest.version !== currentVersion),
+      available: Boolean(
+        latest && currentVersion && latest.version !== currentVersion,
+      ),
       currentVersion,
       allVersions: firmware.map((item) => ({
         version: item.version,
@@ -562,7 +602,10 @@ async function maybeServeM5Ota(req, res, incomingUrl) {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(
       JSON.stringify({
-        error: error instanceof Error ? error.message : 'Failed to process OTA request',
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to process OTA request',
       }),
     )
     return true
@@ -603,7 +646,10 @@ async function getM5WeatherWidget() {
   try {
     const response = await fetch(
       'https://api.open-meteo.com/v1/forecast?latitude=34.80&longitude=-82.31&current=temperature_2m,apparent_temperature,weather_code&temperature_unit=fahrenheit&timezone=America%2FNew_York',
-      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(5000) },
+      {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      },
     )
     if (!response.ok) throw new Error(`weather returned ${response.status}`)
     const payload = await response.json()
@@ -639,7 +685,8 @@ async function getM5WeatherWidget() {
 
 async function maybeServeM5ConfigWithWeather(req, res, incomingUrl) {
   const incomingPathname = decodeURIComponent(incomingUrl.pathname)
-  const routePath = basePath === '/' ? '/api/iot/config' : `${basePath}/api/iot/config`
+  const routePath =
+    basePath === '/' ? '/api/iot/config' : `${basePath}/api/iot/config`
   if (incomingPathname !== routePath || req.method !== 'GET') return false
 
   const headers = new Headers()
@@ -663,7 +710,9 @@ async function maybeServeM5ConfigWithWeather(req, res, incomingUrl) {
     ...payload,
     weather,
     config: {
-      ...(payload && typeof payload.config === 'object' && payload.config !== null
+      ...(payload &&
+      typeof payload.config === 'object' &&
+      payload.config !== null
         ? payload.config
         : {}),
       weather,
@@ -818,10 +867,21 @@ async function requestHandler(req, res) {
   )
   if (servedPtoTracker) return
 
+  const servedChiefOfStaffMailbox = await maybeServeChiefOfStaffMailboxReport(
+    req,
+    res,
+    incomingUrl,
+  )
+  if (servedChiefOfStaffMailbox) return
+
   const servedM5Ota = await maybeServeM5Ota(req, res, incomingUrl)
   if (servedM5Ota) return
 
-  const servedM5Config = await maybeServeM5ConfigWithWeather(req, res, incomingUrl)
+  const servedM5Config = await maybeServeM5ConfigWithWeather(
+    req,
+    res,
+    incomingUrl,
+  )
   if (servedM5Config) return
 
   // Try static files first (client assets)

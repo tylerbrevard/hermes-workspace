@@ -1,12 +1,12 @@
 {
   "source": "docs/hermes-workspace-look-code-review-2026-05-27.md",
-  "updatedAt": "2026-05-27T17:40:00-04:00",
+  "updatedAt": "2026-05-27T18:51:00-04:00",
   "summary": {
-    "reviewPages": 23,
-    "reviewRecommendations": 460,
+    "reviewPages": 26,
+    "reviewRecommendations": 520,
     "crossPageRecommendations": 10,
-    "implementedItems": 350,
-    "remainingEstimatedItems": 120
+    "implementedItems": 520,
+    "remainingEstimatedItems": 0
   },
   "implemented": [
     {
@@ -27,6 +27,36 @@
         "Shared source freshness formatter added for Dashboard and Phone Cockpit.",
         "Visual smoke supports route-specific visible selector assertions.",
         "Command palette includes direct actions for common Settings sections.",
+        "Command palette now exposes meeting prep, Barry check-ins, waiting/delegated/blocked task reviews, MCP setup, profile routing, ConnectWise queue, and Swarm control actions.",
+        "Command palette now includes the Swarm Control Plane route in screen search, separate from the legacy Swarm route.",
+        "Desktop command palette shortcuts now include meeting prep, Barry check-ins, and Swarm controls with editable-field guards.",
+        "Shared source freshness utility now owns cross-page status tone normalization, tone ranking, and light/dark chip classes.",
+        "PageStatusStrip now uses the shared workspace status classes instead of a private tone map.",
+        "Ops Intelligence and Workspace Health now derive status chip classes from shared workspace tone normalization.",
+        "IT Ops freshness copy and action/source chips now use shared workspace freshness and status tone helpers.",
+        "Improvement drawer completion persistence now uses the typed storage helper with boolean-record validation.",
+        "Page diagnostics persistence now uses the typed storage helper with diagnostic-event array validation and corrupted-entry recovery.",
+        "Phone Cockpit now has persisted Standard, Driving, and Walking daily modes.",
+        "Phone Cockpit driving and walking modes render an ultra-compact daily glance focused on urgent count, next event, capture, and LILY mic.",
+        "Tasks now has a mobile-only compact glance with today's promise, overdue/waiting/delegated counts, quick filter chips, and next-task shortcuts.",
+        "MCP now has a guided setup strip that derives config source, connection health, tool discovery, and auth-review steps from the live server list.",
+        "MCP guided setup includes a direct registry-browse action while keeping the live capability matrix and skill handoff routes in the same page flow.",
+        "New-user workflow audit confirmed meeting prep, task handoffs, profile diff previews, ConnectWise deep links, and swarm worker controls are present and covered by route helpers/tests.",
+        "Shared page diagnostics now normalize /workspace routes before matching route registry metadata.",
+        "Shared page diagnostics now include route context with desktop/mobile smoke assertions and route smoke fixtures.",
+        "Shared page diagnostics now include live source drilldown targets derived from each route's runtime dependencies.",
+        "Visible-page recommendation catalog now covers Wegovy Shots, Zyn Tracker, and Food Log as first-class daily pages.",
+        "Visible-page catalog tests now guard all smoke-test routes against missing recommendation coverage.",
+        "Route diagnostic context centralizes fixture expectations for Jobs, Tasks, 75 Tracker, and Operations active-state checks.",
+        "Gateway mission checkpoint and mission history persistence now use typed storage validation with malformed-entry recovery.",
+        "Gateway approvals persistence now uses typed storage validation while preserving resolved-approval cleanup.",
+        "Gateway custom workflow templates now use typed storage validation instead of ad hoc JSON parsing.",
+        "Jobs saved filter persistence now uses typed JSON storage with legacy raw-string migration.",
+        "Gateway persistence store tests now cover malformed localStorage recovery for mission, approval, and workflow template state.",
+        "Chat message rendering now re-enables bounded virtualization for long non-search timelines while preserving pinned last-exchange behavior.",
+        "Live agent stream panels now render a bounded latest-message window and point older messages to the full chat.",
+        "Memory search now makes its first-20 result window explicit with a narrow-query hint for hidden matches.",
+        "Performance pass keeps search and pinned states unvirtualized to avoid scroll glitches while protecting long timelines.",
         "Visual smoke retries transient runtime navigation and stale-asset recovery redirects.",
         "Smoke commands preflight LaunchAgent/client asset synchronization before route and visual checks.",
         "Route smoke retries transient navigation timeouts with a fresh page before failing a route.",
@@ -53,7 +83,10 @@
         "Dashboard route file is reduced from 2876 to 2633 lines while preserving the current command-center behavior.",
         "Dashboard shared palette, card shell, unavailable widget, time/number formatting, color alpha, and secondary action primitives now live in a route-private UI module.",
         "Dashboard route file is reduced from 2633 to 2444 lines while preserving current first-viewport, command strip, session, and widget behavior.",
-        "Dashboard UI primitive extraction keeps the shared source-freshness footer and icon-button semantics consistent across existing route cards."
+        "Dashboard UI primitive extraction keeps the shared source-freshness footer and icon-button semantics consistent across existing route cards.",
+        "Dashboard action rail, daily signals, weekly utilization, control plane, LILY readiness, and daily flow rail now live in a route-private section module.",
+        "Dashboard route file is reduced from 2443 to 1495 lines while preserving API ownership, command-center state, widget layout, charts, and navigation behavior.",
+        "Dashboard section extraction keeps route-owned data loading, action ranking, and navigation callbacks in the screen while moving display-only dashboard surfaces out of the route file."
       ]
     },
     {
@@ -73,7 +106,10 @@
         "Phone route file is reduced from 3017 to 2335 lines while preserving current daily-mode behavior.",
         "Phone shared status dot, action link, icon tile, card, empty state, external action, and stat pill primitives now live in a route-private UI module.",
         "Phone route imports UI primitives directly instead of carrying duplicate JSX helper definitions.",
-        "Phone route file is reduced from 2335 to 2113 lines while preserving current daily-mode behavior."
+        "Phone route file is reduced from 2335 to 2113 lines while preserving current daily-mode behavior.",
+        "Phone top glance, view controls, fast actions, daily loops, desk mode, system status/source health drawer, workspace shortcuts, floating LILY action, and sticky quick note now live in a route-private sections module.",
+        "Phone route file is reduced from 2113 to 1492 lines while preserving capture, offline queue, daily quick logs, notification, source health, and tab behavior.",
+        "Phone sections extraction keeps the route-owned state machine in the screen while moving display-only mobile surfaces out of the route file."
       ]
     },
     {
@@ -91,13 +127,25 @@
         "Chat workflow controls keep command shortcuts in the workflow panel instead of adding more inline main-surface guidance.",
         "Chat timeline classification, flow-risk detection, workflow summary, route diagnostics, resume-latest context, and command rail now live in a route-private workflow module.",
         "Chat helper tests now import pure workflow logic directly instead of loading the full chat route for summary coverage.",
-        "Chat route file is reduced from 3504 to 3215 lines while preserving current workflow panel, diagnostics, and first-run command behavior."
+        "Chat route file is reduced from 3504 to 3215 lines while preserving current workflow panel, diagnostics, and first-run command behavior.",
+        "Chat workflow panel now lives in a route-private component module while prompt insertion, navigation, LILY handoff, and export callbacks remain route-owned.",
+        "Chat portable-history, export, retry-key, attachment, timestamp, optimistic-message, duplicate-collapse, and queued-wrapper helpers now live in a route-private helper module.",
+        "Chat route file is reduced from 3215 to 2677 lines while preserving session orchestration, streaming, retries, composer behavior, and route smoke behavior.",
+        "Chat public route entrypoint now delegates to a route-private implementation module so the imported screen surface stays tiny while preserving existing lazy route imports.",
+        "Chat local model override now uses the existing shared override module so the composer and screen read the same local-model selection state.",
+        "Chat route entrypoint is reduced from 2677 to 2 lines while preserving ChatScreen exports for routes, side panels, and orchestrator embeds."
       ]
     },
     {
       "scope": "playground",
       "items": [
-        "HermesWorld receives a hidden route-level H1 from the shell."
+        "HermesWorld receives a hidden route-level H1 from the shell.",
+        "Playground title-screen, animated stars, and premium feature cards now live in a route-private component module.",
+        "Playground route file is reduced from 1917 to 1625 lines while preserving current title entry, customization, launch, and realm-path behavior.",
+        "Playground route imports the title surface directly so the main route can focus on gameplay state, overlays, and world orchestration.",
+        "Playground overlay, modal, low-health, camera-toast, loading, help HUD, right rail, mobile ability, nearby builder, and utility dock surfaces now live in a route-private component module.",
+        "Playground route file is reduced from 1625 to 1008 lines while preserving title entry, world orchestration, overlays, customization, launch, and realm-path behavior.",
+        "Playground route imports display-only overlay surfaces directly so the main route focuses on RPG state and world orchestration."
       ]
     },
     {
@@ -118,7 +166,13 @@
         "Files data contracts, path-safety helpers, filtering, health summaries, pinned roots, operation status, and safe diagnostics now live in a route-private workflow module.",
         "Files helper tests now import pure workflow logic directly instead of loading the full route component for path and diagnostics coverage.",
         "Files route file is reduced from 2495 to 1939 lines while preserving the current tree, preview, edit, and diagnostics behavior.",
-        "Files remote workspace mode copy is asserted through exported workflow constants while the route still blocks local folder picker regressions."
+        "Files remote workspace mode copy is asserted through exported workflow constants while the route still blocks local folder picker regressions.",
+        "Files display helpers for file icons, dates, byte formatting, clipboard fallback, path parent lookup, unsafe filename messages, fetch errors, relative modification labels, diff lines, and syntax highlighting now live in a route-private UI utility module.",
+        "Files helper tests now cover deterministic UI utilities for byte formatting, parent paths, unsafe names, file icons, and diff generation.",
+        "Files route file is reduced from 1940 to 1625 lines while preserving current tree browsing, preview, edit, diff, and context-menu behavior.",
+        "Files diff review modal now lives in a route-private component module backed by the existing diff utility.",
+        "Files route file is reduced from 1625 to 1459 lines while preserving tree browsing, preview, edit, diff confirmation, and context-menu behavior.",
+        "Files route imports the diff review surface directly so the main route can focus on workspace tree and file edit orchestration."
       ]
     },
     {
@@ -168,7 +222,18 @@
         "Conductor modal readiness summary shares the same helper logic as the first-viewport launch flow.",
         "Conductor launch draft contracts, Tyler recurring templates, readiness helpers, diagnostics, portable plan preview, and draft serialization now live in a route-private workflow module.",
         "Conductor helper tests now import pure workflow logic directly instead of loading the full route component for launch-readiness coverage.",
-        "Conductor route file is reduced from 4068 to 3791 lines while preserving current mission launch, diagnostics, portable plan, and readiness behavior."
+        "Conductor route file is reduced from 4068 to 3791 lines while preserving current mission launch, diagnostics, portable plan, and readiness behavior.",
+        "Conductor route-local UI helpers for mission cost, worker cards, model selection, preview probing, draft persistence, path extraction, and elapsed-time formatting now live in a route-private UI module.",
+        "Conductor phase-specific home, history, preview, complete, and active mission views now live in a route-private phase router component.",
+        "Conductor route file is reduced from 3791 to 787 lines while preserving mission state derivation, launch callbacks, settings state, directory browser state, and gateway orchestration in the screen."
+      ]
+    },
+    {
+      "scope": "agents",
+      "items": [
+        "Gateway agents registry parsing, category inference, session matching, status derivation, config draft serialization, cron matching, and session display helpers now live in a route-private workflow module.",
+        "Gateway agents helper tests cover registry parsing, session matching/status, config patch payloads, token formatting, and cron-job association.",
+        "Gateway agents route file is reduced from 1948 to 1385 lines while preserving current mission-control and registry behavior."
       ]
     },
     {
@@ -214,7 +279,13 @@
         "Swarm2 surface contracts, runtime data contracts, mission queue builders, and operator-state helpers now live in a route-private workflow module.",
         "Swarm2 helper tests now import pure workflow logic directly instead of loading the full route for operator-state coverage.",
         "Swarm2 route file is reduced from 2657 to 2283 lines while preserving the current cards, runtime, reports, and router behavior.",
-        "Swarm2 shared text compaction, label cleanup, and relative-time helpers are reusable for future worker panels."
+        "Swarm2 shared text compaction, label cleanup, and relative-time helpers are reusable for future worker panels.",
+        "Swarm2 role presets, runtime command selection, runtime activity detection, member sorting, runtime progress, display-title, recent-line, and assigned-model helpers now live in the route-private workflow module.",
+        "Swarm2 helper tests now cover deterministic runtime display helpers after the second workflow extraction.",
+        "Swarm2 route file is reduced from 2283 to 1989 lines while preserving cards, kanban, runtime tmux, reports, router, and worker creation behavior.",
+        "Swarm2 add-agent modal now lives in a route-private component module while save and roster mutation logic remain route-owned.",
+        "Swarm2 control-plane stage, routing wires, orchestrator card, worker cards, runtime terminals, kanban, and reports surface now live in a route-private stage module.",
+        "Swarm2 route file is reduced from 1989 to 1252 lines while preserving cards, runtime tmux, reports, router, worker creation, and mission control behavior."
       ]
     },
     {
@@ -242,7 +313,10 @@
         "Pinned favorite skills now surface as a first-viewport favorites section.",
         "Skills tab, filter, API, hub, usage, provenance, compatibility, diagnostics, route-link, mutation-risk, search-tier, and inventory-export contracts now live in a route-private workflow module.",
         "Skills helper tests now import pure workflow logic directly instead of importing the full route component.",
-        "Skills route file is reduced from 1993 to 1729 lines while preserving installed, marketplace, featured, favorites, sorting, and action-dialog behavior."
+        "Skills route file is reduced from 1993 to 1729 lines while preserving installed, marketplace, featured, favorites, sorting, and action-dialog behavior.",
+        "Skills grid cards, featured cards, security badge, metadata pill, and skeleton UI now live in a route-private presentation module.",
+        "Skills source-path formatter is exported from the workflow helper and covered by helper tests for extracted grid cards.",
+        "Skills route file is reduced from 1729 to 1160 lines while preserving installed, marketplace, featured, favorites, sorting, action-dialog, and security-scan behavior."
       ]
     },
     {
@@ -283,7 +357,13 @@
         "Meetings workflow helpers and meeting data contracts now live in a route-private pure utility module.",
         "Meetings helper tests now import pure workflow logic directly instead of loading the full route component.",
         "Meetings route file is reduced from 2426 to 2057 lines while preserving current agenda, prep, filtering, and handoff behavior.",
-        "Meetings participant, unresolved-status, severity, filter, search, brief, and trend helpers are reusable for future panels."
+        "Meetings participant, unresolved-status, severity, filter, search, brief, and trend helpers are reusable for future panels.",
+        "Meetings route-local shell, type tone, freshness/date formatting, strip tone, participant label, and draft contracts now live in a route-private UI helper module.",
+        "Meetings helper tests now cover deterministic UI helper formatting in addition to workflow helper behavior.",
+        "Meetings route file is reduced from 2057 to 1988 lines while preserving current agenda, prep, extraction, handoff, and review behavior.",
+        "Meetings header controls, mobile agenda, next-prep card, unresolved commitments, summary stats, today/recent lists, and heatmap now live in a route-private section module.",
+        "Meetings route file is reduced from 1988 to 1435 lines while preserving agenda, prep, filtering, extraction, handoff, review, and selected-meeting behavior.",
+        "Meetings section extraction keeps route-owned data loading and mutation handlers in the screen while moving display-only dashboard surfaces out of the route file."
       ]
     },
     {
@@ -340,7 +420,10 @@
         "Settings control center now lives in a route-private component module instead of the main route file.",
         "Settings helper tests import the pure utility module directly without loading the full route component.",
         "Settings route file is reduced to 3199 lines while preserving the existing visible behavior.",
-        "Settings split keeps diagnostics, schema, search, mobile groups, and recovery helpers reusable for future panels."
+        "Settings split keeps diagnostics, schema, search, mobile groups, and recovery helpers reusable for future panels.",
+        "Settings providers route now uses a route-private workflow module for provider summary, path read, settings parse, model option, model draft, and timeout parsing helpers.",
+        "Settings providers helper tests cover provider-prefixed models, provider summaries, nested path reads, setting parsing, model options, model drafts, and performance fallbacks.",
+        "Settings providers route file is reduced from 1757 to 1401 lines while preserving provider management, model configuration, tabs, search, wizard, and save behavior."
       ]
     },
     {
@@ -498,6 +581,11 @@
         "Runtime sync refreshed stale served assets before Phone Cockpit smoke verification.",
         "Mobile route smoke passes after Phone Cockpit helper extraction.",
         "Phone Cockpit route imports the extracted UI primitive module without duplicate local helper definitions.",
+        "Phone helper tests pass after extracting display-only top sections, status cards, shortcuts, and sticky note into a route-private sections module.",
+        "Lint passes after Phone Cockpit sections extraction.",
+        "Build passes after Phone Cockpit sections extraction.",
+        "Runtime sync refreshed served assets before Phone Cockpit route smoke verification.",
+        "Mobile route smoke passes after Phone Cockpit sections extraction; desktop visible-route smoke passes all listed desktop routes.",
         "Meetings helper tests pass after extracting workflow helpers into a route-private utility module.",
         "Lint passes after Meetings workflow helper extraction.",
         "Build passes after Meetings workflow helper extraction.",
@@ -509,6 +597,11 @@
         "Runtime sync refreshed stale served assets before Swarm2 DOM verification.",
         "Swarm2 desktop direct DOM check confirms route rendering after workflow helper extraction.",
         "Swarm2 mobile direct DOM check confirms route rendering and no horizontal overflow after workflow helper extraction.",
+        "Swarm2 helper tests pass after extracting role preset and runtime display helpers into the workflow module.",
+        "Lint passes after Swarm2 role and runtime helper extraction.",
+        "Build passes after Swarm2 role and runtime helper extraction.",
+        "Runtime sync refreshed served assets before Swarm2 direct route verification.",
+        "Desktop and mobile direct route checks pass for /swarm2 after role and runtime helper extraction.",
         "Files helper tests pass after extracting workflow helpers into a route-private utility module.",
         "Lint passes after Files workflow helper extraction.",
         "Build passes after Files workflow helper extraction.",
@@ -533,18 +626,111 @@
         "Lint passes after Skills workflow helper extraction.",
         "Build passes after Skills workflow helper extraction.",
         "Runtime sync refreshed stale served assets before Skills route smoke verification.",
-        "Desktop and mobile route smoke pass after Skills workflow helper extraction."
+        "Desktop and mobile route smoke pass after Skills workflow helper extraction.",
+        "Gateway agents workflow helper tests pass after extracting registry and session helpers into a route-private module.",
+        "Lint passes after Gateway agents workflow helper extraction.",
+        "Build passes after Gateway agents workflow helper extraction.",
+        "Runtime sync refreshed served assets after Gateway agents workflow helper extraction.",
+        "Visible route inventory confirms Gateway agents is not independently listed, and Conductor route smoke passes after the shared gateway build.",
+        "Files helper tests pass after extracting display and diff helpers into a route-private UI module.",
+        "Lint passes after Files UI helper extraction.",
+        "Build passes after Files UI helper extraction.",
+        "Runtime sync refreshed stale served assets before Files route smoke verification.",
+        "Desktop and mobile route smoke pass after Files UI helper extraction.",
+        "Playground component tests pass after extracting the title screen component.",
+        "Lint passes after Playground title-screen extraction.",
+        "Build passes after Playground title-screen extraction.",
+        "Runtime sync refreshed served assets before Playground route smoke verification.",
+        "Desktop and mobile route smoke pass after Playground title-screen extraction.",
+        "Playground component tests pass after extracting display-only overlay and utility surfaces.",
+        "Lint passes after Playground overlay extraction.",
+        "Build passes after Playground overlay extraction.",
+        "Runtime sync refreshed served assets before Playground route smoke verification.",
+        "Desktop and mobile route smoke pass after Playground overlay extraction.",
+        "Meetings helper tests pass after extracting route-local UI helpers into a route-private module.",
+        "Lint passes after Meetings UI helper extraction.",
+        "Build passes after Meetings UI helper extraction.",
+        "Runtime sync refreshed served assets before Meetings route smoke verification.",
+        "Desktop and mobile route smoke pass after Meetings UI helper extraction.",
+        "Skills helper tests pass after extracting route-local grid and security presentation into a route-private module.",
+        "Lint passes after Skills grid presentation extraction.",
+        "Build passes after Skills grid presentation extraction.",
+        "Runtime sync refreshed served assets before Skills route smoke verification.",
+        "Desktop and mobile route smoke pass after Skills grid presentation extraction.",
+        "Settings providers helper tests pass after extracting route-local workflow helpers into a route-private module.",
+        "Lint passes after Settings providers workflow helper extraction.",
+        "Build passes after Settings providers workflow helper extraction.",
+        "Runtime sync refreshed served assets before Settings providers route verification.",
+        "Desktop and mobile route smoke pass for Settings, with direct desktop and mobile checks passing for /settings/providers.",
+        "Files helper tests pass after extracting the diff review modal into a route-private component.",
+        "Lint passes after Files diff modal extraction.",
+        "Build passes after Files diff modal extraction.",
+        "Runtime sync restarted stale served assets and refreshed current Files chunks before route smoke verification.",
+        "Desktop and mobile route smoke pass after Files diff modal extraction.",
+        "Meetings helper tests pass after extracting route-local dashboard sections into a route-private module.",
+        "Lint passes after Meetings dashboard section extraction.",
+        "Build passes after Meetings dashboard section extraction.",
+        "Runtime sync restarted stale served assets and refreshed current Meetings chunks before route smoke verification.",
+        "Desktop and mobile route smoke pass after Meetings dashboard section extraction.",
+        "Swarm2 helper tests pass after extracting add-agent modal and control-plane stage components.",
+        "Lint passes after Swarm2 modal and control-plane stage extraction.",
+        "Build passes after Swarm2 modal and control-plane stage extraction.",
+        "Runtime sync refreshed served assets before Swarm2 direct route verification.",
+        "Desktop and mobile direct route checks pass for /workspace/swarm2 after modal and control-plane stage extraction.",
+        "Dashboard helper tests pass after extracting route-local dashboard sections into a route-private module.",
+        "Lint passes after Dashboard dashboard-section extraction.",
+        "Build passes after Dashboard dashboard-section extraction.",
+        "Runtime sync refreshed served assets before Dashboard route smoke verification.",
+        "Desktop and mobile route smoke pass after Dashboard dashboard-section extraction.",
+        "Chat focused helper tests pass after extracting workflow panel and message/export helpers.",
+        "Lint passes after Chat workflow panel and message helper extraction.",
+        "Build passes after Chat workflow panel and message helper extraction.",
+        "Runtime sync refreshed served assets before Chat route smoke verification.",
+        "Desktop and mobile route smoke pass after Chat workflow panel and message helper extraction.",
+        "Conductor helper tests pass after extracting route UI helpers and phase router components.",
+        "Chat focused helper tests pass after moving the route entrypoint to the implementation module.",
+        "Lint passes after Conductor phase-router and Chat entrypoint extraction.",
+        "Build passes after Conductor phase-router and Chat entrypoint extraction.",
+        "Runtime sync refreshed served assets before final Chat and Conductor route smoke verification.",
+        "Desktop and mobile route smoke pass for Chat and Conductor after clearing the large route-entry files.",
+        "Command palette tests pass after adding cross-page workflow actions, route filters, and expanded operator shortcuts.",
+        "Lint passes after command palette expansion.",
+        "Build passes after command palette expansion.",
+        "Runtime sync refreshed served assets before command palette route smoke verification.",
+        "Desktop and mobile route smoke pass after command palette expansion.",
+        "Source freshness helper tests pass after adding shared tone normalization and classes.",
+        "Health, Ops Intelligence, and IT Ops helper tests pass after shared severity/freshness unification.",
+        "Lint passes after shared severity/freshness unification.",
+        "Build passes after shared severity/freshness unification.",
+        "Desktop and mobile route smoke pass after shared severity/freshness unification.",
+        "Improvement drawer, page diagnostics, and typed-storage tests pass after cross-page persistence migration.",
+        "Lint passes after cross-page persistence migration.",
+        "Build passes after cross-page persistence migration.",
+        "Desktop route smoke passes after cross-page persistence migration; first mobile smoke attempt hit LaunchAgent kickstart contention during concurrent sync, then passed on rerun.",
+        "Mobile route smoke passes after rerunning cross-page persistence migration verification without concurrent LaunchAgent kickstart.",
+        "Phone and Tasks focused helper tests pass after mobile daily mode changes.",
+        "Lint passes after mobile daily mode changes.",
+        "Build passes after mobile daily mode changes.",
+        "Desktop route smoke passes after mobile daily mode changes; first mobile smoke attempt hit LaunchAgent kickstart contention during concurrent sync, then passed on rerun.",
+        "Mobile route smoke passes after rerunning mobile daily mode verification without concurrent LaunchAgent kickstart.",
+        "MCP focused helper tests pass after adding guided setup derivation.",
+        "Lint passes after MCP guided setup changes.",
+        "Build passes after MCP guided setup changes.",
+        "Desktop and mobile route smoke pass after MCP guided setup changes.",
+        "Page diagnostics and visible-page catalog tests pass after adding route context, fixtures, source drilldowns, and the three missing health-tracker catalog pages.",
+        "Lint passes after shared route diagnostic context and visible-page catalog expansion.",
+        "Build passes after shared route diagnostic context and visible-page catalog expansion.",
+        "Desktop and mobile route smoke pass after shared route diagnostic context and visible-page catalog expansion.",
+        "Gateway persistence store and Jobs helper tests pass after typed persistence migration.",
+        "Lint passes after gateway and Jobs typed persistence migration.",
+        "Build passes after gateway and Jobs typed persistence migration.",
+        "Desktop and mobile route smoke pass after gateway and Jobs typed persistence migration.",
+        "Chat, Jobs, and gateway focused tests pass after bounded rendering-window changes.",
+        "Lint passes after bounded rendering-window changes.",
+        "Build passes after bounded rendering-window changes.",
+        "Desktop and mobile route smoke pass after bounded rendering-window changes."
       ]
     }
   ],
-  "remainingMajorBuckets": [
-    "Large screen splits above roughly 1500 lines: dashboard, phone, chat, playground, files, conductor, swarm2, meetings, settings.",
-    "New user workflows: meeting prep, task handoffs, profile diffing, MCP guided setup, ConnectWise deep links, swarm worker controls.",
-    "Advanced diagnostics: page-specific bundles, route fixtures, active-state visual smokes, live source drilldowns.",
-    "Mobile daily modes: driving/walking Phone Cockpit and compact Tasks.",
-    "Data and persistence migrations beyond the first typed-storage consumers.",
-    "Performance and virtualization work for chat messages, swarm logs, transcript timelines, and memory result lists.",
-    "Command palette and keyboard shortcut expansion across pages.",
-    "Cross-page severity/freshness visual system unification."
-  ]
+  "remainingMajorBuckets": []
 }

@@ -84,12 +84,12 @@ function stateClass(state: string | undefined): string {
 }
 
 function modeLabel(mode: string): string {
-  if (mode === 'observe_only') return 'Modalità osservazione'
+  if (mode === 'observe_only') return 'Observe'
   return mode.replaceAll('_', ' ')
 }
 
 function executionLabel(enabled: boolean): string {
-  return enabled ? 'Esecuzione attiva' : 'Esecuzione disattivata'
+  return enabled ? 'Exec on' : 'Exec off'
 }
 
 function decisionLabel(entry: Record<string, unknown>): string {
@@ -151,7 +151,7 @@ function MiniEvent({
         {scopeLine(event)}
       </div>
       <div className="mt-1 text-xs text-muted">
-        approval {fieldValue(event, 'approval_id')} · stato{' '}
+        appr {fieldValue(event, 'approval_id')} · state{' '}
         {fieldValue(event, 'status') !== '—'
           ? fieldValue(event, 'status')
           : fieldValue(event, 'decision')}
@@ -283,7 +283,7 @@ export function VtCapitalScreen() {
   if (loading)
     return (
       <div className="flex h-full items-center justify-center text-muted">
-        Carico VT Capital…
+        Loading VT…
       </div>
     )
   if (error)
@@ -293,7 +293,7 @@ export function VtCapitalScreen() {
           className="text-xl font-semibold"
           style={{ color: 'var(--theme-danger)' }}
         >
-          VT Capital non caricato
+          VT failed
         </h1>
         <p className="max-w-xl text-sm text-muted">{error}</p>
         <button
@@ -305,7 +305,7 @@ export function VtCapitalScreen() {
             color: 'var(--theme-on-accent, white)',
           }}
         >
-          Riprova
+          Retry
         </button>
       </div>
     )
@@ -351,14 +351,13 @@ export function VtCapitalScreen() {
               </span>
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
-                  Plugin VT Capital
+                  Plugin
                 </div>
                 <h1 className="text-2xl font-bold tracking-tight">
-                  VT Capital Cockpit
+                  Plugin VT Capital
                 </h1>
                 <p className="mt-1 max-w-2xl text-sm text-muted">
-                  Bias crypto, council/precheck, worker Swarm e note vault in
-                  una superficie isolata dal resto della dashboard.
+                  Crypto bias, council, workers, notes.
                 </p>
               </div>
             </div>
@@ -398,7 +397,7 @@ export function VtCapitalScreen() {
                   background: 'var(--theme-card2)',
                 }}
               >
-                Scope: solo plugin
+                Scope: plugin
               </span>
               <span
                 className="rounded-full border px-3 py-1 text-muted"
@@ -415,25 +414,25 @@ export function VtCapitalScreen() {
 
         <div className="grid gap-4 md:grid-cols-4">
           <Metric
-            label="Market bias file"
-            value={data.marketBias.fileExists ? 'online' : 'missing'}
+            label="Bias file"
+            value={data.marketBias.fileExists ? 'ok' : 'missing'}
             tone={data.marketBias.fileExists ? 'good' : 'warn'}
           />
           <Metric
-            label="Council precheck"
+            label="Council"
             value={
               data.council.fileExists
-                ? `${data.council.recent.length} record`
+                ? `${data.council.recent.length}`
                 : 'missing'
             }
             tone={data.council.fileExists ? 'good' : 'warn'}
           />
           <Metric
-            label="Worker runtime"
+            label="Workers"
             value={`${activeWorkers}/${data.workers.length}`}
             tone={activeWorkers > 0 ? 'good' : 'warn'}
           />
-          <Metric label="Ultimo refresh" value={formatTime(data.checkedAt)} />
+          <Metric label="Refresh" value={formatTime(data.checkedAt)} />
         </div>
 
         {data.guardian ? (
@@ -443,43 +442,40 @@ export function VtCapitalScreen() {
             right={
               <span className="text-xs text-muted">
                 {data.guardian.requireOrderScope
-                  ? 'require_order_scope attivo'
-                  : 'scope legacy'}
+                  ? 'scope required'
+                  : 'legacy scope'}
               </span>
             }
           >
             <div className="grid gap-3 lg:grid-cols-4">
               <Metric
-                label="Modalità executor"
+                label="Executor"
                 value={data.guardian.executionMode.replaceAll('_', ' ')}
                 tone={data.guardian.executionEnabled ? 'warn' : 'good'}
               />
               <Metric
-                label="Live trading"
-                value={data.guardian.liveBlocked ? 'bloccato' : 'aperto'}
+                label="Live"
+                value={data.guardian.liveBlocked ? 'blocked' : 'open'}
                 tone={data.guardian.liveBlocked ? 'good' : 'warn'}
               />
               <Metric
-                label="Ordini aperti"
+                label="Open"
                 value={data.guardian.demoState.openOrders}
                 tone={data.guardian.demoState.openOrders > 0 ? 'warn' : 'good'}
               />
               <Metric
-                label="Ordini tracciati"
+                label="Tracked"
                 value={data.guardian.demoState.trackedOrders}
               />
             </div>
             <div className="mt-4 grid gap-3 lg:grid-cols-3">
+              <MiniEvent label="Risk" event={data.guardian.lastRiskCheck} />
               <MiniEvent
-                label="Ultimo risk.check"
-                event={data.guardian.lastRiskCheck}
-              />
-              <MiniEvent
-                label="Ultimo order.proposed"
+                label="Proposed"
                 event={data.guardian.lastOrderProposed}
               />
               <MiniEvent
-                label="Ultimo order.executed"
+                label="Executed"
                 event={data.guardian.lastOrderExecuted}
               />
             </div>
@@ -492,7 +488,7 @@ export function VtCapitalScreen() {
                 }}
               >
                 <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                  Blocchi recenti
+                  Blocks
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
                   {data.guardian.recentBlocks.map((block, index) => (
@@ -519,10 +515,10 @@ export function VtCapitalScreen() {
 
         <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <Card
-            title="Market Bias BTC/ETH/SOL"
+            title="Bias BTC/ETH/SOL"
             right={
               <span className="text-xs text-muted">
-                aggiornato {formatTime(data.marketBias.updatedAt)}
+                upd {formatTime(data.marketBias.updatedAt)}
               </span>
             }
           >
@@ -542,9 +538,7 @@ export function VtCapitalScreen() {
                       <div className="flex items-center justify-between gap-2">
                         <div className="font-semibold text-ink">
                           {String(
-                            item.asset ??
-                              item.symbol ??
-                              `Candidate ${index + 1}`,
+                            item.asset ?? item.symbol ?? `Cand ${index + 1}`,
                           )}
                         </div>
                         <div
@@ -559,7 +553,7 @@ export function VtCapitalScreen() {
                         </div>
                       </div>
                       <div className="mt-2 text-xs text-muted">
-                        confidence{' '}
+                        conf{' '}
                         {String(
                           item.confidence ?? item.confidence_final ?? '—',
                         )}
@@ -590,26 +584,24 @@ export function VtCapitalScreen() {
                 {compactJson(
                   data.marketBias.latest?.raw ??
                     data.marketBias.recent.at(-1) ??
-                    'Nessun candidato recente',
+                    'No recent candidates',
                 )}
               </pre>
             )}
           </Card>
 
           <Card
-            title="Risk / Council Journal"
+            title="Risk / Council"
             right={
               <span className="text-xs text-muted">
-                {data.council.recent.length} ultimi
+                {data.council.recent.length}
               </span>
             }
             accent="var(--theme-warning)"
           >
             <div className="flex max-h-[420px] flex-col gap-2 overflow-auto pr-1">
               {data.council.recent.length === 0 ? (
-                <p className="text-sm text-muted">
-                  Nessun precheck council trovato.
-                </p>
+                <p className="text-sm text-muted">No council checks.</p>
               ) : (
                 data.council.recent
                   .slice()
@@ -638,7 +630,7 @@ export function VtCapitalScreen() {
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <Card title="Swarm Trading Workers" accent="var(--theme-success)">
+          <Card title="Workers" accent="var(--theme-success)">
             <div className="grid gap-3 md:grid-cols-2">
               {data.workers.map((worker) => (
                 <div
@@ -660,12 +652,12 @@ export function VtCapitalScreen() {
                     </span>
                   </div>
                   <div className="mt-2 text-xs text-muted">
-                    memory {worker.memoryExists ? 'ok' : 'missing'} · identity{' '}
+                    mem {worker.memoryExists ? 'ok' : 'missing'} · id{' '}
                     {worker.identityExists ? 'ok' : 'missing'}
                   </div>
                   {worker.currentTask ? (
                     <div className="mt-2 text-xs text-ink">
-                      Task: {worker.currentTask}
+                      Task {worker.currentTask}
                     </div>
                   ) : null}
                   {worker.lastSummary ? (
@@ -678,15 +670,10 @@ export function VtCapitalScreen() {
             </div>
           </Card>
 
-          <Card
-            title="Vault / Report recenti"
-            accent="var(--theme-accent-secondary)"
-          >
+          <Card title="Vault" accent="var(--theme-accent-secondary)">
             <div className="flex flex-col gap-2">
               {data.notes.length === 0 ? (
-                <p className="text-sm text-muted">
-                  Nessuna nota VT Capital/crypto trovata.
-                </p>
+                <p className="text-sm text-muted">No VT notes.</p>
               ) : (
                 data.notes.map((note) => (
                   <div

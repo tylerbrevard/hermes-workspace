@@ -83,14 +83,20 @@ describe('ProfilesScreen helpers', () => {
       expect.arrayContaining([
         expect.objectContaining({
           label: 'provider',
-          route: '/settings/providers',
+          route: '/settings?section=claude',
           status: 'missing',
         }),
         expect.objectContaining({ label: 'tools', status: 'ok' }),
       ]),
     )
     expect(getProfileUsedByRoutes(profile).map((item) => item.label)).toEqual(
-      expect.arrayContaining(['Chat', 'Operations', 'Conductor', 'Jobs', 'Settings']),
+      expect.arrayContaining([
+        'Chat',
+        'Ops',
+        'Conductor',
+        'Jobs',
+        'Settings',
+      ]),
     )
     expect(canDeleteProfile({ name: 'default', active: false })).toBe(false)
     expect(canDeleteProfile({ name: 'builder', active: true })).toBe(false)

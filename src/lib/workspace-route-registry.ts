@@ -15,6 +15,80 @@ export type WorkspaceRouteRegistryEntry = {
   escalationPath: string
 }
 
+export type WorkspaceRouteSmokeFixture = {
+  route: string
+  label: string
+  smokeText: string
+  mobileSmokeText?: string
+}
+
+export type WorkspaceRouteDiagnosticContext = {
+  registry: WorkspaceRouteRegistryEntry | null
+  smokeAssertions: {
+    desktopText: string | null
+    mobileText: string | null
+  }
+  routeFixtures: Array<WorkspaceRouteSmokeFixture>
+  liveSourceDrilldowns: Array<{
+    label: string
+    target: string
+  }>
+}
+
+const WORKSPACE_ROUTE_SMOKE_FIXTURES: Record<
+  string,
+  Array<WorkspaceRouteSmokeFixture>
+> = {
+  '/jobs': [
+    {
+      route: '/jobs?smokeFixture=failed',
+      label: 'Failed job state',
+      smokeText: 'Smoke fixture failure',
+      mobileSmokeText: 'Smoke fixture failure',
+    },
+  ],
+  '/tasks': [
+    {
+      route: '/tasks?create=task',
+      label: 'Create task modal',
+      smokeText: 'Tasks',
+      mobileSmokeText: 'Tasks',
+    },
+  ],
+  '/75-tracker': [
+    {
+      route: '/75-tracker?mode=hard&quick=1',
+      label: 'Hard-mode quick view',
+      smokeText: '1 gallon',
+      mobileSmokeText: '1 gallon',
+    },
+  ],
+  '/operations': [
+    {
+      route: '/operations?create=agent',
+      label: 'Create agent modal',
+      smokeText: 'Agent',
+      mobileSmokeText: 'Agent',
+    },
+  ],
+}
+
+function getLiveSourceTarget(dependency: string) {
+  const normalized = dependency.toLowerCase()
+  if (normalized.includes('api')) return '/workspace/files?path=src/server'
+  if (normalized.includes('gateway')) return '/workspace/operations'
+  if (normalized.includes('config')) return '/workspace/files?path=config'
+  if (normalized.includes('storage') || normalized.includes('store'))
+    return '/workspace/settings'
+  if (normalized.includes('graph') || normalized.includes('teams'))
+    return '/workspace/presence'
+  if (normalized.includes('connectwise')) return '/workspace/it-ops'
+  if (normalized.includes('skills')) return '/workspace/skills'
+  if (normalized.includes('memory')) return '/workspace/memory'
+  if (normalized.includes('profiles')) return '/workspace/profiles'
+  return '/workspace/files'
+}
+
 export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
   {
     route: '/dashboard',
@@ -22,15 +96,15 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
     owner: 'daily',
     runtimeDependencies: ['dashboard overview API', 'gateway status'],
     smokeText: 'Hermes Workspace',
-    mobileSmokeText: 'Phone Cockpit',
+    mobileSmokeText: 'Quick Actions',
     escalationPath: 'Refresh gateway, then inspect dashboard overview source.',
   },
   {
     route: '/phone',
-    label: 'Phone Cockpit',
+    label: 'Phone',
     owner: 'daily',
     runtimeDependencies: ['phone cockpit API', 'tasks', 'meetings'],
-    smokeText: 'Phone Cockpit',
+    smokeText: 'Phone',
     escalationPath: 'Check phone summary API and local capture queue.',
   },
   {
@@ -42,7 +116,7 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
       'LILY voice worker',
       'Hermes chat API',
     ],
-    smokeText: 'Start LILY',
+    smokeText: 'LILY',
     escalationPath:
       'Check voice diagnostics, worker status, and token issuance.',
   },
@@ -51,8 +125,8 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
     label: 'Chat',
     owner: 'daily',
     runtimeDependencies: ['sessions API', 'gateway streaming', 'model config'],
-    smokeText: 'SESSIONS',
-    mobileSmokeText: 'Begin a session',
+    smokeText: 'CHAT COCKPIT',
+    mobileSmokeText: 'Mobile',
     escalationPath:
       'Check auth, session history, gateway streaming, and model provider.',
   },
@@ -61,7 +135,7 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
     label: 'HermesWorld',
     owner: 'systems',
     runtimeDependencies: ['3D assets', 'playground state', 'browser WebGL'],
-    smokeText: 'OPEN FULL',
+    smokeText: 'FULL',
     escalationPath:
       'Check asset loading, WebGL support, and playground runtime logs.',
   },
@@ -108,11 +182,40 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
     escalationPath: 'Check local storage recovery and daily habit state.',
   },
   {
+    route: '/pto-tracker',
+    label: 'PTO Tracker',
+    owner: 'daily',
+    runtimeDependencies: ['PTO report artifacts', 'direct-report roster'],
+    smokeText: 'PTO Tracker',
+    mobileSmokeText: 'People coverage',
+    escalationPath:
+      'Regenerate the PTO tracker report bundle and check report artifact serving.',
+  },
+  {
+    route: '/chief-of-staff-mailbox',
+    label: 'Chief of Staff Mailbox',
+    owner: 'daily',
+    runtimeDependencies: ['mailbox digest artifacts'],
+    smokeText: 'Mailbox CoS',
+    mobileSmokeText: 'Chief of Staff Mailbox',
+    escalationPath: 'Check mailbox digest generation and report freshness.',
+  },
+  {
+    route: '/apple-health',
+    label: 'Apple Health',
+    owner: 'daily',
+    runtimeDependencies: ['Hermes health SQLite DB', 'Health Auto Export sync'],
+    smokeText: 'Health',
+    mobileSmokeText: 'Health',
+    escalationPath:
+      'Check health bridge status, Health Auto Export freshness, and .health.db daily_summary rows.',
+  },
+  {
     route: '/wegovy',
     label: 'Wegovy Shots',
     owner: 'daily',
     runtimeDependencies: ['local typed storage'],
-    smokeText: 'Wegovy Shots',
+    smokeText: 'Wegovy',
     escalationPath: 'Check local storage recovery and weekly shot state.',
   },
   {
@@ -120,7 +223,7 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
     label: 'Zyn Tracker',
     owner: 'daily',
     runtimeDependencies: ['local typed storage'],
-    smokeText: 'Zyn Tracker',
+    smokeText: 'Zyn',
     escalationPath: 'Check local storage recovery and daily pouch entries.',
   },
   {
@@ -128,7 +231,7 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
     label: 'Food Log',
     owner: 'daily',
     runtimeDependencies: ['local typed storage'],
-    smokeText: 'Food Log',
+    smokeText: 'Food',
     escalationPath: 'Check local storage recovery and meal entries.',
   },
   {
@@ -136,7 +239,7 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
     label: 'Conductor',
     owner: 'agent-ops',
     runtimeDependencies: ['conductor spawn API', 'gateway', 'mission storage'],
-    smokeText: 'Launch a mission',
+    smokeText: 'Plan, assign, verify.',
     escalationPath:
       'Check mission draft, spawn API, gateway stream, and approvals.',
   },
@@ -176,7 +279,7 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
     label: 'Memory',
     owner: 'knowledge',
     runtimeDependencies: ['memory API', 'knowledge browser'],
-    smokeText: 'MEMORY FILES',
+    smokeText: 'Memory',
     escalationPath: 'Check memory feature gate, API reads, and source paths.',
   },
   {
@@ -254,9 +357,41 @@ export const WORKSPACE_ROUTE_REGISTRY: Array<WorkspaceRouteRegistryEntry> = [
 ]
 
 export function findWorkspaceRouteRegistryEntry(route: string) {
-  return WORKSPACE_ROUTE_REGISTRY.find((entry) => entry.route === route) ?? null
+  const normalizedRoute = route.replace(/^\/workspace(?=\/|$)/, '') || '/'
+  return (
+    WORKSPACE_ROUTE_REGISTRY.find((entry) => entry.route === normalizedRoute) ??
+    null
+  )
 }
 
 export function getWorkspaceRouteRegistryByOwner(owner: WorkspaceRouteOwner) {
   return WORKSPACE_ROUTE_REGISTRY.filter((entry) => entry.owner === owner)
+}
+
+export function getWorkspaceRouteSmokeFixtures(route: string) {
+  const routePath =
+    (route.split('?')[0] || route).replace(/^\/workspace(?=\/|$)/, '') || '/'
+  return WORKSPACE_ROUTE_SMOKE_FIXTURES[routePath] ?? []
+}
+
+export function buildWorkspaceRouteDiagnosticContext(
+  route: string,
+): WorkspaceRouteDiagnosticContext {
+  const routePath =
+    (route.split('?')[0] || route).replace(/^\/workspace(?=\/|$)/, '') || '/'
+  const registry = findWorkspaceRouteRegistryEntry(routePath)
+  return {
+    registry,
+    smokeAssertions: {
+      desktopText: registry?.smokeText ?? null,
+      mobileText: registry?.mobileSmokeText ?? registry?.smokeText ?? null,
+    },
+    routeFixtures: getWorkspaceRouteSmokeFixtures(routePath),
+    liveSourceDrilldowns: (registry?.runtimeDependencies ?? []).map(
+      (dependency) => ({
+        label: dependency,
+        target: getLiveSourceTarget(dependency),
+      }),
+    ),
+  }
 }

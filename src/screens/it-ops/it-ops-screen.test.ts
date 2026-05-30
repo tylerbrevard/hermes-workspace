@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildClientUpdate,
   buildConnectWiseActionQueue,
+  buildExecutiveDashboardStats,
   buildInternalTicketBrief,
   buildItOpsBriefing,
   buildItOpsDiagnosticsExport,
@@ -178,5 +179,75 @@ describe('ItOpsScreen helpers', () => {
     expect(buildInternalTicketBrief(ticket)).toContain('Boundary:')
     expect(diagnostics).toContain('nativePsaBoundary')
     expect(diagnostics).not.toContain('privateKey')
+  })
+
+  it('builds executive dashboard stats with Tyler and direct-report load', () => {
+    const stats = buildExecutiveDashboardStats({
+      analytics: {
+        ticketStats: {
+          open: 12,
+          closedToday: 4,
+          avgResolutionHours: 7,
+          slaCompliancePct: 96,
+        },
+        queueBreakdown: [
+          { queue: 'Service Desk', count: 8 },
+          { queue: 'Projects', count: 4 },
+        ],
+        recentTickets: [
+          {
+            id: 301,
+            summary: 'CAB approval required',
+            board: 'Change',
+            status: 'Waiting Approval',
+            priority: 'Normal',
+            owner: 'Tyler',
+            company: 'Acme',
+            dateEntered: '2026-05-27T10:00:00.000Z',
+            requiredDate: null,
+          },
+          {
+            id: 302,
+            summary: 'Printer outage',
+            board: 'Service Desk',
+            status: 'New',
+            priority: 'High',
+            owner: 'Unassigned',
+            company: 'Acme',
+            dateEntered: '2026-05-27T10:00:00.000Z',
+            requiredDate: null,
+          },
+        ],
+      },
+      overview: {
+        totalMeetings: 3,
+        actionItems: [
+          {
+            id: 'a1',
+            meetingId: 'm1',
+            meetingDate: '2026-05-27',
+            assignee: 'Tyler',
+            task: 'Approve change',
+            isTyler: true,
+          },
+          {
+            id: 'a2',
+            meetingId: 'm1',
+            meetingDate: '2026-05-27',
+            assignee: 'Adam Acevedo',
+            task: 'Close stale ticket',
+            isDirectReport: true,
+          },
+        ],
+        recurringIssues: [{ label: 'Backlog', count: 2, dates: [] }],
+      },
+    } as any)
+
+    expect(stats.posture).toBe('Watch')
+    expect(stats.topBoard).toBe('Service Desk')
+    expect(stats.tylerActionCount).toBe(1)
+    expect(stats.directReportActionCount).toBe(1)
+    expect(stats.tylerTouchedTicketCount).toBe(1)
+    expect(stats.unassignedCount).toBe(1)
   })
 })

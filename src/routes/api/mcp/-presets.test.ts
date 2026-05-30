@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -38,6 +38,10 @@ interface PresetsRouteModule {
 async function loadRoute(): Promise<PresetsRouteModule> {
   vi.doMock('@tanstack/react-router', () => ({
     createFileRoute: () => (cfg: unknown) => cfg,
+  }))
+  vi.doMock('../../../server/auth-middleware', () => ({
+    isAuthenticated: (request: Request) =>
+      request.headers.get('x-test-auth') === '1',
   }))
   return (await import('./presets')) as unknown as PresetsRouteModule
 }
@@ -80,7 +84,9 @@ describe('GET /api/mcp/presets', () => {
     delete process.env.CLAUDE_PASSWORD
     const mod = await loadRoute()
     const res = await mod.Route.server.handlers.GET({
-      request: new Request('http://localhost/api/mcp/presets'),
+      request: new Request('http://localhost/api/mcp/presets', {
+        headers: { 'x-test-auth': '1' },
+      }),
     })
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
@@ -95,10 +101,14 @@ describe('GET /api/mcp/presets', () => {
 
   it('returns 200 with source=invalid + error fields when user file is malformed', async () => {
     delete process.env.CLAUDE_PASSWORD
-    writeFileSync(join(homeDir, 'mcp-presets.json'), '{not valid json')
+    const userPath = join(homeDir, 'workspace', 'mcp-presets.json')
+    mkdirSync(join(homeDir, 'workspace'), { recursive: true })
+    writeFileSync(userPath, '{not valid json')
     const mod = await loadRoute()
     const res = await mod.Route.server.handlers.GET({
-      request: new Request('http://localhost/api/mcp/presets'),
+      request: new Request('http://localhost/api/mcp/presets', {
+        headers: { 'x-test-auth': '1' },
+      }),
     })
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
@@ -111,7 +121,7 @@ describe('GET /api/mcp/presets', () => {
     expect(body.ok).toBe(false)
     expect(body.source).toBe('invalid')
     expect(body.error).toBeTruthy()
-    expect(body.errorPath).toBe(join(homeDir, 'mcp-presets.json'))
+    expect(body.errorPath).toBe(userPath)
     expect((body.validationErrors ?? []).length).toBeGreaterThan(0)
   })
 })

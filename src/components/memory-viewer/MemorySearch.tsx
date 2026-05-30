@@ -18,6 +18,9 @@ function MemorySearch({
   onQueryChange,
   onSelectResult,
 }: MemorySearchProps) {
+  const visibleResults = results.slice(0, 20)
+  const hiddenResultCount = Math.max(0, results.length - visibleResults.length)
+
   return (
     <section className="border-b border-primary-200 bg-primary-100/40 px-3 py-2">
       <label className="relative block">
@@ -48,7 +51,13 @@ function MemorySearch({
             </p>
           ) : (
             <div className="max-h-44 space-y-1 overflow-y-auto">
-              {results.slice(0, 20).map(function renderResult(result) {
+              {hiddenResultCount > 0 ? (
+                <div className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-xs text-primary-600">
+                  Showing first {visibleResults.length} matches; narrow the
+                  query to inspect {hiddenResultCount} more.
+                </div>
+              ) : null}
+              {visibleResults.map(function renderResult(result) {
                 return (
                   <button
                     key={`${result.path}:${result.line}:${result.snippet}`}

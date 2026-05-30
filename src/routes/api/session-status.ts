@@ -94,7 +94,9 @@ export const Route = createFileRoute('/api/session-status')({
             const contextUsage = await readContextUsage('main')
             const localMain = getLocalSession('main')
             const activeRun = await getActiveRunForSession('main')
-            const outputTokens = estimateTokensFromText(activeRun?.assistantText ?? '')
+            const outputTokens = estimateTokensFromText(
+              activeRun?.assistantText ?? '',
+            )
             return json({
               ok: true,
               payload: {
@@ -118,7 +120,9 @@ export const Route = createFileRoute('/api/session-status')({
           if (localSession) {
             const contextUsage = await readContextUsage(sessionKey)
             const activeRun = await getActiveRunForSession(sessionKey)
-            const outputTokens = estimateTokensFromText(activeRun?.assistantText ?? '')
+            const outputTokens = estimateTokensFromText(
+              activeRun?.assistantText ?? '',
+            )
             return json({
               ok: true,
               payload: {
@@ -161,7 +165,10 @@ export const Route = createFileRoute('/api/session-status')({
 
           try {
             const session = await getSession(sessionKey)
-            let config: { model: string; provider: string } = { model: '', provider: '' }
+            let config: { model: string; provider: string } = {
+              model: '',
+              provider: '',
+            }
             if (capabilities.config) {
               try {
                 const nextConfig = await getConfig()
@@ -210,7 +217,9 @@ export const Route = createFileRoute('/api/session-status')({
             })
           } catch (sessionErr) {
             const message =
-              sessionErr instanceof Error ? sessionErr.message : String(sessionErr)
+              sessionErr instanceof Error
+                ? sessionErr.message
+                : String(sessionErr)
             if (!/not found|404/i.test(message)) {
               throw sessionErr
             }

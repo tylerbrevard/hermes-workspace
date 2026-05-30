@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router'
-import {  useEffect, useMemo, useState } from 'react'
-import type {FormEvent} from 'react';
+import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import { usePageTitle } from '@/hooks/use-page-title'
 
 type CounterState = {
@@ -21,7 +21,8 @@ export const Route = createFileRoute('/reserve')({
 })
 
 function ReserveRoute() {
-  usePageTitle('Reserve your HermesWorld name')
+  usePageTitle('Reserve HermesWorld')
+  const location = useLocation()
 
   const [desiredName, setDesiredName] = useState('')
   const [email, setEmail] = useState('')
@@ -41,7 +42,8 @@ function ReserveRoute() {
     fetch('/api/hermesworld/reservations', { cache: 'no-store' })
       .then(async (response) => {
         const payload = await response.json()
-        if (!response.ok) throw new Error(payload.error || 'Failed to load counter')
+        if (!response.ok)
+          throw new Error(payload.error || 'Failed to load counter')
         if (!cancelled) {
           setCounter({ loading: false, count: payload.count || 0, error: null })
         }
@@ -57,15 +59,20 @@ function ReserveRoute() {
   }, [])
 
   const reservationsUnavailable = Boolean(counter.error)
-  const isDisabled = reservationsUnavailable || submitState.status === 'submitting'
+  const isDisabled =
+    reservationsUnavailable || submitState.status === 'submitting'
   const trimmedName = useMemo(() => desiredName.trim(), [desiredName])
+
+  if (location.pathname.endsWith('/reserve/confirm')) {
+    return <Outlet />
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (reservationsUnavailable) {
       setSubmitState({
         status: 'error',
-        message: 'Reservations are not configured on this workspace yet.',
+        message: 'Reserve is not configured here yet.',
       })
       return
     }
@@ -88,7 +95,7 @@ function ReserveRoute() {
       }
       setSubmitState({
         status: 'success',
-        message: `Reserved ${payload.reservation.desiredName}. Check ${payload.reservation.email} for the confirmation link.`,
+        message: `Reserved ${payload.reservation.desiredName}. Check ${payload.reservation.email}.`,
       })
       setDesiredName('')
       setEmail('')
@@ -114,43 +121,68 @@ function ReserveRoute() {
 
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 lg:grid lg:grid-cols-[0.9fr_1.1fr] lg:gap-10">
         <section className="rounded-[2rem] border border-[#d9b35f]/24 bg-[#05080e]/82 p-7 shadow-[0_40px_140px_rgba(0,0,0,.52)] backdrop-blur-2xl sm:p-9">
-          <a href="/hermes-world" className="text-[11px] font-black uppercase tracking-[0.22em] text-[#d9b35f]/72 hover:text-[#f8e4ac]">
-            ← Back to HermesWorld
+          <a
+            href="/hermes-world"
+            className="text-[11px] font-black uppercase tracking-[0.22em] text-[#d9b35f]/72 hover:text-[#f8e4ac]"
+          >
+            ← World
           </a>
           <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#d9b35f]/30 bg-[#d9b35f]/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[#f8e4ac]">
-            {reservationsUnavailable ? 'Reservations offline' : 'Name reservation live'}
+            {reservationsUnavailable
+              ? 'Offline'
+              : 'Reserve live'}
           </div>
           <h1 className="mt-5 font-serif text-4xl font-bold leading-[0.92] tracking-[-0.05em] text-[#fff6df] sm:text-6xl">
             {reservationsUnavailable
-              ? 'HermesWorld reservations are not open on this workspace.'
-              : 'Reserve your HermesWorld name before accounts launch.'}
+              ? 'Reservations are offline.'
+              : 'Reserve your HermesWorld name.'}
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-[#d7d0bd]/68 sm:text-lg">
             {reservationsUnavailable
-              ? 'The backend needs Supabase and email delivery configured before names can be accepted. Play, docs, and the public preview remain available.'
-              : 'Lock your desired handle now. We validate duplicates, profanity, and admin/system names server-side, then email you a confirmation link so the reservation can auto-bind when the account system goes live.'}
+              ? 'Supabase and email keys are required before intake opens. Play and docs still work.'
+              : 'Claim a handle, pass server-side checks, then confirm by email for launch binding.'}
           </p>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             <StatCard
-              label="Reservations"
-              value={counter.loading ? '...' : reservationsUnavailable ? 'Offline' : String(counter.count)}
+              label="Names"
+              value={
+                counter.loading
+                  ? '...'
+                  : reservationsUnavailable
+                    ? 'Off'
+                    : String(counter.count)
+              }
               tone="gold"
-              subcopy={reservationsUnavailable ? 'Backend not configured' : 'Public live counter'}
+              subcopy={
+                reservationsUnavailable
+                  ? 'No backend'
+                  : 'Live count'
+              }
             />
-            <StatCard label="Name rules" value="3–20" tone="cyan" subcopy="Letters, numbers, underscores" />
-            <StatCard label="Confirmation" value="Email" tone="violet" subcopy="One-click verification" />
+            <StatCard
+              label="Rules"
+              value="3–20"
+              tone="cyan"
+              subcopy="Letters, numbers, _"
+            />
+            <StatCard
+              label="Confirm"
+              value="Email"
+              tone="violet"
+              subcopy="Email link"
+            />
           </div>
 
           <div className="mt-8 rounded-2xl border border-white/10 bg-black/24 p-5">
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#d9b35f]/72">
-              Reservation notes
+              Notes
             </div>
             <ul className="mt-3 space-y-2 text-sm leading-6 text-[#d7d0bd]/64">
-              <li>• Desired names must use letters, numbers, or underscores only.</li>
-              <li>• Duplicate names are rejected immediately.</li>
-              <li>• Wallet is optional today, but helps with future account linking.</li>
-              <li>• Confirmation email required before the reservation is considered locked.</li>
+              <li>• Letters, numbers, underscores only.</li>
+              <li>• Duplicates rejected.</li>
+              <li>• Wallet optional for launch binding.</li>
+              <li>• Email confirm locks it.</li>
             </ul>
           </div>
         </section>
@@ -159,14 +191,14 @@ function ReserveRoute() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#d9b35f]/72">
-                Reserve handle
+                Handle
               </div>
               <div className="mt-2 text-2xl font-bold text-[#fff6df]">
                 {reservationsUnavailable
-                  ? 'Reservations are paused'
+                  ? 'Paused'
                   : trimmedName
                     ? `Claim ${trimmedName}`
-                    : 'Enter your launch-day name'}
+                    : 'Enter launch name'}
               </div>
             </div>
             <div className="rounded-full border border-cyan-200/22 bg-cyan-200/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100/82">
@@ -186,7 +218,7 @@ function ReserveRoute() {
             />
             <Field
               label="Email"
-              hint="We send the confirmation link here"
+              hint="Confirm link"
               value={email}
               onChange={setEmail}
               placeholder="you@example.com"
@@ -196,7 +228,7 @@ function ReserveRoute() {
             />
             <Field
               label="Wallet"
-              hint="Optional today — useful for launch binding"
+              hint="Optional"
               value={wallet}
               onChange={setWallet}
               placeholder="0x... or wallet alias"
@@ -208,13 +240,17 @@ function ReserveRoute() {
               disabled={isDisabled}
               className="inline-flex w-full items-center justify-center rounded-xl border border-[#ffe7a3]/55 bg-[linear-gradient(180deg,#ffe7a3,#d9a63f)] px-6 py-4 text-sm font-black uppercase tracking-[0.16em] text-[#11100b] shadow-[0_30px_90px_rgba(217,179,95,.32),inset_0_1px_0_rgba(255,255,255,.32)] transition enabled:hover:-translate-y-0.5 enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {reservationsUnavailable ? 'Reservations unavailable' : isDisabled ? 'Submitting…' : 'Reserve name'}
+              {reservationsUnavailable
+                ? 'Unavailable'
+                : isDisabled
+                  ? 'Submitting…'
+                  : 'Reserve'}
             </button>
           </form>
 
           {reservationsUnavailable ? (
             <div className="mt-5 rounded-2xl border border-amber-300/22 bg-amber-300/10 px-4 py-3 text-sm leading-6 text-amber-100">
-              Reservation intake is disabled until the Supabase and Resend environment keys are intentionally provisioned.
+              Supabase + Resend keys required.
             </div>
           ) : null}
 
@@ -296,8 +332,12 @@ function StatCard({
 
   return (
     <div className="rounded-2xl border border-white/10 bg-black/24 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
-      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#d9b35f]/72">{label}</div>
-      <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-lg font-black ${accent}`}>
+      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#d9b35f]/72">
+        {label}
+      </div>
+      <div
+        className={`mt-3 inline-flex rounded-full border px-3 py-1 text-lg font-black ${accent}`}
+      >
         {value}
       </div>
       <div className="mt-3 text-xs leading-5 text-[#d7d0bd]/55">{subcopy}</div>

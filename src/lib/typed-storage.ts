@@ -53,15 +53,21 @@ export function writeJsonStorage<T>(
   }
 }
 
-export function isBooleanRecord(value: unknown): value is Record<string, boolean> {
+export function isBooleanRecord(
+  value: unknown,
+): value is Record<string, boolean> {
   return (
     Boolean(value) &&
     typeof value === 'object' &&
     !Array.isArray(value) &&
-    Object.values(value).every((entry) => typeof entry === 'boolean')
+    Object.values(value as Record<string, unknown>).every(
+      (entry) => typeof entry === 'boolean',
+    )
   )
 }
 
 export function isStringArray(value: unknown): value is Array<string> {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+  return (
+    Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+  )
 }

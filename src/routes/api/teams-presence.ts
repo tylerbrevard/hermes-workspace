@@ -11,7 +11,10 @@ export const Route = createFileRoute('/api/teams-presence')({
         } catch (error) {
           return json(
             {
-              error: error instanceof Error ? error.message : 'Teams presence unavailable',
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Teams presence unavailable',
             },
             { status: 503 },
           )

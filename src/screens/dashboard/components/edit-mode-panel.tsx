@@ -1,8 +1,5 @@
-import type {DashboardLayout} from '@/screens/dashboard/lib/use-dashboard-layout';
-import {
-
-  WIDGET_CATALOG
-} from '@/screens/dashboard/lib/use-dashboard-layout'
+import type { DashboardLayout } from '@/screens/dashboard/lib/use-dashboard-layout'
+import { WIDGET_CATALOG } from '@/screens/dashboard/lib/use-dashboard-layout'
 
 /**
  * Edit-mode banner. Renders only when `layout.editMode` is true.
@@ -125,9 +122,7 @@ function Group({
                     ? 'color-mix(in srgb, var(--theme-success) 60%, transparent)'
                     : 'var(--theme-border)'
                 }`,
-                color: visible
-                  ? 'var(--theme-success)'
-                  : 'var(--theme-muted)',
+                color: visible ? 'var(--theme-success)' : 'var(--theme-muted)',
               }}
               title={w.description}
             >

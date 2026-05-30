@@ -13,18 +13,17 @@ import {
 import { ToneMappingMode } from 'postprocessing'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import {
-
-
-  usePlaygroundMultiplayer
-} from '../hooks/use-playground-multiplayer'
-import {  loadAvatarConfig } from '../lib/avatar-config'
+import { usePlaygroundMultiplayer } from '../hooks/use-playground-multiplayer'
+import { loadAvatarConfig } from '../lib/avatar-config'
 import { ScatteredScenery } from './playground-environment'
 import { PlaygroundNpcGlb } from './playground-npc-glb'
 import { SpeechBubble } from './speech-bubble'
 import { useHermesWorldSettings } from './hermesworld-settings'
-import type {AvatarConfig} from '../lib/avatar-config';
-import type {IncomingChat, RemotePlayer as MpRemotePlayer} from '../hooks/use-playground-multiplayer';
+import type { AvatarConfig } from '../lib/avatar-config'
+import type {
+  IncomingChat,
+  RemotePlayer as MpRemotePlayer,
+} from '../hooks/use-playground-multiplayer'
 import type { PlaygroundWorldId } from '../lib/playground-rpg'
 
 /**

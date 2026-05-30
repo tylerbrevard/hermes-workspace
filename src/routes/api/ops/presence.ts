@@ -100,7 +100,9 @@ export const Route = createFileRoute('/api/ops/presence')({
           return json(
             {
               error:
-                error instanceof Error ? error.message : 'Presence action failed',
+                error instanceof Error
+                  ? error.message
+                  : 'Presence action failed',
             },
             { status: 502 },
           )

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  buildChatCockpitTiles,
   buildChatCommandRail,
   buildChatRouteDiagnostics,
   buildChatWorkflowSummary,
@@ -79,13 +80,12 @@ describe('chat workflow summary', () => {
       label: 'Agent Ops',
       model: 'gpt-5',
       provider: 'openai',
-      fallback: 'HTTP refresh fallback armed',
+      fallback: 'HTTP fallback',
       sessionFreshness: 'Fresh 30m ago',
-      lastSave: 'Last save synced',
-      loadingCopy:
-        'Hermes is thinking, streaming tools, and reconciling history',
-      errorRecovery: 'Retry or refresh history',
-      costGuard: 'Cost guard: confirm before long paid runs',
+      lastSave: 'Saved',
+      loadingCopy: 'Thinking + tools',
+      errorRecovery: 'Retry / refresh',
+      costGuard: 'Cost confirm paid runs',
     })
 
     vi.useRealTimers()
@@ -113,6 +113,39 @@ describe('chat workflow summary', () => {
       secretsIncluded: false,
     })
     expect(JSON.stringify(diagnostics)).not.toContain('token')
+  })
+
+  it('builds visible cockpit tiles for chat app state', () => {
+    const summary = buildChatWorkflowSummary({
+      messages: [
+        message(
+          'user',
+          'Needs Tyler approval. Waiting on Alex. Next step: create a task.',
+        ),
+        message('assistant', 'Decision: review before delete in production.', {
+          content: [
+            {
+              type: 'text',
+              text: 'Decision: review before delete in production.',
+            },
+            { type: 'toolCall', id: 'tool-1', name: 'read_file' },
+          ],
+        }),
+      ],
+      label: 'Daily',
+      modelLabel: 'openai/gpt-5',
+      updatedAt: Date.now(),
+      waiting: false,
+      error: null,
+      connectionState: 'connected',
+    })
+
+    expect(buildChatCockpitTiles(summary)).toMatchObject([
+      { id: 'flow', label: 'Flow state', value: 'Ready', tone: 'good' },
+      { id: 'tools', label: 'Tool lane', value: '1', tone: 'good' },
+      { id: 'decisions', label: 'Decision log', value: '1', tone: 'good' },
+      { id: 'risk', label: 'Risk queue', value: '3', tone: 'danger' },
+    ])
   })
 
   it('summarizes resume-latest context and hides first-run rail after success', () => {

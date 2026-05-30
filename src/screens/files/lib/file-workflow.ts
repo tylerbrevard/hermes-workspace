@@ -13,9 +13,8 @@ export type FilesListResponse = {
   entries: Array<FileEntry>
 }
 
-export const FILE_BROWSER_MODE_LABEL = 'Server workspace'
-export const FILE_BROWSER_REMOTE_HELP =
-  'Files are loaded from the Workspace server via /api/files, so remote deployments show files created by the agent.'
+export const FILE_BROWSER_MODE_LABEL = 'Server'
+export const FILE_BROWSER_REMOTE_HELP = '/api/files live workspace'
 
 export type FileReadResponse = {
   type: 'text' | 'image'

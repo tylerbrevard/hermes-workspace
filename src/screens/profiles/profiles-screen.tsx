@@ -18,6 +18,12 @@ import { Button } from '@/components/ui/button'
 import { DialogContent, DialogRoot, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 import { writeTextToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
 import { withBasePath } from '@/lib/base-path'
@@ -128,7 +134,7 @@ export function getProfileValidationBadges(profile: ProfileSummary) {
     {
       label: 'provider',
       status: profile.provider ? 'ok' : 'missing',
-      route: '/settings/providers',
+      route: '/settings?section=claude',
     },
     {
       label: 'model',
@@ -151,12 +157,12 @@ export function getProfileValidationBadges(profile: ProfileSummary) {
 export function getProfileUsedByRoutes(profile: ProfileSummary) {
   const routes = [
     { label: 'Chat', route: '/chat/main' },
-    { label: 'Operations', route: '/operations' },
+    { label: 'Ops', route: '/operations' },
     { label: 'Conductor', route: '/conductor' },
     { label: 'Jobs', route: '/jobs' },
   ]
   if (!profile.provider || !profile.model) {
-    routes.push({ label: 'Settings', route: '/settings/providers' })
+    routes.push({ label: 'Settings', route: '/settings?section=claude' })
   }
   return routes
 }
@@ -175,9 +181,9 @@ export function buildProfileDiffPreview(
 ) {
   const before = currentDescription.trim()
   const after = nextDescription.trim()
-  if (before === after) return 'No description changes.'
+  if (before === after) return 'No prompt changes.'
   return [
-    'Description diff',
+    'Prompt diff',
     `- ${before || '(empty)'}`,
     `+ ${after || '(empty)'}`,
   ].join('\n')
@@ -336,12 +342,49 @@ export function ProfilesScreen() {
           counts.sessions += profile.sessionCount
           if (profile.hasEnv) counts.withEnv += 1
           if (!profile.provider) counts.missingProvider += 1
+          if (!profile.model) counts.missingModel += 1
+          if (getProfileHealth(profile).riskyPermissions) counts.risky += 1
           return counts
         },
-        { skills: 0, sessions: 0, withEnv: 0, missingProvider: 0 },
+        {
+          skills: 0,
+          sessions: 0,
+          withEnv: 0,
+          missingProvider: 0,
+          missingModel: 0,
+          risky: 0,
+        },
       ),
     [profiles],
   )
+  const activeProfileSummary =
+    profiles.find((profile) => profile.name === activeProfile) ?? profiles[0]
+  const activeRouteLinks = getProfileUsedByRoutes(
+    activeProfileSummary ?? {
+      name: activeProfile,
+      path: '',
+      active: true,
+      exists: true,
+      skillCount: 0,
+      sessionCount: 0,
+      hasEnv: false,
+    },
+  )
+  const profileControlPosture = useMemo(() => {
+    if (profileStats.missingProvider > 0)
+      return `${profileStats.missingProvider} need provider setup`
+    if (profileStats.missingModel > 0)
+      return `${profileStats.missingModel} need model setup`
+    if (duplicateProfiles.length > 0)
+      return `${duplicateProfiles.length} duplicate groups`
+    if (profileStats.risky > 0) return `${profileStats.risky} need risk review`
+    return 'Profile routing ready'
+  }, [
+    duplicateProfiles.length,
+    profileStats.missingModel,
+    profileStats.missingProvider,
+    profileStats.risky,
+  ])
 
   async function refreshProfiles() {
     await queryClient.invalidateQueries({ queryKey: ['profiles'] })
@@ -542,65 +585,220 @@ export function ProfilesScreen() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 md:px-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-[calc(var(--tabbar-h,80px)+1rem)] pt-4 md:px-6 md:pb-6">
       <div className="flex flex-col gap-3 rounded-2xl border border-primary-200 bg-primary-50/80 p-4 shadow-sm md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <HugeiconsIcon icon={UserGroupIcon} size={22} strokeWidth={1.7} />
             <h1 className="text-lg font-semibold text-primary-900">Profiles</h1>
           </div>
-          <p className="mt-1 text-sm text-primary-600">
-            Browse and manage Hermes profiles stored under{' '}
-            <span className="font-mono">~/.hermes/profiles</span>.
-          </p>
+          <p className="mt-1 text-sm text-primary-600">Roles, models, env.</p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-primary-500">
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Source: ~/.hermes/profiles
+              Source ~/.hermes/profiles
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Last refreshed: {formatRefreshTime(profilesQuery.dataUpdatedAt)}
+              Refreshed {formatRefreshTime(profilesQuery.dataUpdatedAt)}
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Health:{' '}
+              Health{' '}
               {profilesQuery.isError
-                ? 'profile list unavailable'
+                ? 'unavailable'
                 : profileStats.missingProvider > 0
-                  ? `${profileStats.missingProvider} without provider`
-                  : 'profiles reachable'}
+                  ? `${profileStats.missingProvider} missing provider`
+                  : 'ok'}
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Active: {activeProfile}
+              Active {activeProfile}
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Duplicate profile detection: {duplicateProfiles.length} groups
+              Duplicates {duplicateProfiles.length}
             </span>
             <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Suggested profile for current page/action:{' '}
-              {suggestedProfile?.name ?? 'none'}
+              Suggested {suggestedProfile?.name ?? 'none'}
             </span>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void copyProfileBundle()}>
-            Import/export profile bundle
+          <Button
+            variant="outline"
+            onClick={() => void copyProfileBundle()}
+            title="Copy profile bundle"
+            aria-label="Copy profile bundle"
+          >
+            <HugeiconsIcon icon={Copy01Icon} size={16} strokeWidth={1.8} />
           </Button>
           <Button onClick={() => setCreateOpen(true)} className="gap-2">
             <HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.8} />
-            Create profile
+            New
           </Button>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-primary-200 bg-primary-50/80 p-4 shadow-sm">
+        <AppSurface className="border-primary-200 bg-primary-50/80 p-3">
+          <AppSectionHeader
+            title={profileControlPosture}
+            meta={`Active ${activeProfile} · ${activeRouteLinks.length} routes`}
+            action={
+              <AppStatusPill
+                tone={
+                  profileStats.missingProvider +
+                    profileStats.missingModel +
+                    profileStats.risky >
+                  0
+                    ? 'amber'
+                    : 'green'
+                }
+              >
+                {profileStats.missingProvider +
+                  profileStats.missingModel +
+                  profileStats.risky >
+                0
+                  ? 'Review'
+                  : 'Ready'}
+              </AppStatusPill>
+            }
+          />
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <AppTile
+              title="Profiles"
+              value={String(profiles.length)}
+              detail={`${sorted.length} visible`}
+              icon={UserGroupIcon}
+              tone="blue"
+              className="min-h-[104px]"
+              onClick={() => setProfileSearch('')}
+            />
+            <AppTile
+              title="Models"
+              value={String(profiles.length - profileStats.missingModel)}
+              detail={
+                profileStats.missingModel > 0
+                  ? `${profileStats.missingModel} missing`
+                  : 'Set'
+              }
+              icon={SparklesIcon}
+              tone={profileStats.missingModel > 0 ? 'amber' : 'green'}
+              className="min-h-[104px]"
+              onClick={() => setProfileSearch('model')}
+            />
+            <AppTile
+              title="Env"
+              value={String(profileStats.withEnv)}
+              detail="Isolated"
+              icon={Key01Icon}
+              tone={profileStats.withEnv === profiles.length ? 'green' : 'amber'}
+              className="min-h-[104px]"
+              onClick={() => setProfileSearch('env')}
+            />
+            <AppTile
+              title="Review"
+              value={String(profileStats.missingProvider + profileStats.risky)}
+              detail={
+                duplicateProfiles.length > 0
+                  ? `${duplicateProfiles.length} duplicates`
+                  : 'Health'
+              }
+              icon={CheckmarkCircle02Icon}
+              tone={
+                profileStats.missingProvider + profileStats.risky > 0
+                  ? 'amber'
+                  : 'green'
+              }
+              className="min-h-[104px]"
+              onClick={() => setProfileSearch('')}
+            />
+          </div>
+        </AppSurface>
+        <div className="mt-3 grid gap-2 lg:grid-cols-4">
+          {(pinnedProfiles.length
+            ? profiles.filter((profile) =>
+                pinnedProfiles.includes(profile.name),
+              )
+            : [activeProfileSummary, suggestedProfile, ...sorted]
+          )
+            .filter((profile): profile is ProfileSummary => Boolean(profile))
+            .filter(
+              (profile, index, list) =>
+                list.findIndex(
+                  (candidate) => candidate.name === profile.name,
+                ) === index,
+            )
+            .slice(0, 4)
+            .map((profile) => {
+              const health = getProfileHealth(profile)
+              return (
+                <article
+                  key={`control-${profile.name}`}
+                  className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="line-clamp-1 text-sm font-semibold text-primary-900">
+                        {profile.name}
+                      </h3>
+                      <p className="mt-1 line-clamp-2 text-xs text-primary-500">
+                        {profile.provider || 'no provider'} ·{' '}
+                        {profile.model || 'no model'} · {profile.skillCount}{' '}
+                        skills
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        'rounded-md border px-2 py-0.5 text-[10px] font-semibold',
+                        health.score < 70
+                          ? 'border-amber-200 bg-amber-50 text-amber-700'
+                          : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                      )}
+                    >
+                      {health.score}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleActivate(profile.name)}
+                      disabled={profile.active || busyName === profile.name}
+                      className="rounded-md border border-primary-200 bg-primary-50 px-2 py-1 text-[10px] font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50"
+                    >
+                      {profile.active ? 'Active' : 'Use'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailsName(profile.name)}
+                      className="rounded-md px-2 py-1 text-[10px] text-primary-500 transition-colors hover:bg-primary-100"
+                    >
+                      Details
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+          {activeRouteLinks.slice(0, 4).map((link) => (
+            <a
+              key={`control-route-${link.label}`}
+              href={withBasePath(link.route)}
+              className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2 text-left text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100"
+            >
+              Open {link.label}
+            </a>
+          ))}
+        </div>
+      </section>
 
       <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             value={profileSearch}
             onChange={(event) => setProfileSearch(event.target.value)}
-            placeholder="Search by capability, workflow, role, model, or tool access"
+            placeholder="Search profiles"
             className="h-10 min-w-0 flex-1"
           />
           <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-xs text-primary-500">
-            Tags: role · workflow · model preference · tool access
+            role · model · tools
           </span>
         </div>
       </div>
@@ -609,14 +807,13 @@ export function ProfilesScreen() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500">
-              Active profile
+              Active
             </div>
             <div className="mt-1 text-lg font-semibold text-primary-900">
               {activeProfile}
             </div>
             <div className="mt-1 text-sm text-primary-600">
-              Used by Chat, Operations, Conductor, Jobs, LILY, tools, and
-              routing.
+              Chat · Ops · Jobs · LILY
             </div>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
@@ -644,51 +841,96 @@ export function ProfilesScreen() {
         </div>
       </section>
 
-      <section className="grid gap-2 md:hidden">
-        {sorted.slice(0, 3).map((profile) => (
-          <article
-            key={`mobile-${profile.name}`}
-            className="rounded-xl border border-primary-200 bg-primary-50/85 px-3 py-2 text-sm"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="font-semibold text-primary-900">
-                  {profile.name}
+      <AppSurface className="grid gap-2 md:hidden">
+        <AppSectionHeader
+          title="Profile stack"
+          meta={`${sorted.length} visible`}
+          action={<AppStatusPill tone="blue">{activeProfile}</AppStatusPill>}
+        />
+        {sorted.map((profile) => {
+          const health = getProfileHealth(profile)
+          return (
+            <article
+              key={`mobile-${profile.name}`}
+              className="rounded-[20px] border border-primary-200 bg-primary-50/85 px-3 py-3 text-sm shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'size-2.5 rounded-full',
+                        profile.active
+                          ? 'bg-emerald-500'
+                          : health.score < 70
+                            ? 'bg-amber-500'
+                            : 'bg-primary-300',
+                      )}
+                    />
+                    <div className="truncate font-semibold text-primary-900">
+                      {profile.name}
+                    </div>
+                  </div>
+                  <div className="mt-1 truncate text-xs text-primary-500">
+                    {profile.provider || 'provider?'} ·{' '}
+                    {profile.model || 'model?'} · {profile.skillCount} skills
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-primary-500">
-                  {profile.active ? 'active' : 'inactive'} ·{' '}
-                  {profile.provider || 'no provider'} ·{' '}
-                  {profile.model || 'no model'}
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={profile.active || busyName === profile.name}
-                onClick={() => void handleActivate(profile.name)}
-                className="rounded-lg border border-primary-200 bg-primary-100/70 px-2 py-1 text-xs text-primary-700 disabled:opacity-50"
-              >
-                Activate
-              </button>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-primary-500">
-              {getProfileTopCapabilities(profile).map((capability) => (
                 <span
-                  key={`${profile.name}-${capability}`}
-                  className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5"
+                  className={cn(
+                    'shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold',
+                    health.score < 70
+                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                  )}
                 >
-                  {capability}
+                  {profile.active ? 'Active' : health.score}
                 </span>
-              ))}
-            </div>
-          </article>
-        ))}
-      </section>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-primary-500">
+                {getProfileTopCapabilities(profile).map((capability) => (
+                  <span
+                    key={`${profile.name}-${capability}`}
+                    className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5"
+                  >
+                    {capability.replace('tool access:', '')}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={profile.active || busyName === profile.name}
+                  onClick={() => void handleActivate(profile.name)}
+                  className="min-h-9 flex-1 rounded-xl border border-primary-200 bg-primary-100/70 px-3 text-xs font-semibold text-primary-700 disabled:opacity-50"
+                >
+                  {profile.active ? 'Current' : 'Use'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailsName(profile.name)}
+                  className="min-h-9 flex-1 rounded-xl border border-primary-200 bg-primary-100/50 px-3 text-xs font-semibold text-primary-700"
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => togglePinnedProfile(profile.name)}
+                  className="min-h-9 rounded-xl border border-primary-200 bg-primary-100/50 px-3 text-xs font-semibold text-primary-700"
+                >
+                  {pinnedProfiles.includes(profile.name) ? 'Pinned' : 'Pin'}
+                </button>
+              </div>
+            </article>
+          )
+        })}
+      </AppSurface>
 
       <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
         <StatChip label="profiles" value={profiles.length} />
         <StatChip label="skills" value={profileStats.skills} />
         <StatChip label="sessions" value={profileStats.sessions} />
-        <StatChip label="with env" value={profileStats.withEnv} />
+        <StatChip label="env" value={profileStats.withEnv} />
       </div>
 
       {profilesQuery.isLoading ? (
@@ -701,7 +943,7 @@ export function ProfilesScreen() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-3">
         {sorted.map((profile) => {
           const busy = busyName === profile.name
           const health = getProfileHealth(profile)
@@ -766,69 +1008,82 @@ export function ProfilesScreen() {
                 <span className="mt-1 inline-block rounded-full bg-primary-100 px-2.5 py-0.5 text-[11px] font-medium text-primary-600 dark:bg-neutral-800 dark:text-neutral-400">
                   {profile.provider || 'no provider'}
                 </span>
-                <p className="mt-3 line-clamp-2 min-h-[2.5rem] px-6 text-center text-xs text-primary-500 dark:text-neutral-400">
-                  {profile.description?.trim() || 'No description yet'}
-                </p>
+                {profile.description?.trim() ? (
+                  <p className="mt-3 line-clamp-2 min-h-[2.5rem] px-6 text-center text-xs text-primary-500 dark:text-neutral-400">
+                    {profile.description.trim()}
+                  </p>
+                ) : (
+                  <div className="mt-3 min-h-[2.5rem]" aria-hidden />
+                )}
                 <div className="mt-2 flex flex-wrap justify-center gap-1.5 px-4 text-[11px]">
                   <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600">
-                    Health score: {health.score}
+                    {health.score}
                   </span>
                   <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600">
-                    Last used:{' '}
-                    {profile.active ? 'current session' : 'usage tracked'}
+                    {profile.active ? 'current' : 'idle'}
                   </span>
                   <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-primary-600">
-                    Success stats: sessions {profile.sessionCount}
+                    Sess {profile.sessionCount}
                   </span>
                   {health.riskyPermissions ? (
                     <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
-                      Destructive actions warning
+                      Risk
                     </span>
                   ) : null}
                 </div>
                 <div className="mt-2 flex flex-wrap justify-center gap-1.5 px-4 text-[11px]">
-                  {tags.slice(0, 4).map((tag) => (
-                    <span
-                      key={`${profile.name}-${tag}`}
-                      className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-primary-500"
-                    >
-                      {tag}
+                  <span
+                    className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-primary-500"
+                    title={tags.join(' · ')}
+                  >
+                    {profile.model || 'model unset'}
+                  </span>
+                  <span
+                    className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-primary-500"
+                    title={tags.join(' · ')}
+                  >
+                    {profile.skillCount} skills
+                  </span>
+                  {profile.hasEnv ? (
+                    <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-primary-500">
+                      env
                     </span>
-                  ))}
+                  ) : null}
                 </div>
                 <div className="mt-2 flex flex-wrap justify-center gap-1.5 px-4 text-[11px]">
-                  {getProfileValidationBadges(profile).map((badge) => (
-                    <a
-                      key={`${profile.name}-${badge.label}`}
-                      href={withBasePath(badge.route)}
-                      className={cn(
-                        'rounded-md border px-2 py-0.5',
-                        badge.status === 'ok'
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : 'border-amber-200 bg-amber-50 text-amber-700',
-                      )}
-                    >
-                      {badge.label}: {badge.status}
-                    </a>
-                  ))}
-                </div>
-                <div className="mt-2 flex flex-wrap justify-center gap-1.5 px-4 text-[11px]">
-                  {getProfileUsedByRoutes(profile).map((link) => (
-                    <a
-                      key={`${profile.name}-${link.label}`}
-                      href={withBasePath(link.route)}
-                      className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-primary-500"
-                    >
-                      {link.label}
-                    </a>
-                  ))}
+                  {getProfileUsedByRoutes(profile)
+                    .slice(0, 3)
+                    .map((link) => (
+                      <a
+                        key={`${profile.name}-${link.label}`}
+                        href={withBasePath(link.route)}
+                        className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-primary-500"
+                      >
+                        {link.label}
+                      </a>
+                    ))}
+                  <span
+                    className={cn(
+                      'rounded-md border px-2 py-0.5',
+                      getProfileValidationBadges(profile).some(
+                        (badge) => badge.status !== 'ok',
+                      )
+                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                    )}
+                    title={getProfileValidationBadges(profile)
+                      .map((badge) => `${badge.label}: ${badge.status}`)
+                      .join(' · ')}
+                  >
+                    checks
+                  </span>
                 </div>
               </div>
 
               {/* Stats ring */}
               <div className="mx-4 mt-4 grid grid-cols-4 divide-x divide-primary-200 rounded-xl border border-primary-200 bg-primary-100/50 dark:divide-neutral-800 dark:border-neutral-800 dark:bg-neutral-900/50">
                 <ProfileStat label="Skills" value={profile.skillCount} />
-                <ProfileStat label="Sessions" value={profile.sessionCount} />
+                <ProfileStat label="Sess" value={profile.sessionCount} />
                 <ProfileStat
                   label="Model"
                   value={profile.model || '\u2014'}
@@ -864,7 +1119,7 @@ export function ProfilesScreen() {
                     size={13}
                     strokeWidth={1.8}
                   />{' '}
-                  Activate
+                  Use
                 </button>
                 <button
                   type="button"
@@ -883,7 +1138,7 @@ export function ProfilesScreen() {
                     size={13}
                     strokeWidth={1.8}
                   />{' '}
-                  Details
+                  Info
                 </button>
                 <button
                   type="button"
@@ -933,10 +1188,7 @@ export function ProfilesScreen() {
 
       {sorted.length === 0 && !profilesQuery.isLoading ? (
         <div className="rounded-2xl border border-dashed border-primary-200 bg-primary-50/70 p-8 text-center text-sm text-primary-600">
-          Clear empty state: ~/.hermes/profiles is missing, unreadable, or has
-          no matching profile. Create a profile, import a profile bundle, or
-          clear search. Do not route Chat, LILY, or agents to an unknown
-          profile. The active profile is{' '}
+          No profiles match. Create, import, or clear search. Active{' '}
           <span className="font-semibold">{activeProfile}</span>.
         </div>
       ) : null}
@@ -957,14 +1209,14 @@ export function ProfilesScreen() {
               </div>
               <div>
                 <DialogTitle className="text-base font-semibold">
-                  Create profile
+                  New profile
                 </DialogTitle>
                 <p className="mt-0.5 text-xs text-primary-500 dark:text-neutral-400">
                   {wizardStep === 1
-                    ? 'Name & template'
+                    ? 'Name + template'
                     : wizardStep === 2
                       ? 'Choose model'
-                      : 'Review & create'}
+                      : 'Review'}
                 </p>
               </div>
             </div>
@@ -1014,7 +1266,7 @@ export function ProfilesScreen() {
               <div className="space-y-5">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-primary-600 dark:text-neutral-400">
-                    Profile name
+                    Name
                   </label>
                   <Input
                     value={newProfileName}
@@ -1032,7 +1284,7 @@ export function ProfilesScreen() {
                     <p className="text-xs text-emerald-600">✓ Valid name</p>
                   ) : (
                     <p className="text-xs text-primary-400 dark:text-neutral-500">
-                      Choose a short, memorable identifier
+                      Short identifier
                     </p>
                   )}
                 </div>
@@ -1045,7 +1297,7 @@ export function ProfilesScreen() {
                         size={13}
                         strokeWidth={1.8}
                       />
-                      Clone from existing
+                      Clone from
                     </span>
                   </label>
                   <select
@@ -1053,7 +1305,7 @@ export function ProfilesScreen() {
                     onChange={(e) => setCloneFrom(e.target.value)}
                     className="h-11 w-full rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm text-primary-900 outline-none transition-colors focus:border-accent-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                   >
-                    <option value="">Start fresh — empty config</option>
+                    <option value="">Fresh config</option>
                     {profiles.map((p) => (
                       <option key={p.name} value={p.name}>
                         {p.name} {p.model ? `(${p.model})` : ''}{' '}
@@ -1062,18 +1314,17 @@ export function ProfilesScreen() {
                     ))}
                   </select>
                   <p className="text-xs text-primary-400 dark:text-neutral-500">
-                    Copies config, skills path, and env from the selected
-                    profile
+                    Copies config, skills, env.
                   </p>
                 </div>
 
                 <div className="rounded-xl border border-primary-200 bg-primary-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40">
                   <p className="text-xs text-primary-500 dark:text-neutral-400">
-                    Profiles are stored under{' '}
+                    Stored under{' '}
                     <code className="rounded bg-primary-100 px-1 py-0.5 font-mono text-[11px] dark:bg-neutral-800">
                       ~/.hermes/profiles/&lt;name&gt;/
                     </code>{' '}
-                    with their own config, skills, sessions, and env.
+                    with config, skills, sessions, env.
                   </p>
                 </div>
               </div>
@@ -1087,12 +1338,11 @@ export function ProfilesScreen() {
                   </label>
                   {loadingModels ? (
                     <div className="flex h-11 items-center rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm text-primary-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-500">
-                      Loading configured models…
+                      Loading models...
                     </div>
                   ) : allModels.length === 0 ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
-                      No models found. Make sure Hermes Agent is running and has
-                      models configured.
+                      No models. Check Hermes Agent/model config.
                     </div>
                   ) : (
                     <select
@@ -1105,7 +1355,7 @@ export function ProfilesScreen() {
                       }}
                       className="h-11 w-full rounded-xl border border-primary-200 bg-primary-50 px-3 text-sm text-primary-900 outline-none transition-colors focus:border-accent-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                     >
-                      <option value="">Skip — configure later</option>
+                      <option value="">Skip</option>
                       {allModels.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name || m.id}
@@ -1125,8 +1375,7 @@ export function ProfilesScreen() {
                 {!wizardModel && !loadingModels && allModels.length > 0 && (
                   <div className="rounded-xl border border-primary-200 bg-primary-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40">
                     <p className="text-xs text-primary-500 dark:text-neutral-400">
-                      Select a model or skip to configure later from profile
-                      details or config.yaml.
+                      Select a model or skip.
                     </p>
                   </div>
                 )}
@@ -1137,7 +1386,7 @@ export function ProfilesScreen() {
               <div className="space-y-4">
                 <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400">
-                    Profile summary with validation and preview
+                    Summary
                   </h3>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SummaryField label="Name" value={newProfileName.trim()} />
@@ -1159,20 +1408,19 @@ export function ProfilesScreen() {
 
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
                   <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                    This will create{' '}
+                    Creates{' '}
                     <code className="rounded bg-emerald-100 px-1 py-0.5 font-mono text-[11px] dark:bg-emerald-900/40">
                       ~/.hermes/profiles/{newProfileName.trim()}/
                     </code>{' '}
                     with config.yaml
                     {cloneFrom ? ` cloned from ${cloneFrom}` : ''}, skills/, and
-                    sessions/ directories.
+                    sessions/.
                   </p>
                 </div>
                 <div className="rounded-xl border border-primary-200 bg-primary-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-900/40">
                   <p className="text-xs text-primary-500 dark:text-neutral-400">
-                    Create/edit validation preview checks malformed profile
-                    files, duplicate names, missing provider/model, and risky
-                    permissions before write.
+                    Validates files, duplicates, provider/model, and risky
+                    permissions.
                   </p>
                 </div>
               </div>
@@ -1229,7 +1477,7 @@ export function ProfilesScreen() {
                     size={14}
                     strokeWidth={1.8}
                   />
-                  Create Profile
+                  Create
                 </Button>
               )}
             </div>
@@ -1257,7 +1505,7 @@ export function ProfilesScreen() {
                   Rename profile
                 </DialogTitle>
                 <p className="mt-0.5 text-xs text-primary-500 dark:text-neutral-400">
-                  Renaming{' '}
+                  Rename{' '}
                   <span className="font-semibold text-primary-700 dark:text-neutral-200">
                     {renameTarget?.name}
                   </span>
@@ -1330,7 +1578,7 @@ export function ProfilesScreen() {
                     {detailsName}
                   </DialogTitle>
                   <p className="mt-0.5 text-xs text-primary-500 dark:text-neutral-400">
-                    Profile details &amp; configuration
+                    Details + config
                   </p>
                 </div>
               </div>
@@ -1340,7 +1588,7 @@ export function ProfilesScreen() {
                 onClick={() => void detailQuery.refetch()}
                 disabled={detailQuery.isFetching}
               >
-                {detailQuery.isFetching ? 'Refreshing…' : 'Refresh'}
+                {detailQuery.isFetching ? 'Refreshing...' : 'Refresh'}
               </Button>
             </div>
           </div>
@@ -1387,7 +1635,7 @@ export function ProfilesScreen() {
                       size={14}
                       strokeWidth={1.8}
                     />
-                    Copy path
+                    Path
                   </Button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -1411,27 +1659,24 @@ export function ProfilesScreen() {
                   />
                 </div>
                 <div className="grid gap-2 text-xs sm:grid-cols-2">
+                  <DetailField label="Ops" value="Conductor · Swarm · Jobs" />
                   <DetailField
-                    label="Operations agents"
-                    value="Conductor · Swarm · Jobs"
+                    label="Audit"
+                    value="created · active · edited"
                   />
                   <DetailField
-                    label="Audit history"
-                    value="created · activated · edited · monitored"
-                  />
-                  <DetailField
-                    label="LILY voice persona"
-                    value={`Use ${detailQuery.data.profile.name} for daily voice handoff`}
+                    label="LILY"
+                    value={`Voice handoff: ${detailQuery.data.profile.name}`}
                   />
                   <DetailField
                     label="Comparison"
-                    value={`Active ${detailQuery.data.profile.active ? 'matches' : 'differs from'} selected profile`}
+                    value={`Active ${detailQuery.data.profile.active ? 'matches' : 'differs'}`}
                   />
                 </div>
                 <div className="rounded-xl border border-primary-200 bg-primary-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900/60">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="text-xs font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400">
-                      Description
+                      Prompt
                     </div>
                     <Button
                       size="sm"
@@ -1446,12 +1691,11 @@ export function ProfilesScreen() {
                     onChange={(event) =>
                       setDescriptionDraft(event.target.value)
                     }
-                    placeholder="What this profile is for, how it should behave, or what makes it different"
+                    placeholder="Role, behavior, differences"
                     className="min-h-[96px] w-full rounded-lg border border-primary-200 bg-primary-100/70 p-3 text-sm text-primary-900 outline-none transition-colors focus:border-accent-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                   />
                   <p className="mt-2 text-xs text-primary-400 dark:text-neutral-500">
-                    Saved into the profile config, so manual file edits show up
-                    here after refresh.
+                    Saved to profile config. Refresh shows file edits.
                   </p>
                   <pre className="mt-3 max-h-32 overflow-auto rounded-lg border border-primary-200 bg-primary-100/70 p-3 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200">
                     {buildProfileDiffPreview(

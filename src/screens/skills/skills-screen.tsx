@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatePresence, motion } from 'motion/react'
+import {
+  AppStoreIcon,
+  Clock01Icon,
+  CommandIcon,
+  PackageIcon,
+  Shield01Icon,
+} from '@hugeicons/core-free-icons'
 import {
   DEFAULT_CATEGORIES,
   PAGE_LIMIT,
@@ -10,15 +16,19 @@ import {
   formatSkillOrigin,
   getSkillCompatibility,
   getSkillDiagnostics,
-  getSkillMutationRisk,
   getSkillProvenance,
   getSkillRouteLinks,
-  getSkillSearchSnippet,
   isSkillBrokenOrReview,
   normalizeSkillUsageKey,
   resolveSkillDataSourceState,
   resolveSkillSearchTier,
 } from './skills-workflow'
+import {
+  FeaturedGrid,
+  MetadataPill,
+  SecurityBadge,
+  SkillsGrid,
+} from './skills-grid'
 import type {
   HubSearchResponse,
   HubSkill,
@@ -31,7 +41,6 @@ import type {
 } from './skills-workflow'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsPanel, TabsTab } from '@/components/ui/tabs'
-import { Switch } from '@/components/ui/switch'
 import {
   DialogContent,
   DialogDescription,
@@ -48,6 +57,12 @@ import { Markdown } from '@/components/prompt-kit/markdown'
 import { cn } from '@/lib/utils'
 import { writeTextToClipboard } from '@/lib/clipboard'
 import { toast } from '@/components/ui/toast'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 
 export function SkillsScreen() {
   const queryClient = useQueryClient()
@@ -325,8 +340,38 @@ export function SkillsScreen() {
           text.includes('browser')
         )
       })
-      .slice(0, 4)
+      .slice(0, 3)
   }, [marketplaceSkills, skills])
+
+  const commandCenterSkills = useMemo(() => {
+    const pinned = skills.filter((skill) => pinnedSkillIds.includes(skill.id))
+    const recent = recentlyUsedSkills.map((entry) => entry.skill)
+    const review = brokenSkills
+    const combined = [...pinned, ...recent, ...recommendedSkills, ...review]
+    const seen = new Set<string>()
+    return combined
+      .filter((skill) => {
+        if (seen.has(skill.id)) return false
+        seen.add(skill.id)
+        return true
+      })
+      .slice(0, 3)
+  }, [
+    brokenSkills,
+    pinnedSkillIds,
+    recentlyUsedSkills,
+    recommendedSkills,
+    skills,
+  ])
+
+  const commandCenterPosture = useMemo(() => {
+    if (brokenSkills.length > 0) return `${brokenSkills.length} need review`
+    if (recentlyUsedSkills.length > 0) {
+      return `${recentlyUsedSkills.length} recently used`
+    }
+    if (recommendedSkills.length > 0) return 'Recommended stack ready'
+    return 'Build a working set'
+  }, [brokenSkills.length, recentlyUsedSkills.length, recommendedSkills.length])
 
   const visibleInstalledSkills = useMemo(() => {
     const base =
@@ -335,26 +380,30 @@ export function SkillsScreen() {
         : focus === 'broken'
           ? brokenSkills
           : skills
-    if (sort !== 'lastUsed') return base
-    return [...base].sort((left, right) => {
-      const leftUsage =
-        usageLookup.get(normalizeSkillUsageKey(left.id)) ??
-        usageLookup.get(normalizeSkillUsageKey(left.name)) ??
-        0
-      const rightUsage =
-        usageLookup.get(normalizeSkillUsageKey(right.id)) ??
-        usageLookup.get(normalizeSkillUsageKey(right.name)) ??
-        0
-      if (leftUsage !== rightUsage) return rightUsage - leftUsage
-      return left.name.localeCompare(right.name)
-    })
+    const sorted =
+      sort !== 'lastUsed'
+        ? base
+        : [...base].sort((left, right) => {
+            const leftUsage =
+              usageLookup.get(normalizeSkillUsageKey(left.id)) ??
+              usageLookup.get(normalizeSkillUsageKey(left.name)) ??
+              0
+            const rightUsage =
+              usageLookup.get(normalizeSkillUsageKey(right.id)) ??
+              usageLookup.get(normalizeSkillUsageKey(right.name)) ??
+              0
+            if (leftUsage !== rightUsage) return rightUsage - leftUsage
+            return left.name.localeCompare(right.name)
+          })
+    return sorted.slice(0, 6)
   }, [brokenSkills, focus, recentlyUsedSkills, skills, sort, usageLookup])
 
   const visibleMarketplaceSkills = useMemo(() => {
-    if (focus === 'available') {
-      return marketplaceSkills.filter((skill) => !skill.installed)
-    }
-    return marketplaceSkills
+    const base =
+      focus === 'available'
+        ? marketplaceSkills.filter((skill) => !skill.installed)
+        : marketplaceSkills
+    return base.slice(0, 6)
   }, [focus, marketplaceSkills])
 
   async function copyCommandAndToast(command: string, message: string) {
@@ -376,7 +425,7 @@ export function SkillsScreen() {
   async function copySkillCommand(skill: SkillSummary) {
     await copyCommandAndToast(
       buildSkillInvocationCommand(skill),
-      'Command palette integration and LILY/voice mapping ready.',
+      'Command ready.',
     )
   }
 
@@ -536,9 +585,9 @@ export function SkillsScreen() {
   }
 
   return (
-    <div className="min-h-full overflow-y-auto bg-surface text-ink">
-      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-4 py-6 pb-[calc(var(--tabbar-h,80px)+1.5rem)] sm:px-6 lg:px-8">
-        <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface text-ink">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 flex-col gap-3 px-3 py-3 pb-[calc(var(--tabbar-h,80px)+0.75rem)] sm:gap-5 sm:px-6 sm:py-6 sm:pb-[calc(var(--tabbar-h,80px)+1.5rem)] lg:px-8">
+        <header className="rounded-2xl border border-primary-200 bg-primary-50/85 p-3 backdrop-blur-xl sm:p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1.5">
               <p className="text-xs font-medium uppercase text-primary-500 tabular-nums">
@@ -548,22 +597,21 @@ export function SkillsScreen() {
                 Skills Browser
               </h1>
               <p className="text-sm text-primary-500 text-pretty sm:text-base">
-                Discover, install, and manage skills across your local workspace
-                and Skills Hub.
+                Local skills, hub, safety.
               </p>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 text-xs [-webkit-overflow-scrolling:touch] sm:grid sm:grid-cols-5 sm:overflow-visible sm:pb-0">
             {[
               ['Installed', skillCounts.installed],
               ['Enabled', skillCounts.enabled],
               ['Built-in', skillCounts.builtin],
-              ['Agent-created', skillCounts.agentCreated],
-              ['Review', skillCounts.review],
+              ['Agent', skillCounts.agentCreated],
+              ['Review', brokenSkills.length],
             ].map(([label, value]) => (
               <div
                 key={String(label)}
-                className="rounded-lg border border-primary-200 bg-primary-100/60 px-3 py-2"
+                className="min-w-[112px] rounded-2xl border border-primary-200 bg-primary-100/60 px-3 py-2 sm:min-w-0"
               >
                 <span className="text-primary-500">{label}</span>
                 <p className="mt-1 text-lg font-semibold text-ink">
@@ -572,163 +620,134 @@ export function SkillsScreen() {
               </div>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-primary-500">
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Source: local skill registry and Skills Hub
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Owner: Hermes Skills
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Last refreshed: {formatRefreshTime(skillsQuery.dataUpdatedAt)}
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Health:{' '}
-              {skillsQuery.isError
-                ? 'installed skills unavailable'
-                : hubQuery.isError && tab === 'marketplace'
-                  ? 'hub search unavailable'
-                  : 'catalog reachable'}
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Data source state: {dataSourceState} · loading · empty ·
-              unavailable · disabled
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Provenance: bundled · curated plugin · local · project · generated
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Actions: dry-run install/update/remove with confirmation
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Security review: mutates files · calls network
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Compatibility: workspace tools checked per skill
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Card telemetry: Broken-skill health · last invoked · Route links ·
-              latest curated version
-            </span>
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1">
-              Command palette invocation mapped
-            </span>
-            <button
-              type="button"
-              onClick={() => void exportSkillInventory()}
-              className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 font-semibold text-primary-700 transition-colors hover:bg-primary-200"
-            >
-              Export skill inventory
-            </button>
-          </div>
-          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-            <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2">
-              <div className="font-semibold text-primary-700">
-                Recommended skills for current visible page
-              </div>
-              <div className="mt-1 text-primary-500">
-                {recommendedSkills.length > 0
-                  ? recommendedSkills.map((skill) => skill.name).join(', ')
-                  : 'No recommendation yet'}
-              </div>
+          <AppSurface className="mt-4">
+            <AppSectionHeader
+              title="Skill command center"
+              meta={`${commandCenterPosture} · ${formatRefreshTime(skillsQuery.dataUpdatedAt)}`}
+              action={
+                <AppStatusPill
+                  tone={
+                    dataSourceState === 'ready'
+                      ? 'green'
+                      : dataSourceState === 'unavailable'
+                        ? 'red'
+                        : 'amber'
+                  }
+                >
+                  {dataSourceState}
+                </AppStatusPill>
+              }
+            />
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <AppTile
+                title="Installed"
+                value={String(skillCounts.installed)}
+                detail="Local stack"
+                icon={PackageIcon}
+                tone="blue"
+                actionLabel="Browse"
+                className="min-h-[118px]"
+                onClick={() => handleFocusChange('installed')}
+              />
+              <AppTile
+                title="Recent"
+                value={String(recentlyUsedSkills.length)}
+                detail="Used skills"
+                icon={Clock01Icon}
+                tone="green"
+                actionLabel="Open"
+                className="min-h-[118px]"
+                onClick={() => handleFocusChange('recent')}
+              />
+              <AppTile
+                title="Review"
+                value={String(brokenSkills.length)}
+                detail="Needs attention"
+                icon={Shield01Icon}
+                tone={brokenSkills.length > 0 ? 'amber' : 'green'}
+                actionLabel="Check"
+                className="min-h-[118px]"
+                onClick={() => handleFocusChange('broken')}
+              />
+              <AppTile
+                title="Hub"
+                value={String(marketplaceSkills.length)}
+                detail="Find skills"
+                icon={AppStoreIcon}
+                tone="purple"
+                actionLabel="Search"
+                className="min-h-[118px]"
+                onClick={() => handleFocusChange('available')}
+              />
             </div>
-            <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2">
-              <div className="font-semibold text-primary-700">
-                Mobile compact launcher
-              </div>
-              <div className="mt-1 text-primary-500">
-                Top skills:{' '}
-                {recentlyUsedSkills
-                  .slice(0, 3)
-                  .map((entry) => entry.skill.name)
-                  .join(', ') || 'pinned skills will appear here'}
-              </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-3">
+              {(commandCenterSkills.length
+                ? commandCenterSkills
+                : recommendedSkills
+              ).map((skill) => (
+                <article
+                  key={`command-${skill.id}`}
+                  className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="line-clamp-1 text-xs font-semibold text-ink">
+                        {skill.icon} {skill.name}
+                      </h3>
+                      <p className="mt-1 line-clamp-1 text-[11px] text-primary-500">
+                        {getSkillCompatibility(skill)}
+                      </p>
+                    </div>
+                    <SecurityBadge security={skill.security} compact />
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void copySkillCommand(skill)}
+                      className="rounded-md border border-primary-200 px-2 py-1 text-[10px] font-medium text-primary-700 transition-colors hover:bg-primary-100"
+                    >
+                      Invoke
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSkill(skill)}
+                      className="rounded-md px-2 py-1 text-[10px] text-primary-500 transition-colors hover:bg-primary-100"
+                    >
+                      Details
+                    </button>
+                  </div>
+                </article>
+              ))}
             </div>
-            <div className="rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2">
-              <div className="font-semibold text-primary-700">
-                Create skill onboarding wizard
-              </div>
-              <div className="mt-1 text-primary-500">
-                Task intent search, docs preview, latest curated compare, and
-                LILY/voice command mapping are surfaced on each card.
-              </div>
-            </div>
-          </div>
-          {pinnedSkillIds.length > 0 ? (
-            <div className="mt-3 rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2 text-xs text-primary-600">
-              <div className="font-semibold text-primary-700">
-                Favorite skills
-              </div>
-              <div className="mt-1">
-                {skills
-                  .filter((skill) => pinnedSkillIds.includes(skill.id))
-                  .map((skill) => skill.name)
-                  .join(', ') || 'Pinned skills will appear here'}
-              </div>
-            </div>
-          ) : null}
-          <div className="mt-4 grid grid-cols-2 gap-2 text-left text-xs sm:grid-cols-4">
-            {[
-              {
-                key: 'recent' as const,
-                label: 'Recently Used',
-                value: recentlyUsedSkills.length,
-                hint:
-                  usageQuery.data?.skillsUsage?.distinctSkills != null
-                    ? `${usageQuery.data.skillsUsage.distinctSkills} used in window`
-                    : 'usage loading',
-              },
-              {
-                key: 'installed' as const,
-                label: 'Installed',
-                value: skillCounts.installed,
-                hint: `${skillCounts.enabled} enabled`,
-              },
-              {
-                key: 'available' as const,
-                label: 'Available',
-                value:
-                  tab === 'marketplace'
-                    ? visibleMarketplaceSkills.filter(
-                        (skill) => !skill.installed,
-                      ).length
-                    : 'Hub',
-                hint: 'open marketplace',
-              },
-              {
-                key: 'broken' as const,
-                label: 'Broken / Review',
-                value: brokenSkills.length,
-                hint: 'disabled or risky',
-              },
-            ].map((item) => (
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              {[
+                { key: 'recent' as const, label: 'Recent' },
+                { key: 'broken' as const, label: 'Review' },
+                { key: 'available' as const, label: 'Find new' },
+                { key: 'installed' as const, label: 'Installed' },
+              ].map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  onClick={() => handleFocusChange(action.key)}
+                  className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-left text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100"
+                >
+                  {action.label}
+                </button>
+              ))}
               <button
-                key={item.key}
                 type="button"
-                onClick={() => handleFocusChange(item.key)}
-                className={cn(
-                  'rounded-xl border px-3 py-2 text-left transition-colors',
-                  focus === item.key ||
-                    (item.key === 'available' && tab === 'marketplace')
-                    ? 'border-accent-500/50 bg-accent-500/10 text-ink'
-                    : 'border-primary-200 bg-primary-100/50 text-primary-600 hover:bg-primary-100',
-                )}
+                onClick={() => void exportSkillInventory()}
+                className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-left text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100"
+                title="Export skill inventory"
               >
-                <span className="block text-[10px] font-semibold uppercase tracking-wide">
-                  {item.label}
-                </span>
-                <span className="mt-1 block text-xl font-semibold text-ink">
-                  {String(item.value)}
-                </span>
-                <span className="mt-0.5 block truncate text-[11px] text-primary-500">
-                  {item.hint}
-                </span>
+                Export
               </button>
-            ))}
-          </div>
+            </div>
+          </AppSurface>
         </header>
 
-        <section className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl sm:p-4">
+        <section className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-primary-200 bg-primary-50/80 p-3 backdrop-blur-xl sm:p-4">
           <Tabs value={tab} onValueChange={handleTabChange}>
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -736,8 +755,8 @@ export function SkillsScreen() {
                 onChange={(event) => handleSearchChange(event.target.value)}
                 placeholder={
                   tab === 'marketplace'
-                    ? 'Search Skills Hub, GitHub, and local fallback'
-                    : 'Search by task intent, skill name, tags, or description'
+                    ? 'Search hub, GitHub, local'
+                    : 'Search skill, tag, task'
                 }
                 className="h-9 w-full min-w-0 flex-1 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none transition-colors focus:border-primary sm:min-w-[220px]"
               />
@@ -762,9 +781,9 @@ export function SkillsScreen() {
                   onChange={(event) => handleOriginChange(event.target.value)}
                   className="h-9 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none"
                 >
-                  <option value="All">All Origins</option>
+                  <option value="All">All</option>
                   <option value="builtin">Built-in</option>
-                  <option value="agent-created">Agent-created</option>
+                  <option value="agent-created">Agent</option>
                   <option value="marketplace">Marketplace</option>
                 </select>
               ) : null}
@@ -783,7 +802,7 @@ export function SkillsScreen() {
                   }
                   className="h-9 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none"
                 >
-                  <option value="name">Name A-Z</option>
+                  <option value="name">Name</option>
                   <option value="category">Category</option>
                   <option value="lastUsed">Last used</option>
                 </select>
@@ -808,10 +827,10 @@ export function SkillsScreen() {
               </p>
             ) : null}
 
-            <TabsPanel value="installed" className="pt-2">
+            <TabsPanel value="installed" className="min-h-0 overflow-y-auto pt-2">
               {focus === 'recent' && recentlyUsedSkills.length > 0 ? (
                 <div className="mb-3 rounded-xl border border-primary-200 bg-primary-100/50 px-3 py-2 text-xs text-primary-600">
-                  Showing recently used skills first:{' '}
+                  Recent first:{' '}
                   {recentlyUsedSkills
                     .slice(0, 5)
                     .map((entry) => `${entry.skill.name} (${entry.usage})`)
@@ -829,15 +848,13 @@ export function SkillsScreen() {
                 emptyState={
                   focus === 'recent'
                     ? {
-                        title: 'No recently used skills on this page',
-                        description:
-                          'Clear the focus or search by a skill name from the dashboard usage card.',
+                        title: 'No recent skills',
+                        description: 'Clear focus or search by skill name.',
                       }
                     : focus === 'broken'
                       ? {
-                          title: 'No broken or review-needed skills',
-                          description:
-                            'Disabled skills and medium/high risk skills appear here.',
+                          title: 'No review skills',
+                          description: 'Disabled and risky skills appear here.',
                         }
                       : undefined
                 }
@@ -854,7 +871,7 @@ export function SkillsScreen() {
               />
             </TabsPanel>
 
-            <TabsPanel value="marketplace" className="space-y-3 pt-2">
+            <TabsPanel value="marketplace" className="min-h-0 space-y-3 overflow-y-auto pt-2">
               <div className="flex items-center justify-between gap-2">
                 {hubQuery.data?.source ? (
                   <div className="text-xs text-primary-500">
@@ -875,8 +892,7 @@ export function SkillsScreen() {
                 (hubQuery.data.source === 'installed-fallback' ||
                   hubQuery.data.source === 'error') ? (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-                  Skills Hub search unavailable — showing installed skills
-                  instead. Ensure the Hermes Agent gateway is running.
+                  Hub unavailable. Showing installed skills.
                 </div>
               ) : null}
 
@@ -889,12 +905,10 @@ export function SkillsScreen() {
                 searchInput={searchInput}
                 tab="marketplace"
                 emptyState={{
-                  title: searchInput.trim()
-                    ? 'No hub skills found'
-                    : 'Search the Skills Hub',
+                  title: searchInput.trim() ? 'No hub skills' : 'Search hub',
                   description: searchInput.trim()
-                    ? 'Try a different search term. If Skills Hub is unavailable, local installed skills are used as fallback.'
-                    : 'Start typing to search Skills Hub and other skill sources.',
+                    ? 'Try another term.'
+                    : 'Type to search hub + local.',
                 }}
                 onOpenDetails={setSelectedSkill}
                 onTogglePinned={togglePinnedSkill}
@@ -921,9 +935,7 @@ export function SkillsScreen() {
 
         {tab !== 'marketplace' ? (
           <footer className="flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-2.5 text-sm text-primary-500 tabular-nums">
-            <span>
-              {(skillsQuery.data?.total || 0).toLocaleString()} total skills
-            </span>
+            <span>{(skillsQuery.data?.total || 0).toLocaleString()} total</span>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -989,16 +1001,12 @@ export function SkillsScreen() {
                   />
                   <MetadataPill
                     label="Last invoked"
-                    value={
-                      selectedSkill.enabled
-                        ? 'usage stats tracked'
-                        : 'disabled or unavailable'
-                    }
+                    value={selectedSkill.enabled ? 'tracked' : 'disabled'}
                   />
                 </div>
                 <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
                   <MetadataPill
-                    label="Route links"
+                    label="Routes"
                     value={getSkillRouteLinks(selectedSkill).join(' · ')}
                   />
                   <MetadataPill
@@ -1007,10 +1015,7 @@ export function SkillsScreen() {
                       getSkillDiagnostics(selectedSkill).join(', ') || 'clear'
                     }
                   />
-                  <MetadataPill
-                    label="Latest curated"
-                    value="compare installed vs latest"
-                  />
+                  <MetadataPill label="Latest" value="compare" />
                 </div>
               </div>
 
@@ -1043,7 +1048,7 @@ export function SkillsScreen() {
                         ))
                       ) : (
                         <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-xs text-primary-500">
-                          No triggers listed
+                          No triggers
                         </span>
                       )}
                     </div>
@@ -1078,12 +1083,12 @@ export function SkillsScreen() {
                       {selectedSkill.origin === 'builtin'
                         ? 'Built-in'
                         : selectedSkill.origin === 'agent-created'
-                          ? 'Agent-created'
+                          ? 'Agent'
                           : 'Marketplace'}
                     </span>
                   ) : null}
                   <p className="text-sm text-primary-500 text-pretty">
-                    Source:{' '}
+                    Src{' '}
                     <code className="inline-code">
                       {selectedSkill.sourcePath}
                     </code>
@@ -1095,7 +1100,7 @@ export function SkillsScreen() {
                     size="sm"
                     onClick={() => void copySkillCommand(selectedSkill)}
                   >
-                    Copy invocation
+                    Copy
                   </Button>
                   <Button
                     variant="outline"
@@ -1114,7 +1119,7 @@ export function SkillsScreen() {
                       )
                     }}
                   >
-                    Copy source
+                    Source
                   </Button>
                   {selectedSkill.installed ? (
                     <Button
@@ -1127,7 +1132,7 @@ export function SkillsScreen() {
                         })
                       }}
                     >
-                      Dry-run remove
+                      Remove
                     </Button>
                   ) : (
                     <Button
@@ -1137,7 +1142,7 @@ export function SkillsScreen() {
                         runSkillAction('install', { skillId: selectedSkill.id })
                       }
                     >
-                      Dry-run install
+                      Install
                     </Button>
                   )}
                   <Button
@@ -1153,577 +1158,6 @@ export function SkillsScreen() {
           ) : null}
         </DialogContent>
       </DialogRoot>
-    </div>
-  )
-}
-
-type SkillsGridProps = {
-  skills: Array<SkillSummary>
-  loading: boolean
-  actionSkillId: string | null
-  pinnedSkillIds: Array<string>
-  recentlyUsedIds: Set<string>
-  searchInput: string
-  tab: 'installed' | 'marketplace'
-  emptyState?: {
-    title: string
-    description: string
-  }
-  onOpenDetails: (skill: SkillSummary) => void
-  onTogglePinned: (skillId: string) => void
-  onCopyCommand: (skill: SkillSummary) => void
-  onInstall: (skillId: string) => void
-  onUninstall: (skillId: string) => void
-  onToggle: (skillId: string, enabled: boolean) => void
-}
-
-const SECURITY_BADGE: Record<
-  string,
-  { label: string; badgeClass: string; confidence: string }
-> = {
-  safe: {
-    label: 'Benign',
-    badgeClass: 'bg-green-100 text-green-700 border-green-200',
-    confidence: 'HIGH CONFIDENCE',
-  },
-  low: {
-    label: 'Benign',
-    badgeClass: 'bg-green-100 text-green-700 border-green-200',
-    confidence: 'MODERATE',
-  },
-  medium: {
-    label: 'Caution',
-    badgeClass: 'bg-amber-100 text-amber-700 border-amber-200',
-    confidence: 'REVIEW RECOMMENDED',
-  },
-  high: {
-    label: 'Warning',
-    badgeClass: 'bg-red-100 text-red-700 border-red-200',
-    confidence: 'MANUAL REVIEW',
-  },
-}
-
-function SecurityBadge({
-  security,
-  compact = true,
-}: {
-  security?: SecurityRisk
-  compact?: boolean
-}) {
-  if (!security) return null
-  const config = SECURITY_BADGE[security.level]
-
-  const [expanded, setExpanded] = useState(false)
-
-  // Compact badge for card grid
-  if (compact) {
-    return (
-      <div className="relative">
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors',
-            config.badgeClass,
-          )}
-          onMouseEnter={() => setExpanded(true)}
-          onMouseLeave={() => setExpanded(false)}
-          onClick={(e) => {
-            e.stopPropagation()
-            setExpanded((v) => !v)
-          }}
-        >
-          {config.label}
-        </button>
-        {expanded && (
-          <div
-            className="absolute left-0 bottom-[calc(100%+6px)] z-50 w-72 overflow-hidden rounded-xl border border-primary-200 p-0 shadow-xl"
-            style={{ backgroundColor: 'var(--color-primary-50)' }}
-          >
-            <SecurityScanCard security={security} />
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // Full card for detail dialog
-  return <SecurityScanCard security={security} />
-}
-
-function SecurityScanCard({ security }: { security: SecurityRisk }) {
-  const [showDetails, setShowDetails] = useState(false)
-  const config = SECURITY_BADGE[security.level]
-
-  const summaryText =
-    security.flags.length === 0
-      ? 'No risky patterns detected. This skill appears safe to install.'
-      : security.level === 'high'
-        ? `Found ${security.flags.length} potential security concern${security.flags.length !== 1 ? 's' : ''}. Review before installing.`
-        : `The skill's code was scanned for common risk patterns. ${security.flags.length} item${security.flags.length !== 1 ? 's' : ''} noted.`
-
-  return (
-    <div className="text-xs">
-      <div className="px-3 pt-3 pb-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-primary-400 mb-2">
-          Security Scan
-        </p>
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-primary-500 font-medium w-16 shrink-0">
-              Hermes Workspace
-            </span>
-            <span
-              className={cn(
-                'rounded-md border px-1.5 py-0.5 text-[10px] font-semibold',
-                config.badgeClass,
-              )}
-            >
-              {config.label}
-            </span>
-            <span className="text-[10px] text-primary-400 uppercase tracking-wide font-medium">
-              {config.confidence}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="px-3 pb-2">
-        <p className="text-primary-500 text-pretty leading-relaxed">
-          {summaryText}
-        </p>
-      </div>
-      {security.flags.length > 0 && (
-        <div className="border-t border-primary-100">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowDetails((v) => !v)
-            }}
-            className="flex w-full items-center justify-between px-3 py-2 text-accent-500 hover:text-accent-600 transition-colors"
-          >
-            <span className="text-[11px] font-medium">Details</span>
-            <span className="text-[10px]">{showDetails ? '▲' : '▼'}</span>
-          </button>
-          {showDetails && (
-            <div className="px-3 pb-3 space-y-1">
-              {security.flags.map((flag) => (
-                <div
-                  key={flag}
-                  className="flex items-start gap-2 text-primary-600"
-                >
-                  <span className="mt-0.5 text-[9px] text-primary-400">●</span>
-                  <span>{flag}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      <div className="border-t border-primary-100 px-3 py-2">
-        <p className="text-[10px] text-primary-400 italic">
-          Security scans are advisory. Review code before you run it.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function SkillsGrid({
-  skills,
-  loading,
-  actionSkillId,
-  pinnedSkillIds,
-  recentlyUsedIds,
-  searchInput,
-  tab,
-  emptyState,
-  onOpenDetails,
-  onTogglePinned,
-  onCopyCommand,
-  onInstall,
-  onUninstall,
-  onToggle,
-}: SkillsGridProps) {
-  if (loading) {
-    return <SkillsSkeleton count={tab === 'installed' ? 6 : 9} />
-  }
-
-  if (skills.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-primary-200 bg-primary-100/40 px-4 py-8 text-center">
-        <p className="text-sm font-medium text-primary-700">
-          {emptyState?.title || 'No skills found'}
-        </p>
-        <p className="mt-1 text-xs text-primary-500 text-pretty max-w-sm mx-auto">
-          {emptyState?.description ||
-            'Try adjusting filters, clearing search, or switching to Marketplace for installable skills.'}
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      <AnimatePresence initial={false}>
-        {skills.map((skill) => {
-          const isActing = actionSkillId === skill.id
-          const provenance = getSkillProvenance(skill)
-          const diagnostics = getSkillDiagnostics(skill)
-          const routeLinks = getSkillRouteLinks(skill)
-          const pinned = pinnedSkillIds.includes(skill.id)
-          const recentlyUsed = recentlyUsedIds.has(skill.id)
-          const usageHint = skill.enabled
-            ? 'last invoked: usage tracked'
-            : 'last invoked: disabled'
-          const installRisk = getSkillMutationRisk('install', skill)
-          const removeRisk = getSkillMutationRisk('uninstall', skill)
-          const toggleRisk = getSkillMutationRisk('toggle', skill)
-
-          return (
-            <motion.article
-              key={`${tab}-${skill.id}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.18 }}
-              className={cn(
-                'relative z-0 flex min-h-[220px] min-w-0 flex-col overflow-hidden rounded-2xl border p-4 shadow-sm backdrop-blur-sm hover:z-20 focus-within:z-20',
-                recentlyUsed
-                  ? 'border-accent-500/50 bg-accent-500/10'
-                  : skill.installed
-                    ? 'border-primary-300 bg-primary-50/90'
-                    : 'border-emerald-300/70 bg-emerald-50/70',
-              )}
-            >
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl leading-none">{skill.icon}</span>
-                    <h3 className="line-clamp-1 min-w-0 text-base font-medium text-ink text-balance">
-                      {skill.name}
-                    </h3>
-                  </div>
-                  {skill.author ? (
-                    <p className="line-clamp-1 text-xs text-primary-500">
-                      by {skill.author}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5">
-                  {skill.origin ? (
-                    <span
-                      className={cn(
-                        'rounded-md border px-2 py-0.5 text-xs tabular-nums',
-                        skill.origin === 'builtin' &&
-                          'border-primary-200 bg-primary-100/60 text-primary-500',
-                        skill.origin === 'agent-created' &&
-                          'border-amber-300/70 bg-amber-100/60 text-amber-700 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-amber-200',
-                        skill.origin === 'marketplace' &&
-                          'border-emerald-300/70 bg-emerald-100/60 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/30 dark:text-emerald-200',
-                      )}
-                    >
-                      {skill.origin === 'builtin'
-                        ? 'Built-in'
-                        : skill.origin === 'agent-created'
-                          ? 'Agent-created'
-                          : 'Marketplace'}
-                    </span>
-                  ) : null}
-                  <span
-                    className={cn(
-                      'rounded-md border px-2 py-0.5 text-xs tabular-nums',
-                      skill.installed
-                        ? 'border-primary/40 bg-primary/15 text-primary'
-                        : 'border-primary-200 bg-primary-100/60 text-primary-500',
-                    )}
-                  >
-                    {skill.installed ? 'Installed' : 'Available'}
-                  </span>
-                  {recentlyUsed ? (
-                    <span className="rounded-md border border-accent-500/40 bg-accent-500/10 px-2 py-0.5 text-xs text-ink">
-                      Recent
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              <p className="line-clamp-3 min-h-[58px] text-sm text-primary-500 text-pretty">
-                {skill.description}
-              </p>
-              <p className="mt-2 rounded-lg border border-primary-200 bg-primary-100/50 px-2 py-1 text-xs text-primary-600">
-                {getSkillSearchSnippet(skill, searchInput)}
-              </p>
-
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <SecurityBadge security={skill.security} />
-                <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-xs text-primary-500">
-                  {skill.category}
-                </span>
-                <span
-                  className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-xs text-primary-500"
-                  title={skill.sourcePath || undefined}
-                >
-                  {sourceTail(skill.sourcePath)}
-                </span>
-                {skill.triggers.slice(0, 2).map((trigger) => (
-                  <span
-                    key={`${skill.id}-${trigger}`}
-                    className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-xs text-primary-500"
-                  >
-                    {trigger}
-                  </span>
-                ))}
-              </div>
-
-              <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onOpenDetails(skill)}
-                >
-                  Docs preview
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onTogglePinned(skill.id)}
-                >
-                  {pinned ? 'Pinned' : 'Pin'}
-                </Button>
-
-                {tab === 'installed' ? (
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 text-xs text-primary-500">
-                      <Switch
-                        checked={skill.enabled}
-                        disabled={isActing}
-                        onCheckedChange={(checked) =>
-                          onToggle(skill.id, checked)
-                        }
-                        aria-label={`Toggle ${skill.name}`}
-                      />
-                      {skill.enabled ? 'Enabled' : 'Disabled'} · toggle risk{' '}
-                      {toggleRisk}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isActing}
-                      onClick={() => onUninstall(skill.id)}
-                    >
-                      Remove risk {removeRisk}
-                    </Button>
-                  </div>
-                ) : skill.installed ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isActing}
-                    onClick={() => onUninstall(skill.id)}
-                  >
-                    Remove risk {removeRisk}
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    disabled={isActing}
-                    onClick={() => onInstall(skill.id)}
-                  >
-                    Install risk {installRisk}
-                  </Button>
-                )}
-              </div>
-              <div className="mt-3 space-y-2 border-t border-primary-200 pt-3 text-xs text-primary-500">
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-                    Provenance: {provenance}
-                  </span>
-                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-                    {getSkillCompatibility(skill)}
-                  </span>
-                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-                    {usageHint}
-                  </span>
-                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-                    latest curated version: compare pending
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-                    Broken-skill health:{' '}
-                    {diagnostics.length > 0 ? diagnostics.join(', ') : 'clear'}
-                  </span>
-                  <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5">
-                    Route links: {routeLinks.join(' · ')}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onCopyCommand(skill)}
-                  >
-                    Command palette
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onCopyCommand(skill)}
-                  >
-                    LILY / voice
-                  </Button>
-                </div>
-              </div>
-            </motion.article>
-          )
-        })}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-function MetadataPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-primary-200 bg-primary-100/50 px-2.5 py-2">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-primary-400">
-        {label}
-      </div>
-      <div className="mt-0.5 truncate text-xs font-medium text-primary-800">
-        {value}
-      </div>
-    </div>
-  )
-}
-
-type FeaturedGridProps = {
-  skills: Array<SkillSummary>
-  loading: boolean
-  actionSkillId: string | null
-  onOpenDetails: (skill: SkillSummary) => void
-  onInstall: (skillId: string) => void
-  onUninstall: (skillId: string) => void
-}
-
-function FeaturedGrid({
-  skills,
-  loading,
-  actionSkillId,
-  onOpenDetails,
-  onInstall,
-  onUninstall,
-}: FeaturedGridProps) {
-  if (loading) {
-    return <SkillsSkeleton count={6} large />
-  }
-
-  if (skills.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-primary-200 bg-primary-100/40 px-4 py-10 text-center text-sm text-primary-500 text-pretty">
-        Featured picks are currently unavailable.
-      </div>
-    )
-  }
-
-  return (
-    <div className="grid grid-cols-1 gap-4 pb-2 lg:grid-cols-2">
-      {skills.map((skill) => {
-        const isActing = actionSkillId === skill.id
-        return (
-          <article
-            key={skill.id}
-            className="flex min-h-0 flex-col rounded-2xl border border-primary-200 bg-primary-50/85 p-4 shadow-sm backdrop-blur-sm"
-          >
-            <div className="mb-3 flex items-start justify-between gap-2">
-              <div className="space-y-1">
-                <p className="text-xs font-medium uppercase text-primary-500 tabular-nums">
-                  {skill.featuredGroup || 'Staff Pick'}
-                </p>
-                <h3 className="text-lg font-medium text-ink text-balance">
-                  {skill.icon} {skill.name}
-                </h3>
-                <p className="text-sm text-primary-500">by {skill.author}</p>
-              </div>
-
-              <span
-                className={cn(
-                  'rounded-md border px-2 py-0.5 text-xs tabular-nums',
-                  skill.installed
-                    ? 'border-primary/40 bg-primary/15 text-primary'
-                    : 'border-primary-200 bg-primary-100/60 text-primary-500',
-                )}
-              >
-                {skill.installed ? 'Installed' : 'Staff Pick'}
-              </span>
-            </div>
-
-            <p className="line-clamp-3 mb-3 text-sm text-primary-500 text-pretty">
-              {skill.description}
-            </p>
-
-            <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onOpenDetails(skill)}
-              >
-                Details
-              </Button>
-              {skill.installed ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isActing}
-                  onClick={() => onUninstall(skill.id)}
-                >
-                  Uninstall
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  disabled={isActing}
-                  onClick={() => onInstall(skill.id)}
-                >
-                  Install
-                </Button>
-              )}
-            </div>
-          </article>
-        )
-      })}
-    </div>
-  )
-}
-
-function SkillsSkeleton({
-  count,
-  large = false,
-}: {
-  count: number
-  large?: boolean
-}) {
-  return (
-    <div
-      className={cn(
-        'grid gap-3',
-        large
-          ? 'grid-cols-1 lg:grid-cols-2'
-          : 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3',
-      )}
-    >
-      {Array.from({ length: count }).map((_, index) => (
-        <div
-          key={index}
-          className={cn(
-            'animate-pulse rounded-2xl border border-primary-200 bg-primary-50/70 p-4',
-            large ? 'min-h-[120px]' : 'min-h-[100px]',
-          )}
-        >
-          <div className="mb-3 h-5 w-2/5 rounded-md bg-primary-100" />
-          <div className="mb-2 h-4 w-3/4 rounded-md bg-primary-100" />
-          <div className="h-4 w-1/2 rounded-md bg-primary-100" />
-          <div className="mt-4 h-20 rounded-xl bg-primary-100/80" />
-          <div className="mt-4 h-8 w-1/3 rounded-md bg-primary-100" />
-        </div>
-      ))}
     </div>
   )
 }

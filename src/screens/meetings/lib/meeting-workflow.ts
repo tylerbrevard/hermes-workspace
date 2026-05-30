@@ -102,6 +102,23 @@ export type MeetingReviewFilter =
   | 'missing-notes'
   | 'needs-follow-up'
 
+export type MeetingCockpitAction =
+  | 'sync'
+  | 'prep'
+  | 'follow-up'
+  | 'review'
+  | 'agenda'
+
+export type MeetingCockpitTile = {
+  id: string
+  label: string
+  value: string
+  detail: string
+  tone: 'ok' | 'warn' | 'bad' | 'neutral'
+  action: MeetingCockpitAction
+  progress: number
+}
+
 export function isUnresolvedStatus(status?: string) {
   return !/^(completed|done|resolved|closed)$/i.test(status || 'open')
 }
@@ -148,6 +165,78 @@ export function formatMeetingTitle(title: string) {
     .trim()
 }
 
+export function buildMeetingCockpitTiles({
+  data,
+  nextMeeting,
+  nextNeedsPrep,
+  unresolvedCommitmentCount,
+  unreviewedCount,
+}: {
+  data: MeetingsData | null
+  nextMeeting: Meeting | null
+  nextNeedsPrep: boolean
+  unresolvedCommitmentCount: number
+  unreviewedCount: number
+}): Array<MeetingCockpitTile> {
+  const todayCount = data?.todayMeetings?.length || 0
+  const totalCount = data?.total || data?.meetings?.length || 0
+  const graphDegraded = Boolean(data?.graphWarning || data?.dataWarning)
+  const graphOffline = Boolean(data?.error)
+  const totalForProgress = Math.max(1, totalCount)
+
+  return [
+    {
+      id: 'agenda',
+      label: 'Today',
+      value: String(todayCount),
+      detail: todayCount > 0 ? 'Agenda loaded' : 'Clear',
+      tone: todayCount > 4 ? 'warn' : 'ok',
+      action: 'agenda',
+      progress: Math.min(100, todayCount * 20),
+    },
+    {
+      id: 'next',
+      label: 'Next',
+      value: nextMeeting ? formatMeetingTitle(nextMeeting.title) : 'None',
+      detail: nextNeedsPrep
+        ? 'Prep open'
+        : nextMeeting
+          ? 'Ready'
+          : 'Sync',
+      tone: nextNeedsPrep ? 'warn' : nextMeeting ? 'ok' : 'neutral',
+      action: 'prep',
+      progress: nextMeeting ? 100 : 0,
+    },
+    {
+      id: 'follow-up',
+      label: 'Follow-up',
+      value: String(unresolvedCommitmentCount),
+      detail: unresolvedCommitmentCount > 0 ? 'Route' : 'Clear',
+      tone: unresolvedCommitmentCount > 0 ? 'warn' : 'ok',
+      action: 'follow-up',
+      progress: Math.min(100, unresolvedCommitmentCount * 20),
+    },
+    {
+      id: 'review',
+      label: 'Review',
+      value: String(unreviewedCount),
+      detail: unreviewedCount > 0 ? 'Open' : 'Clear',
+      tone: unreviewedCount > 0 ? 'warn' : 'ok',
+      action: 'review',
+      progress: Math.round((unreviewedCount / totalForProgress) * 100),
+    },
+    {
+      id: 'sync',
+      label: 'Source',
+      value: graphOffline ? 'Offline' : graphDegraded ? 'Degraded' : 'Live',
+      detail: data?.graphSource || 'Unknown',
+      tone: graphOffline ? 'bad' : graphDegraded ? 'warn' : 'ok',
+      action: 'sync',
+      progress: graphOffline ? 0 : graphDegraded ? 55 : 100,
+    },
+  ]
+}
+
 export function meetingMatchesReviewFilter(
   meeting: Meeting,
   filter: MeetingReviewFilter,
@@ -172,9 +261,7 @@ export function meetingMatchesReviewFilter(
       (meeting.actionItems || []).some((item) =>
         isUnresolvedStatus(item.status),
       ) ||
-      (meeting.issues || []).some((issue) =>
-        isUnresolvedStatus(issue.status),
-      )
+      (meeting.issues || []).some((issue) => isUnresolvedStatus(issue.status))
     )
   }
   return true
@@ -266,9 +353,7 @@ export function getMeetingSeverity(meeting: Meeting) {
     (meeting.actionItems || []).some((item) =>
       isUnresolvedStatus(item.status),
     ) ||
-    (meeting.issues || []).some((issue) =>
-      isUnresolvedStatus(issue.status),
-    )
+    (meeting.issues || []).some((issue) => isUnresolvedStatus(issue.status))
   ) {
     return 'attention'
   }
@@ -297,9 +382,7 @@ export function buildMeetingActionTodoItems(
   meeting: Meeting | null,
   carryForwardItems: Array<BriefOpenActionItem> = [],
 ) {
-  const carryForward = Array.isArray(carryForwardItems)
-    ? carryForwardItems
-    : []
+  const carryForward = Array.isArray(carryForwardItems) ? carryForwardItems : []
   const selectedItems = (meeting?.actionItems || [])
     .filter((item) => isUnresolvedStatus(item.status))
     .map((item) => ({
@@ -380,7 +463,7 @@ export function getMeetingTrendInterpretation(
 
 export function getMeetingEmptyState(error?: string | null) {
   if (error && /auth|unauthorized|token/i.test(error)) {
-    return 'Calendar auth required. Repair Graph auth before syncing; do not create manual duplicate meetings.'
+    return 'Calendar auth required. Repair Graph auth before sync.'
   }
-  return 'No meetings in this view. Refresh Graph, clear filters, or open Calendar/Teams; do not mark missing meetings reviewed.'
+  return 'Clear.'
 }

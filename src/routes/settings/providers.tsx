@@ -1,11 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { usePageTitle } from '@/hooks/use-page-title'
-import { ProvidersScreen } from '@/screens/settings/providers-screen'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/settings/providers')({
   ssr: false,
-  component: function SettingsProvidersRoute() {
-    usePageTitle('Provider Setup')
-    return <ProvidersScreen />
+  beforeLoad() {
+    throw redirect({
+      to: '/settings',
+      search: { section: 'claude' },
+      replace: true,
+    })
   },
+  component: () => null,
 })

@@ -2,12 +2,43 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { AgentHubLayout } from './agent-hub-layout'
-import type {AgentRegistryCardData, AgentRegistryStatus} from '@/components/agent-view/agent-registry-card';
 import {
-  AgentRegistryCard
-
-
-} from '@/components/agent-view/agent-registry-card'
+  CATEGORY_ORDER,
+  FALLBACK_AGENT_REGISTRY,
+  STATUS_SORT_ORDER,
+  buildAgentConfigDraft,
+  buildAgentConfigPatchPayload,
+  dedupe,
+  deriveAgentStatus,
+  deriveFriendlyIdFromKey,
+  formatRelativeTime,
+  formatTokenCount,
+  getSessionFriendlyId,
+  getSessionModelName,
+  getSessionStatusBadgeClasses,
+  getSessionTitle,
+  getSessionTokenCount,
+  matchesAgentCronJob,
+  normalizeToken,
+  parseAgentDefinitions,
+  prettyLabel,
+  readString,
+  readTimestamp,
+  safeStringify,
+  scoreSessionMatch,
+  serializeAgentConfigDraft,
+} from './agents-workflow'
+import type { AgentRegistryCardData } from '@/components/agent-view/agent-registry-card'
+import type {
+  AgentConfigData,
+  AgentConfigDraft,
+  AgentConfigPatchPayload,
+  AgentDefinition,
+  AgentRuntime,
+  AgentsData,
+  SessionEntry,
+} from './agents-workflow'
+import { AgentRegistryCard } from '@/components/agent-view/agent-registry-card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -17,318 +48,9 @@ import { toggleAgentPause } from '@/lib/gateway-api'
 import { toast } from '@/components/ui/toast'
 import { usePullToRefresh } from '@/hooks/use-pull-to-refresh'
 
-type AgentGatewayEntry = {
-  id?: string
-  name?: string
-  role?: string
-  category?: string
-  color?: string
-  [key: string]: unknown
-}
-
-type AgentsData = {
-  defaultId?: string
-  mainKey?: string
-  scope?: string
-  agents?: Array<AgentGatewayEntry>
-  [key: string]: unknown
-}
-
-type SessionEntry = {
-  key?: string
-  friendlyId?: string
-  label?: string
-  displayName?: string
-  title?: string
-  derivedTitle?: string
-  task?: string
-  status?: string
-  updatedAt?: number | string
-  enabled?: boolean
-  [key: string]: unknown
-}
-
-type AgentDefinition = {
-  id: string
-  name: string
-  category: string
-  role: string
-  color: AgentRegistryCardData['color']
-  aliases: Array<string>
-}
-
-type AgentRuntime = AgentRegistryCardData & {
-  matchedSessions: Array<SessionEntry>
-}
-
-type AgentConfigToolEntry = {
-  id: string
-  enabled: boolean
-  source: 'allowed' | 'denied' | 'explicit' | 'unknown'
-}
-
-type AgentConfigSkillEntry = {
-  id: string
-  enabled: boolean
-}
-
-type AgentConfigChannelEntry = {
-  id: string
-  enabled: boolean | null
-  config: Record<string, unknown>
-}
-
-type AgentConfigData = {
-  agentId: string
-  name: string
-  workspacePath: string
-  primaryModel: string
-  fallbackModels: Array<string>
-  modelOverride: string
-  tools: Array<AgentConfigToolEntry>
-  skills: Array<AgentConfigSkillEntry>
-  channels: Array<AgentConfigChannelEntry>
-  readOnly: boolean
-  supportsPatch: boolean
-  sourceMethod?: string
-  warning?: string
-}
-
-type AgentConfigDraft = {
-  modelOverride: string
-  tools: Record<string, boolean>
-  skills: Record<string, boolean>
-  channels: Record<string, { enabled: boolean | null; config: Record<string, unknown> }>
-}
-
-type AgentConfigPatchPayload = {
-  modelOverride?: string
-  tools: Record<string, boolean>
-  skills: Record<string, boolean>
-  channels: Record<string, Record<string, unknown>>
-}
-
 type AgentsScreenVariant = 'mission-control' | 'registry'
 type AgentsScreenProps = {
   variant?: AgentsScreenVariant
-}
-
-const CATEGORY_ORDER = ['Core', 'Coding', 'System', 'Integrations'] as const
-
-const STATUS_SORT_ORDER: Record<AgentRegistryStatus, number> = {
-  active: 0,
-  idle: 1,
-  available: 2,
-  paused: 3,
-}
-
-const RUNNING_STATUSES = new Set([
-  'running',
-  'active',
-  'thinking',
-  'processing',
-  'streaming',
-  'in-progress',
-  'inprogress',
-])
-
-const PAUSED_STATUSES = new Set(['paused', 'pause', 'suspended'])
-
-const ACTIVE_HEARTBEAT_MS = 30_000
-
-// Temporary fallback registry until the gateway exposes a dedicated agent registry schema.
-const FALLBACK_AGENT_REGISTRY: Array<AgentDefinition> = [
-  {
-    id: 'aurora-main',
-    name: 'Main Agent',
-    category: 'Core',
-    role: 'Orchestrator',
-    color: 'orange',
-    aliases: ['aurora-main', 'aurora'],
-  },
-  {
-    id: 'codex',
-    name: 'Codex',
-    category: 'Coding',
-    role: 'Coding specialist',
-    color: 'blue',
-    aliases: ['codex', 'coding'],
-  },
-  {
-    id: 'memory-consolidator',
-    name: 'Memory consolidator',
-    category: 'System',
-    role: 'Memory service',
-    color: 'violet',
-    aliases: ['memory-consolidator', 'memory'],
-  },
-  {
-    id: 'telegram-gateway',
-    name: 'Telegram gateway',
-    category: 'Integrations',
-    role: 'Channel bridge',
-    color: 'cyan',
-    aliases: ['telegram-gateway', 'telegram'],
-  },
-]
-
-function readString(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return value.trim()
-}
-
-function readTimestamp(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value < 1_000_000_000_000 ? value * 1000 : value
-  }
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value)
-    if (!Number.isNaN(parsed)) return parsed
-  }
-  return 0
-}
-
-function normalizeToken(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
-function deriveFriendlyIdFromKey(key: string): string {
-  const trimmed = key.trim()
-  if (!trimmed) return ''
-  const parts = trimmed.split(':')
-  const tail = parts[parts.length - 1]
-  return tail && tail.trim().length > 0 ? tail.trim() : trimmed
-}
-
-function inferCategoryFromText(text: string): string {
-  const normalized = normalizeToken(text)
-  if (
-    normalized.includes('codex') ||
-    normalized.includes('coding') ||
-    normalized.includes('developer')
-  ) {
-    return 'Coding'
-  }
-  if (
-    normalized.includes('memory') ||
-    normalized.includes('system') ||
-    normalized.includes('ops')
-  ) {
-    return 'System'
-  }
-  if (
-    normalized.includes('telegram') ||
-    normalized.includes('discord') ||
-    normalized.includes('slack') ||
-    normalized.includes('integration') ||
-    normalized.includes('gateway')
-  ) {
-    return 'Integrations'
-  }
-  return 'Core'
-}
-
-function normalizeCategoryLabel(category: string): string {
-  const normalized = normalizeToken(category)
-  if (normalized === 'core') return 'Core'
-  if (normalized === 'coding') return 'Coding'
-  if (normalized === 'system') return 'System'
-  if (normalized === 'integrations' || normalized === 'integration') {
-    return 'Integrations'
-  }
-  return category
-}
-
-function inferRoleFromCategory(category: string): string {
-  if (category === 'Coding') return 'Coding agent'
-  if (category === 'System') return 'System agent'
-  if (category === 'Integrations') return 'Integration agent'
-  return 'Core agent'
-}
-
-function inferColorFromCategory(
-  category: string,
-): AgentRegistryCardData['color'] {
-  if (category === 'Coding') return 'blue'
-  if (category === 'System') return 'violet'
-  if (category === 'Integrations') return 'cyan'
-  return 'orange'
-}
-
-function dedupe(values: Array<string>): Array<string> {
-  const result: Array<string> = []
-  const seen = new Set<string>()
-
-  values.forEach((value) => {
-    const normalized = normalizeToken(value)
-    if (!normalized || seen.has(normalized)) return
-    seen.add(normalized)
-    result.push(normalized)
-  })
-
-  return result
-}
-
-function prettyLabel(value: string): string {
-  return value
-    .replace(/[-_.]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-}
-
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return ''
-  }
-}
-
-function buildAgentConfigDraft(config: AgentConfigData): AgentConfigDraft {
-  return {
-    modelOverride: config.modelOverride,
-    tools: Object.fromEntries(
-      config.tools.map((entry) => [entry.id, entry.enabled]),
-    ),
-    skills: Object.fromEntries(
-      config.skills.map((entry) => [entry.id, entry.enabled]),
-    ),
-    channels: Object.fromEntries(
-      config.channels.map((entry) => [
-        entry.id,
-        { enabled: entry.enabled, config: entry.config },
-      ]),
-    ),
-  }
-}
-
-function serializeAgentConfigDraft(draft: AgentConfigDraft | null): string {
-  return JSON.stringify(draft ?? null)
-}
-
-function buildAgentConfigPatchPayload(
-  draft: AgentConfigDraft,
-): AgentConfigPatchPayload {
-  return {
-    ...(draft.modelOverride.trim()
-      ? { modelOverride: draft.modelOverride.trim() }
-      : {}),
-    tools: draft.tools,
-    skills: draft.skills,
-    channels: Object.fromEntries(
-      Object.entries(draft.channels).map(([id, value]) => [
-        id,
-        {
-          ...value.config,
-          ...(value.enabled === null ? {} : { enabled: value.enabled }),
-        },
-      ]),
-    ),
-  }
 }
 
 async function fetchAgentConfig(agentId: string): Promise<AgentConfigData> {
@@ -367,289 +89,6 @@ async function patchAgentConfig(
   }
 }
 
-function matchesAgentCronJob(
-  job: Awaited<ReturnType<typeof fetchCronJobs>>[number],
-  definition: AgentDefinition | null,
-  runtimeAgent: AgentRuntime | null,
-): boolean {
-  if (!runtimeAgent) return false
-
-  const tokens = dedupe([
-    runtimeAgent.id,
-    runtimeAgent.name,
-    ...(definition?.aliases ?? []),
-  ])
-
-  const searchBlob = normalizeToken(
-    [
-      job.id,
-      job.name,
-      job.description ?? '',
-      safeStringify(job.payload),
-      safeStringify(job.deliveryConfig),
-    ].join(' '),
-  )
-
-  return tokens.some((token) => {
-    const normalized = normalizeToken(token)
-    return normalized.length > 0 && searchBlob.includes(normalized)
-  })
-}
-
-function toAgentDefinition(
-  value: unknown,
-  index: number,
-): AgentDefinition | null {
-  const record =
-    value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null
-
-  if (!record) return null
-
-  const id = readString(record.id || record.key || record.agentId)
-  const name = readString(record.name || record.label || record.displayName)
-
-  const fallbackId = normalizeToken(id || name)
-  if (!fallbackId) return null
-
-  const categoryRaw = readString(record.category || record.group || record.kind)
-  const roleRaw = readString(record.role || record.description)
-  const colorRaw = normalizeToken(readString(record.color))
-
-  const category = normalizeCategoryLabel(
-    categoryRaw.length > 0
-      ? categoryRaw
-      : inferCategoryFromText(`${fallbackId} ${name}`),
-  )
-
-  let color = inferColorFromCategory(category)
-  if (
-    colorRaw === 'orange' ||
-    colorRaw === 'blue' ||
-    colorRaw === 'cyan' ||
-    colorRaw === 'purple' ||
-    colorRaw === 'violet'
-  ) {
-    color = colorRaw
-  }
-
-  const aliasParts = [
-    id,
-    name,
-    fallbackId,
-    readString(record.profile),
-    readString(record.handle),
-  ]
-
-  const primaryNameToken = normalizeToken(name).split('-')[0] || ''
-  if (primaryNameToken) aliasParts.push(primaryNameToken)
-
-  return {
-    id: fallbackId || `agent-${index + 1}`,
-    name: name || id || `Agent ${index + 1}`,
-    category,
-    role: roleRaw || inferRoleFromCategory(category),
-    color,
-    aliases: dedupe(aliasParts),
-  }
-}
-
-function parseAgentDefinitions(data: AgentsData | undefined): Array<AgentDefinition> | null {
-  if (!data || typeof data !== 'object') return null
-
-  const directAgents = Array.isArray(data.agents) ? data.agents : null
-  if (directAgents) {
-    return directAgents
-      .map((entry, index) => toAgentDefinition(entry, index))
-      .filter((entry): entry is AgentDefinition => entry !== null)
-  }
-
-  const record = data as Record<string, unknown>
-  const alternateLists = ['registry', 'agentDefinitions']
-
-  for (const key of alternateLists) {
-    const list = record[key]
-    if (!Array.isArray(list)) continue
-
-    return list
-      .map((entry, index) => toAgentDefinition(entry, index))
-      .filter((entry): entry is AgentDefinition => entry !== null)
-  }
-
-  const profiles = record.profiles
-  if (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) {
-    const entries = Object.entries(profiles).map(([profileId, profileValue]) => {
-      const profileRecord =
-        profileValue &&
-        typeof profileValue === 'object' &&
-        !Array.isArray(profileValue)
-          ? (profileValue as Record<string, unknown>)
-          : {}
-      return {
-        ...profileRecord,
-        id: profileId,
-        name: readString(profileRecord.name) || profileId,
-      }
-    })
-
-    return entries
-      .map((entry, index) => toAgentDefinition(entry, index))
-      .filter((entry): entry is AgentDefinition => entry !== null)
-  }
-
-  return null
-}
-
-function getSessionSearchBlob(session: SessionEntry): string {
-  const values = [
-    readString(session.key),
-    readString(session.friendlyId),
-    readString(session.label),
-    readString(session.displayName),
-    readString(session.title),
-    readString(session.derivedTitle),
-    readString(session.task),
-    readString(session.agentId),
-    readString(session.agent),
-    readString(session.profile),
-  ]
-
-  return normalizeToken(values.join(' '))
-}
-
-function getSessionFriendlyId(session: SessionEntry | undefined): string {
-  if (!session) return ''
-  const friendlyId = readString(session.friendlyId)
-  if (friendlyId) return friendlyId
-  return deriveFriendlyIdFromKey(readString(session.key))
-}
-
-function getSessionTitle(session: SessionEntry): string {
-  return (
-    readString(session.label) ||
-    readString(session.displayName) ||
-    readString(session.title) ||
-    readString(session.derivedTitle) ||
-    getSessionFriendlyId(session) ||
-    readString(session.key) ||
-    'Session'
-  )
-}
-
-function scoreSessionMatch(agent: AgentDefinition, session: SessionEntry): number {
-  const sessionKey = normalizeToken(readString(session.key))
-  const friendlyId = normalizeToken(readString(session.friendlyId))
-  const blob = getSessionSearchBlob(session)
-
-  let best = 0
-
-  for (const alias of agent.aliases) {
-    if (!alias) continue
-
-    if (sessionKey === alias || friendlyId === alias) {
-      best = Math.max(best, 100)
-      continue
-    }
-
-    if (
-      sessionKey.startsWith(`${alias}-`) ||
-      sessionKey.includes(`:${alias}:`) ||
-      sessionKey.endsWith(`:${alias}`) ||
-      friendlyId.startsWith(`${alias}-`)
-    ) {
-      best = Math.max(best, 85)
-      continue
-    }
-
-    if (blob.includes(alias)) {
-      best = Math.max(best, 65)
-    }
-  }
-
-  return best
-}
-
-function isPausedSession(session: SessionEntry): boolean {
-  const status = normalizeToken(readString(session.status))
-  if (PAUSED_STATUSES.has(status)) return true
-  if (typeof session.enabled === 'boolean') return session.enabled === false
-  return false
-}
-
-function deriveAgentStatus(
-  session: SessionEntry | undefined,
-  pausedOverride: boolean | undefined,
-): AgentRegistryStatus {
-  if (typeof pausedOverride === 'boolean') {
-    if (pausedOverride) return 'paused'
-    if (!session) return 'available'
-  }
-
-  if (!session) return 'available'
-
-  if (isPausedSession(session)) return 'paused'
-
-  const status = normalizeToken(readString(session.status))
-  const updatedAt = readTimestamp(session.updatedAt)
-  const staleMs = updatedAt > 0 ? Date.now() - updatedAt : 0
-  const runningLike = RUNNING_STATUSES.has(status) || status.length === 0
-
-  if (runningLike && (updatedAt <= 0 || staleMs <= ACTIVE_HEARTBEAT_MS)) {
-    return 'active'
-  }
-
-  return 'idle'
-}
-
-function formatRelativeTime(value: unknown): string {
-  const timestamp = readTimestamp(value)
-  if (!timestamp) return 'No activity timestamp'
-
-  const diffMs = Math.max(0, Date.now() - timestamp)
-  const seconds = Math.floor(diffMs / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
-function getSessionTokenCount(session: SessionEntry): number {
-  const rawValue =
-    typeof session.totalTokens === 'number'
-      ? session.totalTokens
-      : typeof session.tokenCount === 'number'
-        ? session.tokenCount
-        : 0
-
-  return Number.isFinite(rawValue) ? rawValue : 0
-}
-
-function getSessionModelName(session: SessionEntry): string {
-  return readString(session.model) || readString(session.agentModel)
-}
-
-function formatTokenCount(value: number): string {
-  return new Intl.NumberFormat('en-US').format(Math.max(0, Math.floor(value)))
-}
-
-function getSessionStatusBadgeClasses(session: SessionEntry): string {
-  const status = normalizeToken(readString(session.status))
-  if (PAUSED_STATUSES.has(status)) {
-    return 'border border-primary-700 bg-primary-800 text-primary-200'
-  }
-  if (RUNNING_STATUSES.has(status) || status.length === 0) {
-    return 'border border-accent-500/40 bg-accent-500/15 text-accent-300'
-  }
-  return 'border border-primary-800 bg-primary-900 text-primary-300'
-}
-
 async function readResponseError(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as Record<string, unknown>
@@ -663,7 +102,9 @@ async function readResponseError(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`
 }
 
-export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps) {
+export function AgentsScreen({
+  variant = 'mission-control',
+}: AgentsScreenProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const missionControlEnabled = variant === 'mission-control'
@@ -678,13 +119,14 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
   const [historyAgentId, setHistoryAgentId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [detailTab, setDetailTab] = useState('overview')
-  const [agentConfigDraft, setAgentConfigDraft] = useState<AgentConfigDraft | null>(
-    null,
-  )
+  const [agentConfigDraft, setAgentConfigDraft] =
+    useState<AgentConfigDraft | null>(null)
 
   // Mobile detection for pull-to-refresh
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(max-width: 767px)').matches,
   )
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)')
@@ -697,7 +139,9 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
   // Pull-to-refresh: attach to the scrollable <main> in workspace-shell
   const scrollContainerRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
-    const el = document.querySelector('main[data-tour="chat-area"]')
+    const el = document.querySelector<HTMLElement>(
+      'main[data-tour="chat-area"]',
+    )
     scrollContainerRef.current = el
   }, [])
 
@@ -740,11 +184,11 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
     void sessionsQuery.refetch()
   }, [agentsQuery, sessionsQuery])
 
-  const { isPulling: agentHubPulling, pullDistance: agentHubPullDistance, threshold: agentHubThreshold } = usePullToRefresh(
-    isMobile,
-    handlePullRefresh,
-    scrollContainerRef,
-  )
+  const {
+    isPulling: agentHubPulling,
+    pullDistance: agentHubPullDistance,
+    threshold: agentHubThreshold,
+  } = usePullToRefresh(isMobile, handlePullRefresh, scrollContainerRef)
 
   useEffect(() => {
     if (!sessionsQuery.isSuccess) return
@@ -773,7 +217,6 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
     FALLBACK_AGENT_REGISTRY.forEach((definition) => {
       merged.set(definition.id, definition)
     })
-
     ;(parsedDefinitions ?? []).forEach((definition) => {
       const existing = merged.get(definition.id)
       if (!existing) {
@@ -871,7 +314,10 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
         if (!sessionKey.includes('subagent:')) return false
         return readTimestamp(session.updatedAt) >= cutoff
       })
-      .sort((left, right) => readTimestamp(right.updatedAt) - readTimestamp(left.updatedAt))
+      .sort(
+        (left, right) =>
+          readTimestamp(right.updatedAt) - readTimestamp(left.updatedAt),
+      )
   }, [runtimeAgents, sessionsQuery.data])
 
   const groupedSections = useMemo(() => {
@@ -891,12 +337,15 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
     ]
 
     return orderedCategories.map((category) => {
-      const agentsInCategory = (grouped.get(category) ?? []).sort((left, right) => {
-        const leftPriority = STATUS_SORT_ORDER[left.status] ?? 9
-        const rightPriority = STATUS_SORT_ORDER[right.status] ?? 9
-        if (leftPriority !== rightPriority) return leftPriority - rightPriority
-        return left.name.localeCompare(right.name)
-      })
+      const agentsInCategory = (grouped.get(category) ?? []).sort(
+        (left, right) => {
+          const leftPriority = STATUS_SORT_ORDER[left.status] ?? 9
+          const rightPriority = STATUS_SORT_ORDER[right.status] ?? 9
+          if (leftPriority !== rightPriority)
+            return leftPriority - rightPriority
+          return left.name.localeCompare(right.name)
+        },
+      )
 
       return {
         category,
@@ -916,7 +365,8 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
   )
 
   const selectedDefinition = useMemo(
-    () => registryDefinitions.find((agent) => agent.id === selectedAgentId) ?? null,
+    () =>
+      registryDefinitions.find((agent) => agent.id === selectedAgentId) ?? null,
     [registryDefinitions, selectedAgentId],
   )
 
@@ -958,9 +408,12 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
       ])
     },
     onError: (error) => {
-      toast(error instanceof Error ? error.message : 'Failed to save agent config', {
-        type: 'error',
-      })
+      toast(
+        error instanceof Error ? error.message : 'Failed to save agent config',
+        {
+          type: 'error',
+        },
+      )
     },
   })
 
@@ -995,7 +448,11 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
     ]).filter((value) => value.length > 0)
 
     return values
-  }, [agentConfigDraft?.modelOverride, selectedAgentConfig, selectedConfigAgent])
+  }, [
+    agentConfigDraft?.modelOverride,
+    selectedAgentConfig,
+    selectedConfigAgent,
+  ])
 
   async function spawnSessionForAgent(
     agent: AgentRegistryCardData,
@@ -1054,7 +511,8 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
 
   async function handleChat(agent: AgentRegistryCardData) {
     const existingFriendlyId =
-      readString(agent.friendlyId) || deriveFriendlyIdFromKey(readString(agent.sessionKey))
+      readString(agent.friendlyId) ||
+      deriveFriendlyIdFromKey(readString(agent.sessionKey))
 
     if (existingFriendlyId) {
       void navigate({
@@ -1245,7 +703,10 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
     : null
 
   const agentHubPullIndicatorStyle = agentHubPulling
-    ? { transform: `translateY(${Math.min(agentHubPullDistance - 8, 48)}px)`, opacity: Math.min(agentHubPullDistance / agentHubThreshold, 1) }
+    ? {
+        transform: `translateY(${Math.min(agentHubPullDistance - 8, 48)}px)`,
+        opacity: Math.min(agentHubPullDistance / agentHubThreshold, 1),
+      }
     : undefined
 
   if (missionControlEnabled) {
@@ -1262,11 +723,15 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
               <span
                 className={[
                   'size-3 rounded-full border-2 border-accent-500',
-                  agentHubPullDistance >= agentHubThreshold ? 'border-t-transparent animate-spin' : 'opacity-50',
+                  agentHubPullDistance >= agentHubThreshold
+                    ? 'border-t-transparent animate-spin'
+                    : 'opacity-50',
                 ].join(' ')}
               />
               <span className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                {agentHubPullDistance >= agentHubThreshold ? 'Release to refresh' : 'Pull to refresh'}
+                {agentHubPullDistance >= agentHubThreshold
+                  ? 'Release to refresh'
+                  : 'Pull to refresh'}
               </span>
             </div>
           </div>
@@ -1343,7 +808,7 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                 }}
                 className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-accent-600 sm:px-4 sm:py-2 sm:text-sm"
               >
-                Open Settings
+                Model
               </button>
             </div>
           ) : (
@@ -1391,7 +856,8 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {unmatchedSessions.map((session, index) => {
                       const sessionKey = readString(session.key)
-                      const sessionTarget = getSessionFriendlyId(session) || sessionKey
+                      const sessionTarget =
+                        getSessionFriendlyId(session) || sessionKey
                       const sessionModel = getSessionModelName(session)
 
                       return (
@@ -1423,7 +889,10 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                             ) : (
                               <span />
                             )}
-                            <span>{formatTokenCount(getSessionTokenCount(session))} tokens</span>
+                            <span>
+                              {formatTokenCount(getSessionTokenCount(session))}{' '}
+                              tokens
+                            </span>
                             <span>{formatRelativeTime(session.updatedAt)}</span>
                           </div>
 
@@ -1466,7 +935,8 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                     {selectedConfigAgent.name}
                   </h2>
                   <p className="mt-1 text-sm text-primary-600">
-                    {selectedAgentConfig?.name && selectedAgentConfig.name !== selectedConfigAgent.name
+                    {selectedAgentConfig?.name &&
+                    selectedAgentConfig.name !== selectedConfigAgent.name
                       ? `${selectedConfigAgent.role} · ${selectedAgentConfig.name}`
                       : selectedConfigAgent.role}
                   </p>
@@ -1500,7 +970,11 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                   >
                     {saveAgentConfigMutation.isPending ? 'Saving...' : 'Save'}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={handleCloseAgentConfig}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCloseAgentConfig}
+                  >
                     Close
                   </Button>
                 </div>
@@ -1524,7 +998,10 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
               ) : (
                 <Tabs value={detailTab} onValueChange={setDetailTab}>
                   <TabsList className="mb-5 flex w-full flex-wrap gap-2 rounded-2xl border border-primary-200 bg-white p-1 text-primary-500 shadow-sm">
-                    <TabsTrigger value="overview" className="min-w-[110px] flex-1">
+                    <TabsTrigger
+                      value="overview"
+                      className="min-w-[110px] flex-1"
+                    >
                       Overview
                     </TabsTrigger>
                     <TabsTrigger value="tools" className="min-w-[92px] flex-1">
@@ -1533,7 +1010,10 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                     <TabsTrigger value="skills" className="min-w-[92px] flex-1">
                       Skills
                     </TabsTrigger>
-                    <TabsTrigger value="channels" className="min-w-[102px] flex-1">
+                    <TabsTrigger
+                      value="channels"
+                      className="min-w-[102px] flex-1"
+                    >
                       Channels
                     </TabsTrigger>
                     <TabsTrigger value="cron" className="min-w-[102px] flex-1">
@@ -1556,7 +1036,8 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                           Name
                         </p>
                         <p className="mt-2 text-sm font-medium text-primary-900">
-                          {selectedAgentConfig?.name || selectedConfigAgent.name}
+                          {selectedAgentConfig?.name ||
+                            selectedConfigAgent.name}
                         </p>
                       </div>
                       <div className="rounded-2xl border border-primary-200 bg-white p-4 shadow-sm">
@@ -1577,7 +1058,9 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                           </p>
                           <p className="mt-2 text-sm font-medium text-primary-900">
                             {selectedAgentConfig?.primaryModel
-                              ? formatModelName(selectedAgentConfig.primaryModel)
+                              ? formatModelName(
+                                  selectedAgentConfig.primaryModel,
+                                )
                               : 'Unavailable'}
                           </p>
                         </div>
@@ -1587,17 +1070,22 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                             Fallbacks
                           </p>
                           <div className="mt-2 flex flex-wrap gap-2">
-                            {(selectedAgentConfig?.fallbackModels ?? []).length > 0 ? (
-                              selectedAgentConfig?.fallbackModels.map((fallback) => (
-                                <span
-                                  key={fallback}
-                                  className="rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700"
-                                >
-                                  {formatModelName(fallback)}
-                                </span>
-                              ))
+                            {(selectedAgentConfig?.fallbackModels ?? [])
+                              .length > 0 ? (
+                              selectedAgentConfig?.fallbackModels.map(
+                                (fallback) => (
+                                  <span
+                                    key={fallback}
+                                    className="rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700"
+                                  >
+                                    {formatModelName(fallback)}
+                                  </span>
+                                ),
+                              )
                             ) : (
-                              <span className="text-sm text-primary-500">No fallback models</span>
+                              <span className="text-sm text-primary-500">
+                                No fallback models
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1674,7 +1162,9 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                             </p>
                           </div>
                           <Switch
-                            checked={agentConfigDraft?.tools[tool.id] ?? tool.enabled}
+                            checked={
+                              agentConfigDraft?.tools[tool.id] ?? tool.enabled
+                            }
                             disabled={
                               selectedAgentConfig.readOnly ||
                               !selectedAgentConfig.supportsPatch
@@ -1703,10 +1193,15 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                             <p className="text-sm font-medium text-primary-900">
                               {prettyLabel(skill.id)}
                             </p>
-                            <p className="text-xs text-primary-500">{skill.id}</p>
+                            <p className="text-xs text-primary-500">
+                              {skill.id}
+                            </p>
                           </div>
                           <Switch
-                            checked={agentConfigDraft?.skills[skill.id] ?? skill.enabled}
+                            checked={
+                              agentConfigDraft?.skills[skill.id] ??
+                              skill.enabled
+                            }
                             disabled={
                               selectedAgentConfig.readOnly ||
                               !selectedAgentConfig.supportsPatch
@@ -1727,8 +1222,10 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                       </div>
                     ) : (
                       selectedAgentConfig?.channels.map((channel) => {
-                        const draftChannel = agentConfigDraft?.channels[channel.id]
-                        const channelConfig = draftChannel?.config ?? channel.config
+                        const draftChannel =
+                          agentConfigDraft?.channels[channel.id]
+                        const channelConfig =
+                          draftChannel?.config ?? channel.config
                         const channelJson = safeStringify(channelConfig)
                         return (
                           <div
@@ -1746,13 +1243,18 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                               </div>
                               {channel.enabled !== null ? (
                                 <Switch
-                                  checked={draftChannel?.enabled ?? channel.enabled}
+                                  checked={
+                                    draftChannel?.enabled ?? channel.enabled
+                                  }
                                   disabled={
                                     selectedAgentConfig.readOnly ||
                                     !selectedAgentConfig.supportsPatch
                                   }
                                   onCheckedChange={(checked) =>
-                                    handleChannelToggle(channel.id, Boolean(checked))
+                                    handleChannelToggle(
+                                      channel.id,
+                                      Boolean(checked),
+                                    )
                                   }
                                 />
                               ) : (
@@ -1786,7 +1288,8 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                           Assigned cron jobs
                         </p>
                         <p className="text-xs text-primary-500">
-                          Matched against agent id, name, aliases, payload, and delivery config.
+                          Matched against agent id, name, aliases, payload, and
+                          delivery config.
                         </p>
                       </div>
                       <Button
@@ -1851,7 +1354,9 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
                               </p>
                               <p className="mt-1">
                                 {job.lastRun?.startedAt
-                                  ? new Date(job.lastRun.startedAt).toLocaleString()
+                                  ? new Date(
+                                      job.lastRun.startedAt,
+                                    ).toLocaleString()
                                   : 'Never'}
                               </p>
                             </div>
@@ -1896,48 +1401,50 @@ export function AgentsScreen({ variant = 'mission-control' }: AgentsScreenProps)
               </p>
             ) : (
               <div className="max-h-[48vh] space-y-2 overflow-auto">
-                {selectedHistoryAgent.matchedSessions.slice(0, 8).map((session, index) => {
-                  const friendlyId = getSessionFriendlyId(session)
-                  const sessionModel = getSessionModelName(session)
-                  return (
-                    <div
-                      key={`${readString(session.key)}-${readString(session.friendlyId)}-${index}`}
-                      className="rounded-xl border border-white/30 bg-white/60 p-2.5 dark:border-white/10 dark:bg-neutral-900/40"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-xs font-medium text-neutral-900 dark:text-neutral-100">
-                          {getSessionTitle(session)}
-                        </p>
-                        <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
-                          {formatRelativeTime(session.updatedAt)}
-                        </span>
-                      </div>
+                {selectedHistoryAgent.matchedSessions
+                  .slice(0, 8)
+                  .map((session, index) => {
+                    const friendlyId = getSessionFriendlyId(session)
+                    const sessionModel = getSessionModelName(session)
+                    return (
+                      <div
+                        key={`${readString(session.key)}-${readString(session.friendlyId)}-${index}`}
+                        className="rounded-xl border border-white/30 bg-white/60 p-2.5 dark:border-white/10 dark:bg-neutral-900/40"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium text-neutral-900 dark:text-neutral-100">
+                            {getSessionTitle(session)}
+                          </p>
+                          <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                            {formatRelativeTime(session.updatedAt)}
+                          </span>
+                        </div>
 
-                      <div className="mt-1 flex items-center justify-between">
-                        <span className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
-                          {sessionModel
-                            ? `${readString(session.status) || 'unknown'} · ${formatModelName(sessionModel)}`
-                            : readString(session.status) || 'unknown'}
-                        </span>
-                        {friendlyId ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHistoryAgentId(null)
-                              void navigate({
-                                to: '/chat/$sessionKey',
-                                params: { sessionKey: friendlyId },
-                              })
-                            }}
-                            className="min-h-11 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-semibold text-accent-700 transition-colors hover:bg-accent-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-accent-300 dark:hover:bg-accent-950/30 sm:px-4 sm:py-2 sm:text-sm"
-                          >
-                            Open Chat
-                          </button>
-                        ) : null}
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
+                            {sessionModel
+                              ? `${readString(session.status) || 'unknown'} · ${formatModelName(sessionModel)}`
+                              : readString(session.status) || 'unknown'}
+                          </span>
+                          {friendlyId ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setHistoryAgentId(null)
+                                void navigate({
+                                  to: '/chat/$sessionKey',
+                                  params: { sessionKey: friendlyId },
+                                })
+                              }}
+                              className="min-h-11 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-semibold text-accent-700 transition-colors hover:bg-accent-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-accent-300 dark:hover:bg-accent-950/30 sm:px-4 sm:py-2 sm:text-sm"
+                            >
+                              Open Chat
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
               </div>
             )}
           </div>

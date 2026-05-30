@@ -2,11 +2,10 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Chat01Icon,
-  CommandLineIcon,
   DashboardSquare01Icon,
-  File01Icon,
   Menu01Icon,
-  UserGroupIcon,
+  Rocket01Icon,
+  Task01Icon,
 } from '@hugeicons/core-free-icons'
 import {
   useCallback,
@@ -45,7 +44,7 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     id: 'phone',
     label: 'Home',
     icon: DashboardSquare01Icon,
-    to: '/phone',
+    to: '/dashboard',
     match: (p) => p === '/dashboard' || p.startsWith('/phone'),
   },
   {
@@ -63,25 +62,22 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     match: (p) => p.startsWith('/lily'),
   },
   {
-    id: 'files',
-    label: 'Files',
-    icon: File01Icon,
-    to: '/files',
-    match: (p) => p.startsWith('/files'),
+    id: 'tasks',
+    label: 'Tasks',
+    icon: Task01Icon,
+    to: '/tasks',
+    match: (p) => p.startsWith('/tasks'),
   },
   {
-    id: 'terminal',
-    label: 'Terminal',
-    icon: CommandLineIcon,
-    to: '/terminal',
-    match: (p) => p.startsWith('/terminal'),
-  },
-  {
-    id: 'swarm',
-    label: 'Swarm',
-    icon: UserGroupIcon,
-    to: '/swarm',
-    match: (p) => p === '/swarm' || p.startsWith('/swarm2'),
+    id: 'run',
+    label: 'Run',
+    icon: Rocket01Icon,
+    to: '/operations',
+    match: (p) =>
+      p.startsWith('/operations') ||
+      p.startsWith('/conductor') ||
+      p === '/swarm' ||
+      p.startsWith('/swarm2'),
   },
 ]
 
@@ -248,7 +244,7 @@ export function MobileTabBar() {
                 aria-current={isActive ? 'page' : undefined}
                 aria-label={tab.label}
                 className={cn(
-                  // 40x40 touch target (slightly smaller to fit 5 tabs)
+                  // 40x40 touch target for a compact app-style dock.
                   'flex items-center justify-center',
                   'size-10 rounded-full',
                   'transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height] duration-200 active:scale-90',

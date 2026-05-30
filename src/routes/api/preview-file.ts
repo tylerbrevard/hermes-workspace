@@ -19,8 +19,6 @@ const MIME_BY_EXT: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8',
   '.md': 'text/plain; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.mjs': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
@@ -34,7 +32,9 @@ const MIME_BY_EXT: Record<string, string> = {
 function allowedPrefixes(): Array<string> {
   const home = os.homedir()
   const claudeHome =
-    process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? resolvePath(home, '.hermes')
+    process.env.HERMES_HOME ??
+    process.env.CLAUDE_HOME ??
+    resolvePath(home, '.hermes')
   return [
     '/tmp',
     `${home}/tmp`,
@@ -82,14 +82,22 @@ export const Route = createFileRoute('/api/preview-file')({
             return new Response('File too large for preview', { status: 413 })
           }
           const body = readFileSync(abs)
-          const mime = MIME_BY_EXT[extname(abs).toLowerCase()] ?? 'application/octet-stream'
+          const mime =
+            MIME_BY_EXT[extname(abs).toLowerCase()] ??
+            'application/octet-stream'
+          if (mime === 'application/octet-stream') {
+            return new Response('Unsupported preview type', { status: 415 })
+          }
           return new Response(body, {
             status: 200,
             headers: {
               'Content-Type': mime,
               'Cache-Control': 'no-store',
+              'Content-Security-Policy':
+                "sandbox; default-src 'none'; img-src 'self' data: blob:; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
               // Restrict referrer so preview content can't phone home with paths
               'Referrer-Policy': 'no-referrer',
+              'X-Content-Type-Options': 'nosniff',
             },
           })
         } catch (error) {

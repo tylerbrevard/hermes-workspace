@@ -12,7 +12,10 @@ const ONE_ON_ONES_DB =
   join(HERMES_WORKSPACE, '.one-on-ones.json')
 const WINS_CACHE_FILE = join(HERMES_WORKSPACE, '.wins-cache.json')
 const WINS_TEAM_MEMBERS_FILE = join(HERMES_WORKSPACE, '.wins-team-members.json')
-const WORKSPACE_SETTINGS_FILE = join(HERMES_WORKSPACE, '.workspace-settings.json')
+const WORKSPACE_SETTINGS_FILE = join(
+  HERMES_WORKSPACE,
+  '.workspace-settings.json',
+)
 const LEGACY_SETTINGS_FILE = join(HERMES_WORKSPACE, '.clawos-settings.json')
 const NOTION_KEY_FILE = join(HOME, '.config', 'notion', 'api_key')
 const WINS_DATA_SOURCE_ID = '3223a60b-cbfa-8126-9dc8-000bbecb3a60'
@@ -90,11 +93,9 @@ function rowToMeeting(row: Record<string, unknown>): BarryMeeting {
   return {
     id: String(row.id || ''),
     date: String(row.date || ''),
-    status: (
-      row.status === 'completed' || row.status === 'archived'
-        ? row.status
-        : 'upcoming'
-    ) as BarryMeetingStatus,
+    status: (row.status === 'completed' || row.status === 'archived'
+      ? row.status
+      : 'upcoming') as BarryMeetingStatus,
     agenda: parseJsonArray(row.agenda_json),
     winsDiscussed: parseJsonArray(row.wins_json),
     actionItems: parseJsonArray(row.actions_json),
@@ -116,7 +117,9 @@ export function listBarryMeetings(): Array<BarryMeeting> {
   }
 }
 
-function normalizeMeeting(input: Partial<BarryMeeting> & { id?: string }): BarryMeeting {
+function normalizeMeeting(
+  input: Partial<BarryMeeting> & { id?: string },
+): BarryMeeting {
   if (!input.id?.trim()) {
     throw new Error('Missing meeting id')
   }
@@ -128,13 +131,17 @@ function normalizeMeeting(input: Partial<BarryMeeting> & { id?: string }): Barry
         ? input.status
         : 'upcoming',
     agenda: Array.isArray(input.agenda) ? input.agenda : [],
-    winsDiscussed: Array.isArray(input.winsDiscussed) ? input.winsDiscussed : [],
+    winsDiscussed: Array.isArray(input.winsDiscussed)
+      ? input.winsDiscussed
+      : [],
     actionItems: Array.isArray(input.actionItems) ? input.actionItems : [],
     notes: input.notes || '',
   }
 }
 
-export function createBarryMeeting(input: Partial<BarryMeeting> & { id?: string }) {
+export function createBarryMeeting(
+  input: Partial<BarryMeeting> & { id?: string },
+) {
   ensureBarrySchema()
   const meeting = normalizeMeeting(input)
   const now = new Date().toISOString()
@@ -149,10 +156,14 @@ export function createBarryMeeting(input: Partial<BarryMeeting> & { id?: string 
   `)
 }
 
-export function updateBarryMeeting(input: Partial<BarryMeeting> & { id?: string }) {
+export function updateBarryMeeting(
+  input: Partial<BarryMeeting> & { id?: string },
+) {
   ensureBarrySchema()
   if (!input.id?.trim()) throw new Error('Missing meeting id')
-  const existing = listBarryMeetings().find((meeting) => meeting.id === input.id)
+  const existing = listBarryMeetings().find(
+    (meeting) => meeting.id === input.id,
+  )
   if (!existing) {
     const error = new Error('Meeting not found') as Error & { status?: number }
     error.status = 404
@@ -202,7 +213,8 @@ function readCurrentUser() {
     {},
   )
   const configuredName =
-    workspaceSettings.profile?.name?.trim() || legacySettings.profile?.name?.trim()
+    workspaceSettings.profile?.name?.trim() ||
+    legacySettings.profile?.name?.trim()
 
   if (configuredName) {
     return configuredName.split(/\s+/)[0]
@@ -229,7 +241,8 @@ function parseNotionWin(page: Record<string, any>): BarryWin {
     win: props.Win?.title ? plainText(props.Win.title) : '',
     category: props.Category?.select?.name || 'Personal Win',
     priority: props.Priority?.select?.name || 'Medium',
-    date: props.Date?.date?.start || String(page.created_time || '').slice(0, 10),
+    date:
+      props.Date?.date?.start || String(page.created_time || '').slice(0, 10),
     costSavings: props['Cost Savings']?.number ?? null,
     impactNote: props['Impact Note']?.rich_text
       ? plainText(props['Impact Note'].rich_text)
@@ -245,7 +258,10 @@ function readWinsCache(): WinsCache | null {
 }
 
 function mergeTeamMembers(wins: Array<BarryWin>): Array<BarryWin> {
-  const index = readJsonFile<Record<string, Array<string>>>(WINS_TEAM_MEMBERS_FILE, {})
+  const index = readJsonFile<Record<string, Array<string>>>(
+    WINS_TEAM_MEMBERS_FILE,
+    {},
+  )
   return wins.map((win) =>
     Array.isArray(index[win.id]) && index[win.id].length > 0
       ? { ...win, teamMembers: index[win.id] }
@@ -283,11 +299,15 @@ async function fetchWinsFromNotion(): Promise<Array<BarryWin>> {
       message?: string
     }
     if (!response.ok) {
-      throw new Error(payload.message || `Notion wins fetch failed (${response.status})`)
+      throw new Error(
+        payload.message || `Notion wins fetch failed (${response.status})`,
+      )
     }
 
     allWins.push(...(payload.results || []).map(parseNotionWin))
-    startCursor = payload.has_more ? payload.next_cursor || undefined : undefined
+    startCursor = payload.has_more
+      ? payload.next_cursor || undefined
+      : undefined
   } while (startCursor)
 
   writeJsonFile(WINS_CACHE_FILE, { wins: allWins, lastFetched: Date.now() })

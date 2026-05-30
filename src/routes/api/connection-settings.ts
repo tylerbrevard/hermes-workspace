@@ -16,15 +16,7 @@ import {
   setGatewayUrl,
 } from '../../server/gateway-capabilities'
 import { requireJsonContentType } from '../../server/rate-limit'
-
-function isValidHttpUrl(u: string): boolean {
-  try {
-    const parsed = new URL(u)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
+import { assertAllowedHermesServiceUrl } from '../../server/service-url-guard'
 
 export const Route = createFileRoute('/api/connection-settings')({
   server: {
@@ -48,24 +40,20 @@ export const Route = createFileRoute('/api/connection-settings')({
           }
           if (body.gateway !== undefined) {
             const value = typeof body.gateway === 'string' ? body.gateway : ''
-            if (value && !isValidHttpUrl(value)) {
-              return json(
-                { error: 'gateway must be a valid http(s) URL' },
-                { status: 400 },
-              )
-            }
-            setGatewayUrl(value)
+            setGatewayUrl(
+              value
+                ? await assertAllowedHermesServiceUrl(value, 'gateway')
+                : value,
+            )
           }
           if (body.dashboard !== undefined) {
             const value =
               typeof body.dashboard === 'string' ? body.dashboard : ''
-            if (value && !isValidHttpUrl(value)) {
-              return json(
-                { error: 'dashboard must be a valid http(s) URL' },
-                { status: 400 },
-              )
-            }
-            setDashboardUrl(value)
+            setDashboardUrl(
+              value
+                ? await assertAllowedHermesServiceUrl(value, 'dashboard')
+                : value,
+            )
           }
           // Reprobe so the UI can immediately reflect the new state.
           await ensureGatewayProbed()
@@ -75,7 +63,8 @@ export const Route = createFileRoute('/api/connection-settings')({
             error instanceof Error
               ? error.message
               : 'Failed to update connection settings'
-          return json({ error: message }, { status: 500 })
+          const status = /must|could not be resolved/.test(message) ? 400 : 500
+          return json({ error: message }, { status })
         }
       },
     },

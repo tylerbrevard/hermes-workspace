@@ -72,23 +72,23 @@ describe('ops intelligence helpers', () => {
   it('classifies stale snapshots and confidence labels', () => {
     const now = new Date('2026-05-27T12:00:00.000Z')
 
-    expect(
-      classifyOpsSnapshotFreshness('2026-05-27T10:00:00.000Z', now),
-    ).toBe('fresh')
-    expect(
-      classifyOpsSnapshotFreshness('2026-05-27T01:00:00.000Z', now),
-    ).toBe('stale')
+    expect(classifyOpsSnapshotFreshness('2026-05-27T10:00:00.000Z', now)).toBe(
+      'fresh',
+    )
+    expect(classifyOpsSnapshotFreshness('2026-05-27T01:00:00.000Z', now)).toBe(
+      'stale',
+    )
     expect(classifyOpsSnapshotFreshness(undefined, now)).toBe('unknown')
 
-    expect(
-      getOpsConfidenceLabel('warn', '2026-05-27T10:00:00.000Z', now),
-    ).toBe('observed')
-    expect(
-      getOpsConfidenceLabel('ok', '2026-05-27T01:00:00.000Z', now),
-    ).toBe('stale')
-    expect(
-      getOpsConfidenceLabel('info', '2026-05-27T10:00:00.000Z', now),
-    ).toBe('inferred')
+    expect(getOpsConfidenceLabel('warn', '2026-05-27T10:00:00.000Z', now)).toBe(
+      'observed',
+    )
+    expect(getOpsConfidenceLabel('ok', '2026-05-27T01:00:00.000Z', now)).toBe(
+      'stale',
+    )
+    expect(getOpsConfidenceLabel('info', '2026-05-27T10:00:00.000Z', now)).toBe(
+      'inferred',
+    )
   })
 
   it('builds empty evidence copy and action routes', () => {

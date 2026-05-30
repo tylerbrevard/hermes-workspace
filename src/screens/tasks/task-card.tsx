@@ -1,3 +1,9 @@
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  UserMultipleIcon,
+} from '@hugeicons/core-free-icons'
 import type { ClaudeTask } from '@/lib/tasks-api'
 import { cn } from '@/lib/utils'
 import { PRIORITY_COLORS, isOverdue } from '@/lib/tasks-api'
@@ -20,7 +26,23 @@ export function formatTaskAssigneeLabel(
   const resolvedLabel = assignee
     ? (assigneeLabels[assignee] ?? assignee)
     : 'Unassigned'
-  return `Assignee: ${resolvedLabel}`
+  return resolvedLabel
+}
+
+export function formatTaskCardText(value: string, maxLength = 86): string {
+  const cleaned = value
+    .replace(/^Source:\s+.*$/i, '')
+    .replace(/\s+Source:\s+.*$/i, '')
+    .replace(/\s+Section:\s+.*$/i, '')
+    .replace(/\s+Unassigned\b.*$/i, '')
+    .replace(/\s+manual\s+no session\b.*$/i, '')
+    .replace(/\s+automation\s+no session\b.*$/i, '')
+    .replace(/\s+created from meeting\s+no session\b.*$/i, '')
+    .replace(/\s+links\b.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (cleaned.length <= maxLength) return cleaned
+  return `${cleaned.slice(0, maxLength - 3).replace(/[.,;:\s]+$/, '')}...`
 }
 
 export function TaskCard({
@@ -35,16 +57,19 @@ export function TaskCard({
 }: Props) {
   const overdue = isOverdue(task)
   const priorityColor = PRIORITY_COLORS[task.priority]
-  const visibleTags = task.tags.slice(0, 2)
-  const extraTagCount = task.tags.length - 2
+  const visibleTags = task.tags
+    .filter((tag) => tag.length <= 18 && !/^workspace-flow-/i.test(tag))
+    .slice(0, 1)
+  const extraTagCount = Math.max(0, task.tags.length - visibleTags.length)
   const assigneeLabel = formatTaskAssigneeLabel(task.assignee, assigneeLabels)
+  const title = formatTaskCardText(task.title, 38)
   const provenance = (() => {
     const text = [task.created_by, task.title, task.description, ...task.tags]
       .join(' ')
       .toLowerCase()
-    if (/chat|session/.test(text)) return 'created from chat'
-    if (/meeting|transcript/.test(text)) return 'created from meeting'
-    if (/note|obsidian|markdown/.test(text)) return 'created from note'
+    if (/chat|session/.test(text)) return 'chat'
+    if (/meeting|transcript/.test(text)) return 'meeting'
+    if (/note|obsidian|markdown/.test(text)) return 'note'
     if (/agent|automation|cron|system/.test(text)) return 'automation'
     return 'manual'
   })()
@@ -54,6 +79,11 @@ export function TaskCard({
         /\b(?:waiting on|follow up with|pending from)\s+([A-Z][A-Za-z0-9._ -]{1,40})/i,
       )?.[1]
       ?.trim() || null
+  const quickActions = [
+    { label: 'Done', action: onComplete, icon: CheckmarkCircle02Icon },
+    { label: 'Defer', action: onDefer, icon: Clock01Icon },
+    { label: 'Delegate', action: onDelegate, icon: UserMultipleIcon },
+  ] as const
 
   return (
     <div
@@ -87,56 +117,48 @@ export function TaskCard({
       />
 
       <p className="text-sm font-medium text-[var(--theme-text)] leading-snug mb-1 line-clamp-2 pr-4">
-        {task.title}
+        {title || task.title}
       </p>
 
-      {task.description && (
-        <p className="text-xs text-[var(--theme-muted)] line-clamp-2 mb-2">
-          {task.description}
-        </p>
-      )}
-
       <div className="mb-2 grid grid-cols-3 gap-1.5">
-        {[
-          ['Done', onComplete],
-          ['Defer', onDefer],
-          ['Delegate', onDelegate],
-        ].map(([label, action]) => (
+        {quickActions.map(({ label, action, icon }) => (
           <button
-            key={String(label)}
+            key={label}
             type="button"
             disabled={!action}
+            title={label}
+            aria-label={label}
             onClick={(event) => {
               event.stopPropagation()
               if (typeof action === 'function') action()
             }}
-            className="min-h-8 rounded-md border border-[var(--theme-border)] px-1.5 text-[10px] font-semibold text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex min-h-8 items-center justify-center rounded-md border border-[var(--theme-border)] px-1.5 text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-hover)] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {String(label)}
+            <HugeiconsIcon icon={icon} size={14} aria-hidden="true" />
           </button>
         ))}
       </div>
 
       <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--theme-hover)] text-[var(--theme-muted)]">
-            {assigneeLabel}
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--theme-hover)] text-[var(--theme-muted)]">
-            {provenance}
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--theme-hover)] text-[var(--theme-muted)]">
-            Diagnostics:{' '}
-            {task.session_id ? 'linked session' : 'no linked session'}
-          </span>
-          {waitingPerson ? (
+          {task.assignee ? (
             <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--theme-hover)] text-[var(--theme-muted)]">
-              Follow-up: {waitingPerson}
+              {assigneeLabel}
             </span>
           ) : null}
           <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--theme-hover)] text-[var(--theme-muted)]">
-            Links: chat/session/meeting/files
+            {provenance}
           </span>
+          {task.session_id ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--theme-hover)] text-[var(--theme-muted)]">
+              session
+            </span>
+          ) : null}
+          {waitingPerson ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--theme-hover)] text-[var(--theme-muted)]">
+              Follow-up
+            </span>
+          ) : null}
           {visibleTags.map((tag) => (
             <span
               key={tag}

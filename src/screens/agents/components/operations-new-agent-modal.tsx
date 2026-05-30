@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown01Icon, Cancel01Icon, PlusSignIcon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  PlusSignIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { AGENT_PRESETS } from '../agent-presets'
-import type {GatewayModelCatalogEntry} from '@/lib/gateway-api';
+import type { GatewayModelCatalogEntry } from '@/lib/gateway-api'
 import { Button } from '@/components/ui/button'
-import {  fetchModels } from '@/lib/gateway-api'
+import { fetchModels } from '@/lib/gateway-api'
 import { cn } from '@/lib/utils'
 
 type PresetOption = {
@@ -41,11 +45,15 @@ type AvailableModel = {
   name: string
 }
 
-function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null {
+function normalizeModel(
+  model: GatewayModelCatalogEntry,
+): AvailableModel | null {
   if (typeof model === 'string') {
     return {
       id: model,
-      provider: model.includes('/') ? (model.split('/')[0] ?? 'model') : 'model',
+      provider: model.includes('/')
+        ? (model.split('/')[0] ?? 'model')
+        : 'model',
       name: model.split('/').pop() ?? model,
     }
   }
@@ -56,7 +64,12 @@ function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null 
   return {
     id,
     provider: model.provider ?? id.split('/')[0] ?? 'model',
-    name: model.label ?? model.displayName ?? model.name ?? id.split('/').pop() ?? id,
+    name:
+      model.label ??
+      model.displayName ??
+      model.name ??
+      id.split('/').pop() ??
+      id,
   }
 }
 
@@ -90,21 +103,26 @@ function ModelSelector({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
+        className="inline-flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
       >
         <span className="truncate">
-          {selected ? `${selected.provider} / ${selected.name}` : 'Default (auto)'}
+          {selected
+            ? `${selected.provider} / ${selected.name}`
+            : 'Default (auto)'}
         </span>
         <HugeiconsIcon
           icon={ArrowDown01Icon}
           size={16}
           strokeWidth={1.8}
-          className={cn('text-[var(--theme-muted)] transition-transform', open && 'rotate-180')}
+          className={cn(
+            'text-[var(--theme-muted)] transition-transform',
+            open && 'rotate-180',
+          )}
         />
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-[calc(100%+0.5rem)] z-[80] w-full overflow-hidden rounded-2xl border border-[var(--theme-border2)] bg-[var(--theme-card)] shadow-[0_24px_80px_var(--theme-shadow)]">
+        <div className="absolute left-0 top-[calc(100%+0.5rem)] z-[80] w-full overflow-hidden rounded-xl border border-[var(--theme-border2)] bg-[var(--theme-card)] shadow-[0_24px_80px_var(--theme-shadow)]">
           <div className="max-h-80 overflow-y-auto p-2">
             {models.map((model) => (
               <button
@@ -199,7 +217,7 @@ export function OperationsNewAgentModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl rounded-3xl border border-[var(--theme-border2)] bg-[var(--theme-card)] p-6 shadow-[0_30px_100px_var(--theme-shadow)]"
+        className="w-full max-w-2xl rounded-2xl border border-[var(--theme-border2)] bg-[var(--theme-card)] p-4 shadow-[0_30px_100px_var(--theme-shadow)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
@@ -208,12 +226,9 @@ export function OperationsNewAgentModal({
               <HugeiconsIcon icon={PlusSignIcon} size={20} strokeWidth={1.8} />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-[var(--theme-text)]">
-                New Agent
+              <h2 className="text-lg font-semibold text-[var(--theme-text)]">
+                Agent
               </h2>
-              <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                Add a persistent Operations agent to the roster.
-              </p>
             </div>
           </div>
           <button
@@ -225,84 +240,92 @@ export function OperationsNewAgentModal({
           </button>
         </div>
 
-        <div className="mt-6 space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">
-            Start from a template
-          </span>
-          <div className="flex flex-wrap gap-2">
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Preset
+            </span>
+            <span className="truncate text-xs text-[var(--theme-muted)]">
+              {PRESET_OPTIONS.find((preset) => preset.id === presetId)?.name}
+            </span>
+          </div>
+          <div className="grid grid-cols-5 gap-2 sm:grid-cols-8">
             {PRESET_OPTIONS.map((preset) => (
               <button
                 key={preset.id}
                 type="button"
                 onClick={() => applyPreset(preset.id)}
+                title={preset.name}
+                aria-label={`Use ${preset.name} preset`}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
+                  'inline-flex aspect-square items-center justify-center rounded-xl border text-lg transition-[color,background-color,border-color,box-shadow,opacity,transform,width,height,max-height]',
                   presetId === preset.id
                     ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-text)]'
                     : 'border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',
                 )}
               >
                 <span aria-hidden="true">{preset.emoji}</span>
-                <span>{preset.name}</span>
               </button>
             ))}
           </div>
-          <p className="text-xs text-[var(--theme-muted)]">
-            Templates fill in emoji, description, and system prompt. You can edit
-            everything before creating.
-          </p>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-[1.2fr_0.6fr]">
+        <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr_0.45fr]">
           <label className="space-y-2">
-            <span className="text-sm font-medium text-[var(--theme-text)]">Name</span>
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Name
+            </span>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Sage"
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-medium text-[var(--theme-text)]">Emoji</span>
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Emoji
+            </span>
             <input
               value={emoji}
               onChange={(event) => setEmoji(event.target.value)}
               placeholder="🐦"
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
           </label>
         </div>
 
         <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">Model</span>
+          <span className="text-sm font-medium text-[var(--theme-text)]">
+            Model
+          </span>
           <ModelSelector value={model} onChange={setModel} models={models} />
         </label>
 
         <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">Description</span>
+          <span className="text-sm font-medium text-[var(--theme-text)]">Role</span>
           <input
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="X/Twitter growth agent"
-            className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+            placeholder="Growth agent"
+            className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
           />
         </label>
 
         <label className="mt-4 block space-y-2">
           <span className="text-sm font-medium text-[var(--theme-text)]">
-            System Prompt
+            Prompt
           </span>
           <textarea
             value={systemPrompt}
             onChange={(event) => setSystemPrompt(event.target.value)}
-            placeholder="You are Sage, an expert..."
-            className="min-h-[180px] w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+            placeholder="Mission, boundaries, voice."
+            className="min-h-32 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
           />
         </label>
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-4 flex justify-end gap-2">
           <Button
             variant="secondary"
             className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
@@ -323,7 +346,7 @@ export function OperationsNewAgentModal({
             }
             disabled={isSaving || !name.trim()}
           >
-            {isSaving ? 'Creating…' : 'Create Agent'}
+            {isSaving ? 'Creating…' : 'Create'}
           </Button>
         </div>
       </div>

@@ -10,7 +10,7 @@ import {
   Link01Icon,
   Message01Icon,
   Search01Icon,
-  Settings01Icon,
+  SlidersHorizontalIcon,
 } from '@hugeicons/core-free-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
@@ -580,14 +580,14 @@ export function KnowledgeBrowserScreen() {
                   backgroundColor: 'var(--theme-card)',
                   color: 'var(--theme-text)',
                 }}
-                title="Knowledge base settings"
+                title="Knowledge source"
               >
                 <HugeiconsIcon
-                  icon={Settings01Icon}
+                  icon={SlidersHorizontalIcon}
                   size={16}
                   strokeWidth={1.7}
                 />
-                <span className="hidden sm:inline">Settings</span>
+                <span className="hidden sm:inline">Source</span>
               </DialogTrigger>
               <DialogContent
                 className="sm:max-w-md"
@@ -600,14 +600,11 @@ export function KnowledgeBrowserScreen() {
                 <div className="space-y-4">
                   <div>
                     <DialogTitle className="text-base font-semibold">
-                      Knowledge Base Settings
+                      Source
                     </DialogTitle>
-                    <DialogDescription
-                      className="mt-1 text-sm"
-                      style={{ color: 'var(--theme-muted)' }}
-                    >
-                      Choose where your knowledge base is located. Changes take
-                      effect immediately.
+                    <DialogDescription className="sr-only">
+                      Choose the local folder or GitHub repository used for the
+                      knowledge base.
                     </DialogDescription>
                   </div>
 

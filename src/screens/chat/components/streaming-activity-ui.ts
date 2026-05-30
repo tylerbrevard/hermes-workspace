@@ -17,7 +17,8 @@ function readStringArg(
   if (!args) return null
   for (const key of keys) {
     const value = args[key]
-    if (typeof value === 'string' && value.trim().length > 0) return value.trim()
+    if (typeof value === 'string' && value.trim().length > 0)
+      return value.trim()
   }
   return null
 }
@@ -70,8 +71,8 @@ export function buildHermesActivitySummary(
     return {
       countLabel: '0 calls',
       statusLabel: 'idle',
-      visibleLabel: 'No active tools',
-      collapsedLabel: 'No active tools',
+      visibleLabel: 'No tools',
+      collapsedLabel: 'No tools',
       runningCount: 0,
       errorCount: 0,
       doneCount: 0,
@@ -103,7 +104,7 @@ export function buildHermesActivitySummary(
         ? `${errorCount} failed`
         : `${doneCount} done`
 
-  const countLabel = `${sections.length} ${sections.length === 1 ? 'call' : 'calls'}`
+  const countLabel = `${sections.length} ${sections.length === 1 ? 'tool' : 'tools'}`
   const visibleLabel = `${visibleLabels}${overflowLabel}`
 
   return {

@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown01Icon, Cancel01Icon, Settings01Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  SlidersHorizontalIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { OperationsSettings } from '../hooks/use-operations'
-import type {GatewayModelCatalogEntry} from '@/lib/gateway-api';
+import type { GatewayModelCatalogEntry } from '@/lib/gateway-api'
 import { Button } from '@/components/ui/button'
-import {  fetchModels } from '@/lib/gateway-api'
+import { fetchModels } from '@/lib/gateway-api'
 import { cn } from '@/lib/utils'
 
 type AvailableModel = {
@@ -14,11 +18,15 @@ type AvailableModel = {
   name: string
 }
 
-function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null {
+function normalizeModel(
+  model: GatewayModelCatalogEntry,
+): AvailableModel | null {
   if (typeof model === 'string') {
     return {
       id: model,
-      provider: model.includes('/') ? (model.split('/')[0] ?? 'model') : 'model',
+      provider: model.includes('/')
+        ? (model.split('/')[0] ?? 'model')
+        : 'model',
       name: model.split('/').pop() ?? model,
     }
   }
@@ -29,7 +37,12 @@ function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null 
   return {
     id,
     provider: model.provider ?? id.split('/')[0] ?? 'model',
-    name: model.label ?? model.displayName ?? model.name ?? id.split('/').pop() ?? id,
+    name:
+      model.label ??
+      model.displayName ??
+      model.name ??
+      id.split('/').pop() ??
+      id,
   }
 }
 
@@ -66,13 +79,18 @@ function ModelSelector({
         className="inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
       >
         <span className="truncate">
-          {selected ? `${selected.provider} / ${selected.name}` : 'Default (auto)'}
+          {selected
+            ? `${selected.provider} / ${selected.name}`
+            : 'Default (auto)'}
         </span>
         <HugeiconsIcon
           icon={ArrowDown01Icon}
           size={16}
           strokeWidth={1.8}
-          className={cn('text-[var(--theme-muted)] transition-transform', open && 'rotate-180')}
+          className={cn(
+            'text-[var(--theme-muted)] transition-transform',
+            open && 'rotate-180',
+          )}
         />
       </button>
 
@@ -87,7 +105,9 @@ function ModelSelector({
               }}
               className={cn(
                 'flex w-full rounded-xl px-3 py-2.5 text-left text-sm',
-                !value ? 'bg-[var(--theme-accent-soft)]' : 'hover:bg-[var(--theme-bg)]',
+                !value
+                  ? 'bg-[var(--theme-accent-soft)]'
+                  : 'hover:bg-[var(--theme-bg)]',
               )}
             >
               Default (auto)
@@ -162,15 +182,16 @@ export function OperationsSettingsModal({
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="flex size-11 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)]">
-              <HugeiconsIcon icon={Settings01Icon} size={20} strokeWidth={1.8} />
+              <HugeiconsIcon
+                icon={SlidersHorizontalIcon}
+                size={20}
+                strokeWidth={1.8}
+              />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-[var(--theme-text)]">
-                Operations Settings
+                Fleet Defaults
               </h2>
-              <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                Defaults stored locally for the Operations screen.
-              </p>
             </div>
           </div>
           <button
@@ -185,11 +206,13 @@ export function OperationsSettingsModal({
         <div className="mt-6 space-y-4">
           <label className="space-y-2">
             <span className="text-sm font-medium text-[var(--theme-text)]">
-              Default model for new agents
+              New-agent model
             </span>
             <ModelSelector
               value={draft.defaultModel}
-              onChange={(defaultModel) => setDraft((current) => ({ ...current, defaultModel }))}
+              onChange={(defaultModel) =>
+                setDraft((current) => ({ ...current, defaultModel }))
+              }
               models={models}
             />
           </label>
@@ -200,7 +223,7 @@ export function OperationsSettingsModal({
                 Auto-approve
               </span>
               <span className="block text-sm text-[var(--theme-muted-2)]">
-                Reserved for future workflow automation.
+                Future workflow automation.
               </span>
             </span>
             <input
@@ -218,7 +241,7 @@ export function OperationsSettingsModal({
 
           <label className="space-y-2">
             <span className="text-sm font-medium text-[var(--theme-text)]">
-              Activity feed length
+              Feed rows
             </span>
             <input
               type="number"
@@ -251,7 +274,7 @@ export function OperationsSettingsModal({
               onClose()
             }}
           >
-            Save Settings
+            Save
           </Button>
         </div>
       </div>

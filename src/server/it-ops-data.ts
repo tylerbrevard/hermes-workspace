@@ -42,9 +42,15 @@ const RECURRING_THEMES = [
   { label: 'Darktrace', keywords: ['darktrace'] },
   { label: 'CrowdStrike Azure gap', keywords: ['crowdstrike'] },
   { label: 'VDI migration', keywords: ['vdi migration', ' vdi '] },
-  { label: 'Server OS upgrades (2016->2022)', keywords: ['os upgrade', '2016 to 2022'] },
+  {
+    label: 'Server OS upgrades (2016->2022)',
+    keywords: ['os upgrade', '2016 to 2022'],
+  },
   { label: 'Cisco CSR replacement', keywords: ['csr router', 'cisco csr'] },
-  { label: 'CWA / Power Platform', keywords: ['cwa', 'power platform', 'powerapp'] },
+  {
+    label: 'CWA / Power Platform',
+    keywords: ['cwa', 'power platform', 'powerapp'],
+  },
   { label: 'LinkSquare -> SharePoint', keywords: ['linksquare'] },
   { label: 'Current Chemicals SD-WAN', keywords: ['sd-wan', 'current chem'] },
   { label: 'BPM server', keywords: ['bpm server'] },
@@ -112,7 +118,10 @@ function execDb(dbPath: string, sql: string) {
 }
 
 function parseParticipants(
-  raw?: string | null | Array<string | { displayName?: string; email?: string }>,
+  raw?:
+    | string
+    | null
+    | Array<string | { displayName?: string; email?: string }>,
 ): Array<string | { displayName?: string; email?: string }> {
   if (!raw) return []
   if (Array.isArray(raw)) return raw
@@ -124,7 +133,9 @@ function parseParticipants(
   }
 }
 
-function participantName(participant: string | { displayName?: string; name?: string; email?: string }) {
+function participantName(
+  participant: string | { displayName?: string; name?: string; email?: string },
+) {
   if (typeof participant === 'string') return participant
   return participant.displayName || participant.name || participant.email || ''
 }
@@ -132,7 +143,9 @@ function participantName(participant: string | { displayName?: string; name?: st
 function isPresent(candidate: string, person: string) {
   const lower = candidate.toLowerCase()
   const parts = person.toLowerCase().split(/\s+/).filter(Boolean)
-  return parts.every((part) => lower.includes(part) || lower.includes(`${part},`))
+  return parts.every(
+    (part) => lower.includes(part) || lower.includes(`${part},`),
+  )
 }
 
 function todayStr() {
@@ -160,7 +173,9 @@ function readConnectWiseConfig(): ConnectWiseConfig | null {
   for (const configPath of candidates) {
     if (!existsSync(configPath)) continue
     try {
-      const parsed = JSON.parse(readFileSync(configPath, 'utf8')) as ConnectWiseConfig
+      const parsed = JSON.parse(
+        readFileSync(configPath, 'utf8'),
+      ) as ConnectWiseConfig
       if (
         parsed.baseUrl &&
         parsed.companyId &&
@@ -193,13 +208,19 @@ async function cwFetch(config: ConnectWiseConfig, requestPath: string) {
   })
 
   if (!response.ok) {
-    throw new Error(`ConnectWise API ${response.status}: ${await response.text()}`)
+    throw new Error(
+      `ConnectWise API ${response.status}: ${await response.text()}`,
+    )
   }
 
   return response.json()
 }
 
-async function safeCWFetch(config: ConnectWiseConfig, requestPath: string, errors: Array<string>) {
+async function safeCWFetch(
+  config: ConnectWiseConfig,
+  requestPath: string,
+  errors: Array<string>,
+) {
   try {
     return await cwFetch(config, requestPath)
   } catch (error) {
@@ -226,7 +247,11 @@ function ensureItOpsSchema() {
   )
 }
 
-function logEscalation(ticketId: string, reason: string, escalatedBy = 'system') {
+function logEscalation(
+  ticketId: string,
+  reason: string,
+  escalatedBy = 'system',
+) {
   ensureItOpsSchema()
   execDb(
     IT_OPS_DB_PATH,
@@ -257,13 +282,19 @@ function getItOpsOverview() {
         parseParticipants(meeting.participants).length > 0,
     )
   const total = hydratedStandups.length
-  const attendanceMap: Record<string, { present: Array<string>; absent: Array<string> }> = {}
+  const attendanceMap: Record<
+    string,
+    { present: Array<string>; absent: Array<string> }
+  > = {}
   const personStats: Record<string, { present: number; absent: number }> = {}
-  for (const name of DIRECT_REPORTS) personStats[name] = { present: 0, absent: 0 }
+  for (const name of DIRECT_REPORTS)
+    personStats[name] = { present: 0, absent: 0 }
 
   for (const meeting of hydratedStandups) {
     const dateKey = meeting.date.slice(0, 10)
-    const participantNames = parseParticipants(meeting.participants).map(participantName).filter(Boolean)
+    const participantNames = parseParticipants(meeting.participants)
+      .map(participantName)
+      .filter(Boolean)
     const present = DIRECT_REPORTS.filter((person) =>
       participantNames.some((candidate) => isPresent(candidate, person)),
     )
@@ -278,27 +309,36 @@ function getItOpsOverview() {
     total,
     present: personStats[name]?.present ?? 0,
     absent: personStats[name]?.absent ?? 0,
-    absenceRate: total > 0 ? Math.round(((personStats[name]?.absent ?? 0) / total) * 100) : 0,
+    absenceRate:
+      total > 0
+        ? Math.round(((personStats[name]?.absent ?? 0) / total) * 100)
+        : 0,
   })).sort((a, b) => b.absenceRate - a.absenceRate)
 
   const actionItems = hydratedStandups.flatMap((meeting) =>
     (meeting.actionItems || []).map((item, index) => {
-    const task = item.text || ''
-    const assignee = item.assignee || (() => {
-      const colonIndex = task.indexOf(':')
-      return colonIndex > 0 ? task.slice(0, colonIndex).trim() : 'Unassigned'
-    })()
-    return {
-      id: item.id || `${meeting.id}-${index}`,
-      meetingId: meeting.id,
-      meetingDate: meeting.date.slice(0, 10),
-      assignee,
-      task,
-      isDirectReport: DIRECT_REPORTS.some((name) => assignee.includes(name.split(' ')[0])),
-      isTyler: assignee.toLowerCase().includes('tyler'),
-      status: item.status || undefined,
-      priority: item.priority || undefined,
-    }
+      const task = item.text || ''
+      const assignee =
+        item.assignee ||
+        (() => {
+          const colonIndex = task.indexOf(':')
+          return colonIndex > 0
+            ? task.slice(0, colonIndex).trim()
+            : 'Unassigned'
+        })()
+      return {
+        id: item.id || `${meeting.id}-${index}`,
+        meetingId: meeting.id,
+        meetingDate: meeting.date.slice(0, 10),
+        assignee,
+        task,
+        isDirectReport: DIRECT_REPORTS.some((name) =>
+          assignee.includes(name.split(' ')[0]),
+        ),
+        isTyler: assignee.toLowerCase().includes('tyler'),
+        status: item.status || undefined,
+        priority: item.priority || undefined,
+      }
     }),
   )
 
@@ -310,7 +350,9 @@ function getItOpsOverview() {
         decisions: meeting.decisions || [],
         actions: meeting.actionItems || [],
       }).toLowerCase()
-      return theme.keywords.some((keyword) => text.includes(keyword.toLowerCase()))
+      return theme.keywords.some((keyword) =>
+        text.includes(keyword.toLowerCase()),
+      )
     })
     return {
       label: theme.label,
@@ -319,18 +361,28 @@ function getItOpsOverview() {
       firstSeen: appearances[0]?.date?.slice(0, 10) ?? null,
       lastSeen: appearances[appearances.length - 1]?.date?.slice(0, 10) ?? null,
     }
-  }).filter((theme) => theme.count >= 2).sort((a, b) => b.count - a.count)
+  })
+    .filter((theme) => theme.count >= 2)
+    .sort((a, b) => b.count - a.count)
 
-  const recentMeetings = [...hydratedStandups].slice(-10).reverse().map((meeting) => ({
-    id: meeting.id,
-    date: meeting.date.slice(0, 10),
-    title: meeting.title,
-    attendees: parseParticipants(meeting.participants).map(participantName).filter(Boolean),
-    absentDirectReports: attendanceMap[meeting.date.slice(0, 10)]?.absent || [],
-    actionItems: (meeting.actionItems || []).map((item) => item.text),
-    issues: (meeting.issues || []).map((issue) => issue.title || issue.description || ''),
-    decisions: (meeting.decisions || []).map((decision) => decision.text),
-  }))
+  const recentMeetings = [...hydratedStandups]
+    .slice(-10)
+    .reverse()
+    .map((meeting) => ({
+      id: meeting.id,
+      date: meeting.date.slice(0, 10),
+      title: meeting.title,
+      attendees: parseParticipants(meeting.participants)
+        .map(participantName)
+        .filter(Boolean),
+      absentDirectReports:
+        attendanceMap[meeting.date.slice(0, 10)]?.absent || [],
+      actionItems: (meeting.actionItems || []).map((item) => item.text),
+      issues: (meeting.issues || []).map(
+        (issue) => issue.title || issue.description || '',
+      ),
+      decisions: (meeting.decisions || []).map((decision) => decision.text),
+    }))
 
   return {
     totalMeetings: total,
@@ -357,7 +409,12 @@ function calcSLACompliance(totalTickets: number, slaBreaches: number) {
 async function getItOpsAnalytics() {
   const errors: Array<string> = []
   const now = new Date()
-  let ticketStats = { open: 0, closedToday: 0, avgResolutionHours: 0, slaCompliancePct: 100 }
+  let ticketStats = {
+    open: 0,
+    closedToday: 0,
+    avgResolutionHours: 0,
+    slaCompliancePct: 100,
+  }
   let teamPerformance = IT_TEAM_MEMBERS.map((member) => ({
     name: member.name,
     role: member.role,
@@ -388,8 +445,16 @@ async function getItOpsAnalytics() {
     const thirtyDaysAgo = daysAgoStr(30)
     const [openTicketsRaw, closedTodayRaw, last30DaysRaw] = await Promise.all([
       safeCWFetch(config, OPEN_TICKET_QUERY, errors),
-      safeCWFetch(config, `/service/tickets?conditions=closedDate>=[${today}T00:00:00Z]&pageSize=200&fields=id,closedDate,dateEntered,assignedTo,owner`, errors),
-      safeCWFetch(config, `/service/tickets?conditions=dateEntered>=[${thirtyDaysAgo}T00:00:00Z]&pageSize=500&fields=id,dateEntered,closedDate,board,assignedTo,requiredDate,status,owner`, errors),
+      safeCWFetch(
+        config,
+        `/service/tickets?conditions=closedDate>=[${today}T00:00:00Z]&pageSize=200&fields=id,closedDate,dateEntered,assignedTo,owner`,
+        errors,
+      ),
+      safeCWFetch(
+        config,
+        `/service/tickets?conditions=dateEntered>=[${thirtyDaysAgo}T00:00:00Z]&pageSize=500&fields=id,dateEntered,closedDate,board,assignedTo,requiredDate,status,owner`,
+        errors,
+      ),
     ])
 
     const openTickets = Array.isArray(openTicketsRaw) ? openTicketsRaw : []
@@ -398,7 +463,8 @@ async function getItOpsAnalytics() {
     let slaBreaches = 0
     for (const ticket of openTickets) {
       if (!ticket.requiredDate) continue
-      const hoursLeft = (new Date(ticket.requiredDate).getTime() - Date.now()) / 3_600_000
+      const hoursLeft =
+        (new Date(ticket.requiredDate).getTime() - Date.now()) / 3_600_000
       if (hoursLeft < 0) slaBreaches += 1
     }
 
@@ -407,7 +473,8 @@ async function getItOpsAnalytics() {
     for (const ticket of closedToday) {
       if (!ticket.closedDate || !ticket.dateEntered) continue
       const hours =
-        (new Date(ticket.closedDate).getTime() - new Date(ticket.dateEntered).getTime()) /
+        (new Date(ticket.closedDate).getTime() -
+          new Date(ticket.dateEntered).getTime()) /
         3_600_000
       if (hours >= 0) {
         totalResolutionHours += hours
@@ -419,13 +486,28 @@ async function getItOpsAnalytics() {
       open: openTickets.length,
       closedToday: closedToday.length,
       avgResolutionHours:
-        resolvedCount > 0 ? Math.round((totalResolutionHours / resolvedCount) * 10) / 10 : 0,
+        resolvedCount > 0
+          ? Math.round((totalResolutionHours / resolvedCount) * 10) / 10
+          : 0,
       slaCompliancePct: calcSLACompliance(openTickets.length, slaBreaches),
     }
 
-    const teamMap: Record<string, { assigned: number; resolved: number; resHoursSum: number; resCount: number }> = {}
+    const teamMap: Record<
+      string,
+      {
+        assigned: number
+        resolved: number
+        resHoursSum: number
+        resCount: number
+      }
+    > = {}
     for (const member of IT_TEAM_MEMBERS) {
-      teamMap[member.name] = { assigned: 0, resolved: 0, resHoursSum: 0, resCount: 0 }
+      teamMap[member.name] = {
+        assigned: 0,
+        resolved: 0,
+        resHoursSum: 0,
+        resCount: 0,
+      }
     }
     for (const ticket of last30Days) {
       const ownerName = ticket.owner?.name || ticket.assignedTo?.name
@@ -435,7 +517,8 @@ async function getItOpsAnalytics() {
       teamMap[ownerName].resolved += 1
       if (!ticket.dateEntered) continue
       const hours =
-        (new Date(ticket.closedDate).getTime() - new Date(ticket.dateEntered).getTime()) /
+        (new Date(ticket.closedDate).getTime() -
+          new Date(ticket.dateEntered).getTime()) /
         3_600_000
       if (hours >= 0) {
         teamMap[ownerName].resHoursSum += hours
@@ -450,7 +533,9 @@ async function getItOpsAnalytics() {
         ticketsAssigned: stats.assigned,
         ticketsResolved: stats.resolved,
         avgResolutionHours:
-          stats.resCount > 0 ? Math.round((stats.resHoursSum / stats.resCount) * 10) / 10 : 0,
+          stats.resCount > 0
+            ? Math.round((stats.resHoursSum / stats.resCount) * 10) / 10
+            : 0,
       }
     })
 
@@ -466,7 +551,11 @@ async function getItOpsAnalytics() {
     }
     trendData = Object.entries(trendMap)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([date, counts]) => ({ date, created: counts.created, resolved: counts.resolved }))
+      .map(([date, counts]) => ({
+        date,
+        created: counts.created,
+        resolved: counts.resolved,
+      }))
 
     const queueMap: Record<string, number> = {}
     const priorityMap: Record<string, number> = {}
@@ -484,8 +573,12 @@ async function getItOpsAnalytics() {
       .map(([priority, count]) => ({ priority, count }))
     recentTickets = [...openTickets]
       .sort((left, right) => {
-        const leftTime = left.dateEntered ? new Date(left.dateEntered).getTime() : 0
-        const rightTime = right.dateEntered ? new Date(right.dateEntered).getTime() : 0
+        const leftTime = left.dateEntered
+          ? new Date(left.dateEntered).getTime()
+          : 0
+        const rightTime = right.dateEntered
+          ? new Date(right.dateEntered).getTime()
+          : 0
         return rightTime - leftTime
       })
       .slice(0, 12)
@@ -507,11 +600,17 @@ async function getItOpsAnalytics() {
           ? (Date.now() - new Date(ticket.dateEntered).getTime()) / 3_600_000
           : 0
         if (ageHours > ESCALATION_THRESHOLDS.STALE_TICKET_HOURS) {
-          logEscalation(String(ticket.id), `Stale ticket (${Math.round(ageHours)}h old)`, 'system')
+          logEscalation(
+            String(ticket.id),
+            `Stale ticket (${Math.round(ageHours)}h old)`,
+            'system',
+          )
         }
       }
     } catch (error) {
-      errors.push(`Escalation auto-log: ${error instanceof Error ? error.message : String(error)}`)
+      errors.push(
+        `Escalation auto-log: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 
@@ -519,7 +618,9 @@ async function getItOpsAnalytics() {
   try {
     escalationCount = getEscalationCountSince(hoursAgoISO(24))
   } catch (error) {
-    errors.push(`Escalation DB read: ${error instanceof Error ? error.message : String(error)}`)
+    errors.push(
+      `Escalation DB read: ${error instanceof Error ? error.message : String(error)}`,
+    )
   }
 
   const topQueue = queueBreakdown[0]
@@ -556,7 +657,10 @@ async function getItOpsAnalytics() {
 }
 
 export async function getItOpsData() {
-  const [overview, analytics] = await Promise.all([getItOpsOverview(), getItOpsAnalytics()])
+  const [overview, analytics] = await Promise.all([
+    getItOpsOverview(),
+    getItOpsAnalytics(),
+  ])
   return {
     overview,
     analytics,

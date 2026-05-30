@@ -1,6 +1,29 @@
 import { startTransition, useEffect, useMemo, useState } from 'react'
+import {
+  Alert01Icon,
+  Calendar03Icon,
+  CheckListIcon,
+  Shield01Icon,
+  Task01Icon,
+} from '@hugeicons/core-free-icons'
+import type { HugeIcon } from '@/screens/dashboard/dashboard-ui'
 import { SetupEmptyState } from '@/components/setup-empty-state'
-import { apiPath } from '@/lib/base-path'
+import { apiPath, withBasePath } from '@/lib/base-path'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
+import {
+  ToolsActionDock,
+  ToolsStatusRail,
+} from '@/components/tools-action-dock'
+import {
+  formatWorkspaceFreshness,
+  normalizeWorkspaceStatusTone,
+  workspaceStatusClass,
+} from '@/lib/source-freshness'
 
 type ItOpsData = {
   overview?: {
@@ -112,30 +135,56 @@ type ConnectWiseAction = {
   sort: number
 }
 
+type ExecutiveDashboardStats = {
+  posture: 'Stable' | 'Watch' | 'Escalate'
+  postureDetail: string
+  openTickets: number
+  closedToday: number
+  slaCompliancePct: number
+  avgResolutionHours: number
+  exceptionCount: number
+  slaActionCount: number
+  approvalActionCount: number
+  unassignedCount: number
+  highPriorityCount: number
+  topBoard: string
+  topBoardCount: number
+  tylerActionCount: number
+  directReportActionCount: number
+  tylerTouchedTicketCount: number
+  standupCount: number
+  recurringIssueCount: number
+}
+
+type ItOpsCommandAction = 'queue' | 'sla' | 'approvals' | 'tickets' | 'standups'
+
+const IT_OPS_COMMAND_ICONS: Record<ItOpsCommandAction, HugeIcon> = {
+  queue: Alert01Icon,
+  sla: CheckListIcon,
+  approvals: Shield01Icon,
+  tickets: Task01Icon,
+  standups: Calendar03Icon,
+}
+
 function shellClassName() {
   return 'rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/92'
 }
 
 function formatFreshness(value?: string | null) {
-  if (!value) return 'Last pull unknown'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Last pull unknown'
-  return `Last pull ${date.toLocaleString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
+  return `Pull ${formatWorkspaceFreshness(value, {
+    emptyLabel: 'unknown',
+    invalidLabel: 'unknown',
   })}`
 }
 
 function stripTone(state: 'ok' | 'warn' | 'bad') {
-  if (state === 'ok') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200'
-  }
-  if (state === 'warn') {
-    return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200'
-  }
-  return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200'
+  return workspaceStatusClass(normalizeWorkspaceStatusTone(state))
+}
+
+function compactText(value: string | null | undefined, limit = 42) {
+  const text = (value || '').replace(/\s+/g, ' ').trim()
+  if (text.length <= limit) return text
+  return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`
 }
 
 function hoursUntil(value?: string | null) {
@@ -170,7 +219,7 @@ function hasHighPrioritySignal(ticket: ConnectWiseTicket) {
 
 export function buildConnectWiseActionQueue(
   tickets: Array<ConnectWiseTicket>,
-  limit = 8,
+  limit = 6,
 ) {
   const actions: Array<ConnectWiseAction> = []
 
@@ -266,6 +315,71 @@ export function getItOpsSourceState(
   return 'healthy'
 }
 
+export function buildExecutiveDashboardStats(
+  data: ItOpsData | null,
+  actionQueue = buildConnectWiseActionQueue(
+    data?.analytics?.recentTickets || [],
+  ),
+): ExecutiveDashboardStats {
+  const tickets = data?.analytics?.recentTickets || []
+  const stats = data?.analytics?.ticketStats
+  const slaActionCount = actionQueue.filter(
+    (action) => action.kind === 'sla-breach' || action.kind === 'sla-risk',
+  ).length
+  const approvalActionCount = actionQueue.filter(
+    (action) => action.kind === 'approval',
+  ).length
+  const unassignedCount = tickets.filter(
+    (ticket) => ticket.owner === 'Unassigned',
+  ).length
+  const highPriorityCount = tickets.filter(hasHighPrioritySignal).length
+  const topBoard = [...(data?.analytics?.queueBreakdown || [])].sort(
+    (left, right) => right.count - left.count,
+  )[0]
+  const actionItems = data?.overview?.actionItems || []
+  const tylerActionCount = actionItems.filter((item) => item.isTyler).length
+  const directReportActionCount = actionItems.filter(
+    (item) => item.isDirectReport,
+  ).length
+  const tylerTouchedTicketCount = tickets.filter((ticket) =>
+    /tyler/i.test(`${ticket.lastUpdatedBy || ''} ${ticket.owner || ''}`),
+  ).length
+  const exceptionCount = actionQueue.length
+  const slaCompliancePct = stats?.slaCompliancePct ?? 0
+  const posture: ExecutiveDashboardStats['posture'] =
+    slaActionCount > 0 || slaCompliancePct < 90
+      ? 'Escalate'
+      : approvalActionCount > 0 || unassignedCount > 0 || exceptionCount > 0
+        ? 'Watch'
+        : 'Stable'
+
+  return {
+    posture,
+    postureDetail:
+      posture === 'Escalate'
+        ? 'SLA/compliance pressure.'
+        : posture === 'Watch'
+          ? 'Review approvals, owners, aging.'
+          : 'No executive blockers.',
+    openTickets: stats?.open ?? 0,
+    closedToday: stats?.closedToday ?? 0,
+    slaCompliancePct,
+    avgResolutionHours: stats?.avgResolutionHours ?? 0,
+    exceptionCount,
+    slaActionCount,
+    approvalActionCount,
+    unassignedCount,
+    highPriorityCount,
+    topBoard: topBoard?.queue || 'None',
+    topBoardCount: topBoard?.count || 0,
+    tylerActionCount,
+    directReportActionCount,
+    tylerTouchedTicketCount,
+    standupCount: data?.overview?.totalMeetings ?? 0,
+    recurringIssueCount: data?.overview?.recurringIssues?.length ?? 0,
+  }
+}
+
 export function buildItOpsBriefing(data: ItOpsData | null) {
   return [
     '# IT Ops Briefing',
@@ -358,13 +472,15 @@ export function buildItOpsDiagnosticsExport(data: ItOpsData | null) {
 }
 
 function actionTone(severity: ConnectWiseAction['severity']) {
-  if (severity === 'critical') {
-    return 'border-red-300 bg-red-50 text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-100'
-  }
-  if (severity === 'high') {
-    return 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100'
-  }
-  return 'border-primary-200 bg-primary-50/80 text-primary-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100'
+  return workspaceStatusClass(normalizeWorkspaceStatusTone(severity))
+}
+
+function appToneForItOps(
+  state: 'ok' | 'warn' | 'bad',
+): 'green' | 'amber' | 'red' {
+  if (state === 'ok') return 'green'
+  if (state === 'warn') return 'amber'
+  return 'red'
 }
 
 export function ItOpsScreen() {
@@ -498,7 +614,82 @@ export function ItOpsScreen() {
   const approvalActionCount = actionQueue.filter(
     (action) => action.kind === 'approval',
   ).length
+  const executiveStats = useMemo(
+    () => buildExecutiveDashboardStats(data, actionQueue),
+    [actionQueue, data],
+  )
   const sourceState = getItOpsSourceState(data, error)
+  const commandTone =
+    executiveStats.posture === 'Escalate'
+      ? 'bad'
+      : executiveStats.posture === 'Watch'
+        ? 'warn'
+        : 'ok'
+  const commandTiles: Array<{
+    id: string
+    title: string
+    value: string
+    detail: string
+    tone: 'green' | 'amber' | 'red' | 'blue' | 'neutral'
+    action: ItOpsCommandAction
+  }> = [
+    {
+      id: 'queue',
+      title: 'Queue',
+      value: String(executiveStats.exceptionCount),
+      detail: executiveStats.postureDetail,
+      tone: appToneForItOps(commandTone),
+      action: 'queue',
+    },
+    {
+      id: 'sla',
+      title: 'SLA',
+      value: `${executiveStats.slaCompliancePct}%`,
+      detail: `${executiveStats.slaActionCount} risk`,
+      tone: executiveStats.slaActionCount > 0 ? 'red' : 'green',
+      action: 'sla',
+    },
+    {
+      id: 'approvals',
+      title: 'Approvals',
+      value: String(executiveStats.approvalActionCount),
+      detail: 'Native PSA',
+      tone: executiveStats.approvalActionCount > 0 ? 'amber' : 'green',
+      action: 'approvals',
+    },
+    {
+      id: 'tickets',
+      title: 'Tickets',
+      value: String(executiveStats.openTickets),
+      detail: `${executiveStats.closedToday} closed`,
+      tone: executiveStats.openTickets > 0 ? 'blue' : 'neutral',
+      action: 'tickets',
+    },
+    {
+      id: 'standups',
+      title: 'Standups',
+      value: String(executiveStats.standupCount),
+      detail: `${executiveStats.directReportActionCount} DR actions`,
+      tone: executiveStats.directReportActionCount > 0 ? 'amber' : 'green',
+      action: 'standups',
+    },
+  ]
+
+  function activateItOpsCommand(action: ItOpsCommandAction) {
+    if (action === 'sla') {
+      setTicketMode('sla-risk')
+      return
+    }
+    if (action === 'approvals') {
+      setTicketMode('approvals')
+      return
+    }
+    if (action === 'standups') {
+      window.location.href = withBasePath('/meetings')
+      return
+    }
+    setTicketMode('all')
+  }
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -578,7 +769,7 @@ export function ItOpsScreen() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-1 pb-6 sm:px-2">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-1 pb-[calc(var(--tabbar-h,0px)+12px)] sm:gap-4 sm:px-2 sm:pb-6">
       <div className={shellClassName()}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -589,8 +780,7 @@ export function ItOpsScreen() {
               IT Ops / ConnectWise
             </h1>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              ConnectWise ticket health, service-board load, standup patterns,
-              and action ownership.
+              Tickets, SLA, standups.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -608,11 +798,11 @@ export function ItOpsScreen() {
               disabled={!data}
               className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
             >
-              Export report
+              Report
             </button>
           </div>
         </div>
-        <div className="mt-4 grid gap-2 md:grid-cols-4">
+        <div className="mt-3 hidden gap-2 md:mt-4 md:grid md:grid-cols-4">
           <span
             className={`rounded-xl border px-3 py-2 text-xs ${stripTone(error ? 'bad' : connectWiseErrors.length > 0 ? 'warn' : 'ok')}`}
           >
@@ -641,35 +831,64 @@ export function ItOpsScreen() {
             )}
           </span>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-primary-500 dark:text-neutral-400">
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Source state: {sourceState}
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Native PSA actions only
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            {getNativePsaGuidance()}
-          </span>
-          {actionQueue.length > 0 ? (
-            <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-              {actionQueue.length} ticket action
-              {actionQueue.length === 1 ? '' : 's'} queued
-            </span>
-          ) : null}
-        </div>
+        <ToolsActionDock
+          className="mt-3 hidden sm:mt-4 md:block"
+          label="ConnectWise quick actions"
+          items={[
+            {
+              id: 'refresh',
+              label: 'Refresh',
+              icon: 'refresh',
+              onClick: () => void load(),
+              disabled: loading,
+              tone: 'primary',
+              meta: 'Sync',
+            },
+            {
+              id: 'approvals',
+              label: 'Approvals',
+              icon: 'shield',
+              onClick: () => setTicketMode('approvals'),
+              tone: approvalActionCount > 0 ? 'warning' : 'good',
+              meta: `${approvalActionCount} open`,
+            },
+            {
+              id: 'SLA',
+              label: 'SLA',
+              icon: 'check',
+              onClick: () => setTicketMode('sla-risk'),
+              tone: slaActionCount > 0 ? 'danger' : 'good',
+              meta: `${slaActionCount} risk`,
+            },
+            {
+              id: 'report',
+              label: 'Report',
+              icon: 'download',
+              onClick: exportExceptionReport,
+              disabled: !data,
+              meta: 'MD',
+            },
+            {
+              id: 'task',
+              label: 'Task',
+              icon: 'task',
+              href: withBasePath('/tasks?create=task&source=it-ops'),
+              meta: 'Follow-up',
+            },
+          ]}
+        />
       </div>
 
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-          <div className="font-semibold">IT Ops data is unavailable</div>
+          <div className="font-semibold">IT Ops unavailable</div>
           <div className="mt-1">{error}</div>
           <button
             type="button"
             onClick={() => void load()}
             className="mt-3 rounded-xl border border-red-300 bg-red-100/60 px-3 py-2 text-xs font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-100"
           >
-            Retry IT Ops refresh
+            Retry
           </button>
         </div>
       ) : null}
@@ -680,17 +899,115 @@ export function ItOpsScreen() {
         </div>
       ) : null}
 
+      {!loading ? (
+        <AppSurface>
+          <AppSectionHeader
+            title="IT Ops command center"
+            meta="ConnectWise, SLA, approvals, standups"
+            action={
+              <AppStatusPill tone={appToneForItOps(commandTone)}>
+                {executiveStats.posture}
+              </AppStatusPill>
+            }
+          />
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+            {commandTiles.map((tile) => (
+              <AppTile
+                key={tile.id}
+                title={tile.title}
+                value={tile.value}
+                detail={tile.detail}
+                icon={IT_OPS_COMMAND_ICONS[tile.action]}
+                tone={tile.tone}
+                actionLabel={
+                  tile.action === 'standups'
+                    ? 'Meetings'
+                    : tile.action === 'sla'
+                      ? 'SLA'
+                      : tile.action === 'approvals'
+                        ? 'Review'
+                        : 'Open'
+                }
+                className="min-h-[118px]"
+                onClick={() => activateItOpsCommand(tile.action)}
+              />
+            ))}
+          </div>
+        </AppSurface>
+      ) : null}
+
+      <section className={`${shellClassName()} hidden md:block`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
+              Executive Dashboard
+            </div>
+            <h2 className="mt-1 text-base font-semibold text-primary-900 dark:text-neutral-100">
+              IT director view
+            </h2>
+            <p className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
+              {executiveStats.postureDetail}
+            </p>
+          </div>
+          <span
+            className={`w-fit rounded-full border px-3 py-1 text-xs font-medium ${stripTone(
+              executiveStats.posture === 'Escalate'
+                ? 'bad'
+                : executiveStats.posture === 'Watch'
+                  ? 'warn'
+                  : 'ok',
+            )}`}
+          >
+            {executiveStats.posture}
+          </span>
+        </div>
+
+        <ToolsStatusRail
+          className="mt-4"
+          label="ConnectWise executive stats"
+          items={[
+            {
+              id: 'sla',
+              label: 'SLA',
+              value: `${executiveStats.slaCompliancePct}%`,
+              tone: executiveStats.slaCompliancePct >= 90 ? 'good' : 'warning',
+              progress: executiveStats.slaCompliancePct,
+            },
+            {
+              id: 'exceptions',
+              label: 'Exceptions',
+              value: String(executiveStats.exceptionCount),
+              tone: executiveStats.exceptionCount > 0 ? 'warning' : 'good',
+              progress: Math.min(100, executiveStats.exceptionCount * 15),
+            },
+            {
+              id: 'board',
+              label: 'Board',
+              value: String(executiveStats.topBoardCount),
+              progress: Math.min(100, executiveStats.topBoardCount * 10),
+            },
+            {
+              id: 'tyler',
+              label: 'Tyler',
+              value: String(executiveStats.tylerActionCount),
+              tone: executiveStats.tylerActionCount > 0 ? 'warning' : 'good',
+              progress: Math.min(100, executiveStats.tylerActionCount * 20),
+            },
+          ]}
+        />
+      </section>
+
       <section className={`${shellClassName()} md:hidden`}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-              Mobile IT Ops
+              Glance
             </div>
             <div className="mt-2 text-2xl font-semibold text-primary-900 dark:text-neutral-100">
               {slaActionCount + approvalActionCount}
             </div>
             <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-              SLA or approval blockers
+              SLA / approval
             </div>
           </div>
           <span
@@ -723,24 +1040,23 @@ export function ItOpsScreen() {
           ))}
           {actionQueue.length === 0 ? (
             <div className="rounded-xl border border-dashed border-primary-200 bg-primary-50/50 px-3 py-3 text-sm text-primary-500 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
-              No urgent blockers in the current ConnectWise pull.
+              No blockers.
             </div>
           ) : null}
         </div>
       </section>
 
-      <section className={shellClassName()}>
+      <section className={`${shellClassName()} hidden md:block`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-              Action queue
+              Queue
             </div>
             <h2 className="mt-1 text-base font-semibold text-primary-900 dark:text-neutral-100">
-              Tickets, approvals, and SLA risk
+              Tickets + SLA
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-primary-600 dark:text-neutral-400">
-              The next items to touch first, ranked by due date, approval
-              wording, owner gaps, priority, and age.
+              Ranked risk.
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
@@ -749,25 +1065,23 @@ export function ItOpsScreen() {
                 {actionQueue.length}
               </div>
               <div className="text-primary-600 dark:text-neutral-400">
-                actions
+                queued
               </div>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
               <div className="text-lg font-semibold">{slaActionCount}</div>
-              <div>SLA</div>
+              <div>risk</div>
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="text-lg font-semibold text-primary-900 dark:text-neutral-100">
                 {approvalActionCount}
               </div>
-              <div className="text-primary-600 dark:text-neutral-400">
-                approvals
-              </div>
+              <div className="text-primary-600 dark:text-neutral-400">ok</div>
             </div>
           </div>
         </div>
         <div className="mt-4 grid gap-2 lg:grid-cols-2">
-          {actionQueue.map((action) => (
+          {actionQueue.slice(0, 4).map((action) => (
             <article
               key={`${action.kind}-${action.ticket.id}`}
               className={`rounded-xl border px-3 py-3 ${actionTone(action.severity)}`}
@@ -778,16 +1092,17 @@ export function ItOpsScreen() {
                     {action.label}
                   </div>
                   <div className="mt-1 truncate text-sm font-semibold">
-                    #{action.ticket.id} {action.ticket.summary}
+                    #{action.ticket.id} {compactText(action.ticket.summary, 54)}
                   </div>
                 </div>
                 <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[11px]">
                   {action.detail}
                 </span>
               </div>
-              <div className="mt-2 text-xs opacity-80">
-                {action.ticket.company} · {action.ticket.board} ·{' '}
-                {action.ticket.status} · {action.ticket.owner}
+              <div className="mt-2 truncate text-xs opacity-80">
+                {compactText(action.ticket.company, 24)} ·{' '}
+                {compactText(action.ticket.board, 18)} ·{' '}
+                {compactText(action.ticket.owner, 18)}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -795,7 +1110,7 @@ export function ItOpsScreen() {
                   onClick={() => setSelectedTicketId(String(action.ticket.id))}
                   className="rounded-lg border border-current/20 px-2 py-1 text-xs font-medium"
                 >
-                  Focus ticket
+                  Focus
                 </button>
                 <button
                   type="button"
@@ -804,75 +1119,26 @@ export function ItOpsScreen() {
                   }
                   className="rounded-lg border border-current/20 px-2 py-1 text-xs font-medium"
                 >
-                  Copy id
+                  ID
                 </button>
               </div>
             </article>
           ))}
           {actionQueue.length === 0 ? (
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 text-sm text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-              No ticket actions detected from the current ConnectWise pull.
+              No ticket actions in this pull.
             </div>
           ) : null}
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <section className={shellClassName()}>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-            Open tickets
-          </div>
-          <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
-            {data?.analytics?.ticketStats.open ?? 0}
-          </div>
-          <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            {data?.analytics?.ticketStats.closedToday ?? 0} closed today
-          </div>
-        </section>
-        <section className={shellClassName()}>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-            SLA compliance
-          </div>
-          <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
-            {data?.analytics?.ticketStats.slaCompliancePct ?? 0}%
-          </div>
-          <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            Avg resolution{' '}
-            {data?.analytics?.ticketStats.avgResolutionHours ?? 0}h
-          </div>
-        </section>
-        <section className={shellClassName()}>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-            Escalations
-          </div>
-          <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
-            {data?.analytics?.escalationCount ?? 0}
-          </div>
-          <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            Logged in the last 24 hours
-          </div>
-        </section>
-        <section className={shellClassName()}>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-            Standups tracked
-          </div>
-          <div className="mt-2 text-3xl font-semibold text-primary-900 dark:text-neutral-100">
-            {data?.overview?.totalMeetings ?? 0}
-          </div>
-          <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-            {data?.overview?.dateRange?.from || '—'} to{' '}
-            {data?.overview?.dateRange?.to || '—'}
-          </div>
-        </section>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="hidden gap-4 md:grid xl:grid-cols-[1.15fr_0.85fr]">
         <section className={shellClassName()}>
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            ConnectWise Briefing
+            Briefing
           </h2>
-          <div className="mt-3 text-sm text-primary-800 dark:text-neutral-200">
-            {data?.analytics?.briefing || 'No briefing available.'}
+          <div className="mt-3 line-clamp-3 text-sm text-primary-800 dark:text-neutral-200">
+            {data?.analytics?.briefing || 'No briefing.'}
           </div>
           {(data?.analytics?.errors || []).length > 0 ? (
             <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
@@ -882,7 +1148,7 @@ export function ItOpsScreen() {
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                Service boards
+                Boards
               </div>
               <div className="mt-3 grid gap-2">
                 {(data?.analytics?.queueBreakdown || [])
@@ -904,7 +1170,7 @@ export function ItOpsScreen() {
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                Priority load
+                Priority
               </div>
               <div className="mt-3 grid gap-2">
                 {(data?.analytics?.priorityBreakdown || [])
@@ -924,7 +1190,7 @@ export function ItOpsScreen() {
                   ))}
                 {(data?.analytics?.priorityBreakdown || []).length === 0 ? (
                   <div className="text-sm text-primary-500 dark:text-neutral-400">
-                    No priority data available.
+                    No priority data.
                   </div>
                 ) : null}
               </div>
@@ -932,7 +1198,7 @@ export function ItOpsScreen() {
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900 md:col-span-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                  Recent open tickets
+                  Tickets
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <input
@@ -984,15 +1250,15 @@ export function ItOpsScreen() {
                     className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                   >
                     <option value="all">All</option>
-                    <option value="approvals">Needs Tyler approval</option>
+                    <option value="approvals">Approval</option>
                     <option value="sla-risk">SLA risk</option>
                     <option value="unassigned">Unassigned</option>
-                    <option value="recently-touched">Touched by Tyler</option>
+                    <option value="recently-touched">Tyler touched</option>
                   </select>
                 </div>
               </div>
               <div className="mt-3 grid gap-2">
-                {visibleTickets.slice(0, 8).map((ticket) => (
+                {visibleTickets.slice(0, 5).map((ticket) => (
                   <div
                     key={String(ticket.id)}
                     data-testid="connectwise-ticket"
@@ -1002,12 +1268,13 @@ export function ItOpsScreen() {
                         : 'border-primary-200 bg-primary-50/70 dark:bg-neutral-950'
                     }`}
                   >
-                    <div className="font-medium text-primary-900 dark:text-neutral-100">
-                      #{ticket.id} {ticket.summary}
+                    <div className="truncate font-medium text-primary-900 dark:text-neutral-100">
+                      #{ticket.id} {compactText(ticket.summary, 62)}
                     </div>
-                    <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                      {ticket.company} · {ticket.board} · {ticket.status} ·{' '}
-                      {ticket.priority} · {ticket.owner}
+                    <div className="mt-1 truncate text-xs text-primary-600 dark:text-neutral-400">
+                      {compactText(ticket.company, 22)} ·{' '}
+                      {compactText(ticket.board, 16)} ·{' '}
+                      {compactText(ticket.status, 16)}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                       <span
@@ -1022,14 +1289,11 @@ export function ItOpsScreen() {
                         {getTicketSlaLabel(ticket)}
                       </span>
                       <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-                        Owner: {ticket.owner || 'Unassigned'}
+                        {compactText(ticket.owner || 'Unassigned', 16)}
                       </span>
-                      <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-                        {getTicketApprovalBoundary(ticket)}
-                      </span>
-                      {ticket.lastUpdatedBy ? (
+                      {hasApprovalSignal(ticket) ? (
                         <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-                          Last touched: {ticket.lastUpdatedBy}
+                          PSA approval
                         </span>
                       ) : null}
                     </div>
@@ -1045,8 +1309,8 @@ export function ItOpsScreen() {
                       className="mt-2 text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
                     >
                       {selectedTicketId === String(ticket.id)
-                        ? 'Hide details'
-                        : 'Show details'}
+                        ? 'Hide'
+                        : 'Details'}
                     </button>
                     <button
                       type="button"
@@ -1055,7 +1319,7 @@ export function ItOpsScreen() {
                       }
                       className="ml-3 mt-2 text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
                     >
-                      Copy ticket id
+                      ID
                     </button>
                     {getConnectWiseTicketUrl(ticket) ? (
                       <a
@@ -1064,7 +1328,7 @@ export function ItOpsScreen() {
                         rel="noreferrer"
                         className="ml-3 mt-2 inline-block text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
                       >
-                        Open in ConnectWise
+                        PSA
                       </a>
                     ) : null}
                   </div>
@@ -1072,28 +1336,27 @@ export function ItOpsScreen() {
                 {selectedTicket ? (
                   <div className="rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-3 text-sm dark:border-neutral-800 dark:bg-neutral-950">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                      Ticket detail
+                      Detail
                     </div>
                     <div className="mt-2 font-medium text-primary-900 dark:text-neutral-100">
-                      #{selectedTicket.id} {selectedTicket.summary}
+                      #{selectedTicket.id}{' '}
+                      {compactText(selectedTicket.summary, 70)}
                     </div>
                     <div className="mt-2 grid gap-2 text-xs text-primary-600 dark:text-neutral-400 sm:grid-cols-2">
-                      <div>Company: {selectedTicket.company || 'unknown'}</div>
-                      <div>Owner: {selectedTicket.owner || 'unknown'}</div>
-                      <div>Board: {selectedTicket.board || 'unknown'}</div>
-                      <div>Status: {selectedTicket.status || 'unknown'}</div>
+                      <div>Company {selectedTicket.company || 'unknown'}</div>
+                      <div>Owner {selectedTicket.owner || 'unknown'}</div>
+                      <div>Board {selectedTicket.board || 'unknown'}</div>
+                      <div>Status {selectedTicket.status || 'unknown'}</div>
+                      <div>Priority {selectedTicket.priority || 'unknown'}</div>
                       <div>
-                        Priority: {selectedTicket.priority || 'unknown'}
+                        Entered {selectedTicket.dateEntered || 'unknown'}
                       </div>
                       <div>
-                        Entered: {selectedTicket.dateEntered || 'unknown'}
+                        Required {selectedTicket.requiredDate || 'not set'}
                       </div>
+                      <div>SLA {getTicketSlaLabel(selectedTicket)}</div>
                       <div>
-                        Required: {selectedTicket.requiredDate || 'not set'}
-                      </div>
-                      <div>SLA: {getTicketSlaLabel(selectedTicket)}</div>
-                      <div>
-                        Boundary: {getTicketApprovalBoundary(selectedTicket)}
+                        Boundary {getTicketApprovalBoundary(selectedTicket)}
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -1102,14 +1365,14 @@ export function ItOpsScreen() {
                         onClick={() => void copySelectedTicket('client')}
                         className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
                       >
-                        Copy client update
+                        Client
                       </button>
                       <button
                         type="button"
                         onClick={() => void copySelectedTicket('internal')}
                         className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
                       >
-                        Copy internal brief
+                        Internal
                       </button>
                       {getConnectWiseTicketUrl(selectedTicket) ? (
                         <a
@@ -1120,7 +1383,7 @@ export function ItOpsScreen() {
                           rel="noreferrer"
                           className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
                         >
-                          Open native PSA ticket
+                          PSA
                         </a>
                       ) : null}
                     </div>
@@ -1128,9 +1391,9 @@ export function ItOpsScreen() {
                 ) : null}
                 {visibleTickets.length === 0 ? (
                   <SetupEmptyState
-                    title="No recent open tickets available."
-                    description="ConnectWise returned no actionable tickets for this view."
-                    nextAction="Refresh the pull; if tickets should appear, verify ConnectWise credentials and board filters before trusting the empty queue."
+                    title="No tickets"
+                    description="No action for this view."
+                    nextAction="Refresh, then check credentials/filters."
                     detail=".config/hermes/tokens/connectwise_config.json"
                     action={
                       <button
@@ -1138,7 +1401,7 @@ export function ItOpsScreen() {
                         onClick={() => void load()}
                         className="rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
                       >
-                        Refresh tickets
+                        Refresh
                       </button>
                     }
                   />
@@ -1147,11 +1410,11 @@ export function ItOpsScreen() {
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 p-3 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                Team performance
+                Team
               </div>
               <div className="mt-3 grid gap-2">
                 {(data?.analytics?.teamPerformance || [])
-                  .slice(0, 6)
+                  .slice(0, 4)
                   .map((member) => (
                     <div
                       key={member.name}
@@ -1161,9 +1424,8 @@ export function ItOpsScreen() {
                         {member.name}
                       </div>
                       <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                        {member.ticketsAssigned} assigned ·{' '}
-                        {member.ticketsResolved} resolved · avg{' '}
-                        {member.avgResolutionHours}h
+                        {member.ticketsAssigned} in · {member.ticketsResolved}{' '}
+                        out · {member.avgResolutionHours}h
                       </div>
                     </div>
                   ))}
@@ -1174,11 +1436,11 @@ export function ItOpsScreen() {
 
         <section className={shellClassName()}>
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            Recurring issues
+            Recurring
           </h2>
           <div className="mt-3 grid gap-2">
             {(data?.overview?.recurringIssues || [])
-              .slice(0, 8)
+              .slice(0, 5)
               .map((issue) => (
                 <div
                   key={issue.label}
@@ -1186,10 +1448,10 @@ export function ItOpsScreen() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="font-medium text-primary-900 dark:text-neutral-100">
-                      {issue.label}
+                      {compactText(issue.label, 42)}
                     </div>
                     <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                      {issue.count} mentions
+                      {issue.count}
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
@@ -1199,20 +1461,20 @@ export function ItOpsScreen() {
               ))}
             {(data?.overview?.recurringIssues || []).length === 0 ? (
               <div className="text-sm text-primary-500 dark:text-neutral-400">
-                No recurring issue clusters found.
+                No recurring clusters.
               </div>
             ) : null}
           </div>
         </section>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+      <div className="hidden gap-4 md:grid xl:grid-cols-[1fr_1fr]">
         <section className={shellClassName()}>
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            Direct-report action load
+            Direct-report load
           </h2>
           <div className="mt-3 grid gap-2">
-            {directReportActions.slice(0, 12).map((item) => (
+            {directReportActions.slice(0, 6).map((item) => (
               <div
                 key={item.id}
                 className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-900"
@@ -1226,13 +1488,13 @@ export function ItOpsScreen() {
                   </span>
                 </div>
                 <div className="mt-1 text-sm text-primary-700 dark:text-neutral-300">
-                  {item.task}
+                  {compactText(item.task, 70)}
                 </div>
               </div>
             ))}
             {directReportActions.length === 0 ? (
               <div className="text-sm text-primary-500 dark:text-neutral-400">
-                No direct-report action items available.
+                No direct-report actions.
               </div>
             ) : null}
           </div>
@@ -1240,28 +1502,28 @@ export function ItOpsScreen() {
 
         <section className={shellClassName()}>
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-            Recent standups
+            Standups
           </h2>
           <div className="mt-3 grid gap-2">
             {(data?.overview?.recentMeetings || [])
-              .slice(0, 8)
+              .slice(0, 4)
               .map((meeting) => (
                 <div
                   key={meeting.id}
                   className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-3 dark:border-neutral-800 dark:bg-neutral-900"
                 >
                   <div className="font-medium text-primary-900 dark:text-neutral-100">
-                    {meeting.title}
+                    {compactText(meeting.title, 54)}
                   </div>
                   <div className="mt-1 text-xs text-primary-500 dark:text-neutral-400">
                     {meeting.date}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                     <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                      {(meeting.actionItems || []).length} action item(s)
+                      {(meeting.actionItems || []).length} actions
                     </span>
                     <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
-                      {(meeting.issues || []).length} issue(s)
+                      {(meeting.issues || []).length} issues
                     </span>
                     <span className="rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
                       {(meeting.absentDirectReports || []).length} absent
@@ -1271,7 +1533,7 @@ export function ItOpsScreen() {
               ))}
             {(data?.overview?.recentMeetings || []).length === 0 ? (
               <div className="text-sm text-primary-500 dark:text-neutral-400">
-                No recent standup records available.
+                No recent standups.
               </div>
             ) : null}
           </div>

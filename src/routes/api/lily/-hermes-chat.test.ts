@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeLilyChatOptions } from './hermes-chat'
+import {
+  normalizeLilyChatOptions,
+  sanitizeLilyMemoryEvents,
+} from './hermes-chat'
 
 describe('normalizeLilyChatOptions', () => {
   it('keeps supported LILY model, personality, and memory settings', () => {
@@ -30,5 +33,43 @@ describe('normalizeLilyChatOptions', () => {
       useWorkspaceMemory: true,
       useConversationMemory: true,
     })
+  })
+
+  it('sanitizes transcript and decision memory events before persistence', () => {
+    expect(
+      sanitizeLilyMemoryEvents([
+        {
+          kind: 'transcript',
+          label: 'Prompt',
+          detail: 'Prep my next meeting.',
+          source: 'typed',
+        },
+        {
+          kind: 'decision',
+          label: 'Reply',
+          detail: 'Start with the board review.',
+          source: 'hands-free',
+        },
+        {
+          kind: 'bogus',
+          label: 'Drop',
+          detail: 'Nope',
+          source: 'typed',
+        },
+      ]),
+    ).toEqual([
+      {
+        kind: 'transcript',
+        label: 'Prompt',
+        detail: 'Prep my next meeting.',
+        source: 'typed',
+      },
+      {
+        kind: 'decision',
+        label: 'Reply',
+        detail: 'Start with the board review.',
+        source: 'hands-free',
+      },
+    ])
   })
 })

@@ -3,8 +3,8 @@
  * Connects to /api/gateway/sessions and tracks live agent sessions.
  */
 import { create } from 'zustand'
-import type {GatewaySession} from '@/lib/gateway-api';
-import { BASE_URL  } from '@/lib/gateway-api'
+import type { GatewaySession } from '@/lib/gateway-api'
+import { BASE_URL } from '@/lib/gateway-api'
 
 export type SwarmSession = GatewaySession & {
   /** Derived status for UI rendering */

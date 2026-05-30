@@ -4,16 +4,13 @@ import {
   ArrowDown01Icon,
   Cancel01Icon,
   Delete02Icon,
-  Settings01Icon,
+  SlidersHorizontalIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { OperationsAgent } from '../hooks/use-operations'
-import type {GatewayModelCatalogEntry} from '@/lib/gateway-api';
+import type { GatewayModelCatalogEntry } from '@/lib/gateway-api'
 import { Button } from '@/components/ui/button'
-import {
-
-  fetchModels
-} from '@/lib/gateway-api'
+import { fetchModels } from '@/lib/gateway-api'
 import { cn } from '@/lib/utils'
 
 type AvailableModel = {
@@ -22,11 +19,15 @@ type AvailableModel = {
   name: string
 }
 
-function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null {
+function normalizeModel(
+  model: GatewayModelCatalogEntry,
+): AvailableModel | null {
   if (typeof model === 'string') {
     return {
       id: model,
-      provider: model.includes('/') ? (model.split('/')[0] ?? 'model') : 'model',
+      provider: model.includes('/')
+        ? (model.split('/')[0] ?? 'model')
+        : 'model',
       name: model.split('/').pop() ?? model,
     }
   }
@@ -38,7 +39,11 @@ function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null 
     id,
     provider: model.provider ?? id.split('/')[0] ?? 'model',
     name:
-      model.label ?? model.displayName ?? model.name ?? id.split('/').pop() ?? id,
+      model.label ??
+      model.displayName ??
+      model.name ??
+      id.split('/').pop() ??
+      id,
   }
 }
 
@@ -77,7 +82,9 @@ function ModelSelector({
       const valueModelId = value.slice(slashIndex + 1)
       // First try exact provider+id match
       const exactMatch = models.find(
-        (m) => m.provider === valueProvider && (m.id === value || m.id === valueModelId),
+        (m) =>
+          m.provider === valueProvider &&
+          (m.id === value || m.id === valueModelId),
       )
       if (exactMatch) return exactMatch
     }
@@ -99,7 +106,9 @@ function ModelSelector({
         className="inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
       >
         <span className="truncate">
-          {selected ? `${selected.provider} / ${selected.name}` : 'Default (auto)'}
+          {selected
+            ? `${selected.provider} / ${selected.name}`
+            : 'Default (auto)'}
         </span>
         <HugeiconsIcon
           icon={ArrowDown01Icon}
@@ -123,7 +132,9 @@ function ModelSelector({
               }}
               className={cn(
                 'flex w-full rounded-xl px-3 py-2.5 text-left text-sm',
-                !value ? 'bg-[var(--theme-accent-soft)]' : 'hover:bg-[var(--theme-bg)]',
+                !value
+                  ? 'bg-[var(--theme-accent-soft)]'
+                  : 'hover:bg-[var(--theme-bg)]',
               )}
             >
               Default (auto)
@@ -217,25 +228,26 @@ export function OperationsAgentDetail({
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="flex size-11 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)]">
-              <HugeiconsIcon icon={Settings01Icon} size={20} strokeWidth={1.8} />
+              <HugeiconsIcon
+                icon={SlidersHorizontalIcon}
+                size={20}
+                strokeWidth={1.8}
+              />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--theme-muted)]">
-                Agent Settings
+                Agent Profile
               </p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--theme-text)]">
                 {agent.name}
               </h2>
-              <p className="mt-2 text-sm text-[var(--theme-muted-2)]">
-                Update this agent without leaving the roster.
-              </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="inline-flex size-10 items-center justify-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card2)] text-lg text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent-strong)]"
-            aria-label="Close agent settings"
+            aria-label="Close agent profile"
           >
             <HugeiconsIcon icon={Cancel01Icon} size={18} strokeWidth={1.8} />
           </button>
@@ -243,7 +255,9 @@ export function OperationsAgentDetail({
 
         <div className="mt-6 grid gap-4 md:grid-cols-[1.2fr_0.6fr]">
           <label className="space-y-2">
-            <span className="text-sm font-medium text-[var(--theme-text)]">Name</span>
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Name
+            </span>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -252,7 +266,9 @@ export function OperationsAgentDetail({
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-medium text-[var(--theme-text)]">Emoji</span>
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Emoji
+            </span>
             <input
               value={emoji}
               onChange={(event) => setEmoji(event.target.value)}
@@ -262,7 +278,9 @@ export function OperationsAgentDetail({
         </div>
 
         <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">Model</span>
+          <span className="text-sm font-medium text-[var(--theme-text)]">
+            Model
+          </span>
           <ModelSelector value={model} onChange={setModel} models={models} />
         </label>
 

@@ -3,6 +3,7 @@ import {
   buildFailureSparkline,
   buildJobDependencyMap,
   buildJobIncidentReport,
+  buildJobsCockpitTiles,
   classifyJobFailureFamily,
   filterJobOutputs,
   filterJobs,
@@ -246,8 +247,8 @@ describe('jobs screen workflow helpers', () => {
     expect(jobNeedsTyler(failed)).toBe(true)
     expect(jobUsesPaidCall(failed)).toBe(true)
     expect(getJobRetryPolicy(failed)).toContain('Retry 1/3')
-    expect(getJobCompletionSla(failed)).toContain('Expected duration')
-    expect(buildJobDependencyMap(failed)).toContain('Upstream: ops')
+    expect(getJobCompletionSla(failed)).toContain('5-15m')
+    expect(buildJobDependencyMap(failed)).toContain('ops -> obsidian')
     expect(buildFailureSparkline(failed)).toBe('▁▁▂▃▅▇█')
     expect(buildJobIncidentReport(failed)).toContain('Failure family: auth')
     expect(buildJobIncidentReport(failed)).toContain('Affected systems')
@@ -267,10 +268,39 @@ describe('jobs screen workflow helpers', () => {
     expect(isDailyCheckJob(makeJob({ name: 'One-off export' }))).toBe(false)
   })
 
+  it('builds app-like cockpit tiles for job recovery and routing lanes', () => {
+    const tiles = buildJobsCockpitTiles([
+      makeJob({
+        id: 'failed',
+        state: 'failed',
+        last_run_success: false,
+        last_run_error: 'Graph API timeout',
+        next_run_at: '2026-05-21T13:00:00Z',
+      }),
+      makeJob({
+        id: 'blocked',
+        state: 'failed',
+        last_run_success: false,
+        last_run_error: 'Needs Tyler token approval',
+        prompt: 'Run Claude paid model task',
+      }),
+      makeJob({ id: 'running', state: 'running' }),
+    ])
+
+    expect(tiles).toMatchObject([
+      { id: 'failed', label: 'Failure lane', value: '2', tone: 'danger' },
+      { id: 'running', label: 'Running now', value: '1' },
+      { id: 'next-due', label: 'Scheduled lane', value: '1' },
+      { id: 'blocked', label: 'Needs Tyler', value: '1', tone: 'warning' },
+      { id: 'paid', label: 'Paid calls', value: '1', filter: 'paid' },
+    ])
+  })
+
   it('summarizes affected systems, no-op contracts, and run metadata', () => {
     const job = makeJob({
       name: 'Outlook NO_REPLY meeting digest',
-      prompt: 'Export meeting tasks to Obsidian and stay silent when no changes',
+      prompt:
+        'Export meeting tasks to Obsidian and stay silent when no changes',
       deliver: ['obsidian'],
       created_at: '2026-05-21T11:00:00Z',
       last_run_at: '2026-05-21T12:00:00Z',
@@ -278,8 +308,13 @@ describe('jobs screen workflow helpers', () => {
       next_run_at: '2026-05-21T13:00:00Z',
     })
 
-    expect(getAffectedSystems(job)).toEqual(['Outlook', 'Obsidian', 'Tasks', 'Meetings'])
-    expect(getNoOpContractLabel(job)).toBe('No-op contract: silent/no reply')
+    expect(getAffectedSystems(job)).toEqual([
+      'Outlook',
+      'Obsidian',
+      'Tasks',
+      'Meetings',
+    ])
+    expect(getNoOpContractLabel(job)).toBe('Silent')
     expect(getJobRunMetadata(job)).toMatchObject({
       lastDuration: '8m',
       changedSinceLastRun: expect.stringContaining('Metadata changed'),

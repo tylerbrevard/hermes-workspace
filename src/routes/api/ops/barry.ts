@@ -86,7 +86,7 @@ export const Route = createFileRoute('/api/ops/barry')({
         } catch (error) {
           const status =
             typeof (error as { status?: unknown })?.status === 'number'
-              ? ((error as { status: number }).status)
+              ? (error as { status: number }).status
               : 500
           return json(
             {

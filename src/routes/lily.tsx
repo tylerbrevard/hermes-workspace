@@ -8,6 +8,22 @@ type LilyConfig = {
   configured: boolean
   serverUrl: string
   agentName: string
+  voiceProvider?:
+    | 'gemini_live'
+    | 'openai_realtime'
+    | 'livekit'
+    | 'chrome'
+    | 'auto'
+  gemini?: {
+    configured: boolean
+    model: string
+    voice: string
+  }
+  realtime?: {
+    configured: boolean
+    model: string
+    voice: string
+  }
   voiceWorker?: {
     status: 'online' | 'offline' | 'unknown' | 'not_configured'
     checkedAt: string
@@ -37,10 +53,53 @@ type LilyTimelineEvent = {
   createdAt: string
 }
 
+type LilyMemoryEvent = {
+  kind: LilyTimelineEvent['kind']
+  label: string
+  detail: string
+  source:
+    | 'typed'
+    | 'hands-free'
+    | 'push-to-talk'
+    | 'realtime'
+    | 'gemini'
+    | 'test'
+}
+
 type LilyConversationPreset = {
   id: string
   label: string
   prompt: string
+}
+
+type GeminiLiveSession = {
+  sendClientContent: (params: {
+    turns?: unknown
+    turnComplete?: boolean
+  }) => void
+  sendToolResponse: (params: { functionResponses: unknown }) => void
+  close: () => void
+}
+
+type GeminiLiveServerMessage = {
+  data?: string
+  text?: string
+  serverContent?: {
+    outputTranscription?: {
+      text?: string
+      finished?: boolean
+    }
+    turnComplete?: boolean
+    generationComplete?: boolean
+    interrupted?: boolean
+  }
+  toolCall?: {
+    functionCalls?: Array<{
+      id?: string
+      name?: string
+      args?: Record<string, unknown>
+    }>
+  }
 }
 
 const LILY_MODEL_OPTIONS = [
@@ -75,25 +134,25 @@ const LILY_PERSONALITY_OPTIONS: Array<{
 export const LILY_CONVERSATION_PRESETS: Array<LilyConversationPreset> = [
   {
     id: 'daily-brief',
-    label: 'Daily brief',
+    label: 'Brief',
     prompt:
       'Give me a daily brief: meetings, urgent tasks, waiting replies, and the one thing I should do next.',
   },
   {
     id: 'meeting-prep',
-    label: 'Meeting prep',
+    label: 'Prep',
     prompt:
       'Prep me for the next meeting. Include context, likely decisions, open action items, and risks.',
   },
   {
     id: 'task-triage',
-    label: 'Task triage',
+    label: 'Triage',
     prompt:
       'Triage my tasks into do now, delegate, schedule, and ignore. Call out anything waiting on me.',
   },
   {
     id: 'system-check',
-    label: 'System check',
+    label: 'Check',
     prompt:
       'Check Hermes workspace health, voice loop readiness, source freshness, and what changed recently.',
   },
@@ -103,6 +162,9 @@ export function buildLilyDiagnostics(input: {
   micPermission: string
   browserVoiceLabel: string
   liveKitConnected: boolean
+  geminiConnected?: boolean
+  realtimeConnected?: boolean
+  voiceMode?: string
   tokenStatus: string
   workerStatus?: string
   status: string
@@ -112,9 +174,101 @@ export function buildLilyDiagnostics(input: {
     'LILY diagnostics',
     `[browser] mic=${input.micPermission}; speech=${input.browserVoiceLabel}`,
     `[worker] status=${input.workerStatus || 'checking'}`,
-    `[network] livekit=${input.liveKitConnected ? 'connected' : 'not connected'}; token=${input.tokenStatus}`,
+    `[transport] livekit=${input.liveKitConnected ? 'connected' : 'not connected'}; realtime=${input.realtimeConnected ? 'connected' : 'not connected'}; gemini=${input.geminiConnected ? 'connected' : 'not connected'}; token=${input.tokenStatus}`,
+    `[agent] voiceMode=${input.voiceMode || 'unknown'}`,
     `[config] status=${input.status}; error=${input.error || 'none'}`,
   ].join('\n')
+}
+
+export function buildLilyVoiceLoopStages(input: {
+  handsFreeEnabled: boolean
+  pushToTalkActive: boolean
+  browserVoiceLabel: string
+  micPermission: string
+  liveKitConnected: boolean
+  realtimeConnected?: boolean
+  geminiConnected?: boolean
+  workerStatus?: string
+  tokenStatus: string
+  voiceMode: string
+  isSending: boolean
+  lastTestStage: string
+}) {
+  const browserActive = input.handsFreeEnabled || input.pushToTalkActive
+  const connectedTransport = input.geminiConnected
+    ? 'Gemini Live connected'
+    : input.realtimeConnected
+      ? 'OpenAI Realtime connected'
+      : input.liveKitConnected
+        ? 'LiveKit transport connected'
+        : input.workerStatus === 'online'
+          ? 'Worker online; token pending'
+          : 'Browser fallback only'
+  const speaking =
+    input.voiceMode === 'speaking'
+      ? 'Speaking now'
+      : input.isSending || input.voiceMode === 'thinking'
+        ? 'Thinking'
+        : 'Not speaking'
+
+  return [
+    {
+      id: 'browser',
+      label: 'Browser loop',
+      value: browserActive ? 'Hands-free' : 'Manual',
+      detail:
+        input.micPermission === 'denied'
+          ? 'Mic blocked'
+          : `${input.browserVoiceLabel}; mic ${input.micPermission}`,
+      tone:
+        input.micPermission === 'denied'
+          ? ('unavailable' as const)
+          : browserActive
+            ? ('ready' as const)
+            : ('degraded' as const),
+    },
+    {
+      id: 'transport',
+      label: 'Transport',
+      value: connectedTransport,
+      detail: input.tokenStatus,
+      tone:
+        input.geminiConnected ||
+        input.realtimeConnected ||
+        input.liveKitConnected
+          ? ('ready' as const)
+          : input.workerStatus === 'online'
+            ? ('degraded' as const)
+            : ('unavailable' as const),
+    },
+    {
+      id: 'agent',
+      label: 'Voice agent',
+      value: speaking,
+      detail: input.voiceMode,
+      tone:
+        input.voiceMode === 'speaking'
+          ? ('ready' as const)
+          : input.isSending || input.voiceMode === 'thinking'
+            ? ('degraded' as const)
+            : ('unavailable' as const),
+    },
+    {
+      id: 'test',
+      label: 'Last test',
+      value: input.lastTestStage.startsWith('passed')
+        ? 'Passed'
+        : input.lastTestStage.startsWith('failed')
+          ? 'Failed'
+          : 'Not passed',
+      detail: input.lastTestStage,
+      tone: input.lastTestStage.startsWith('passed')
+        ? ('ready' as const)
+        : input.lastTestStage.startsWith('failed')
+          ? ('unavailable' as const)
+          : ('degraded' as const),
+    },
+  ] as const
 }
 
 export function getLilyFailureCta(input: {
@@ -127,7 +281,7 @@ export function getLilyFailureCta(input: {
   if (input.micPermission === 'denied') return 'Grant mic'
   if (!input.browserSupported) return 'Switch browser'
   if (input.workerStatus && input.workerStatus !== 'online') {
-    return 'Start worker'
+    return 'Use Chrome loop'
   }
   if (/unavailable|refreshing|no livekit token/i.test(input.tokenStatus)) {
     return 'Refresh token'
@@ -138,16 +292,24 @@ export function getLilyFailureCta(input: {
 
 export function getLilyVoiceReadiness(input: {
   configured: boolean
+  geminiConfigured?: boolean
+  realtimeConfigured?: boolean
   micPermission: string
   browserSupported: boolean
   workerStatus?: string
   tokenStatus: string
   liveKitConnected: boolean
+  geminiConnected?: boolean
+  realtimeConnected?: boolean
 }) {
-  if (input.liveKitConnected) {
+  if (
+    input.geminiConnected ||
+    input.realtimeConnected ||
+    input.liveKitConnected
+  ) {
     return {
       state: 'ready' as const,
-      label: 'Voice ready',
+      label: 'Voice',
       blocker: 'none',
       canStart: true,
     }
@@ -155,111 +317,205 @@ export function getLilyVoiceReadiness(input: {
   if (input.micPermission === 'denied') {
     return {
       state: 'unavailable' as const,
-      label: 'Voice unavailable',
-      blocker: 'Microphone permission is blocked',
+      label: 'Blocked',
+      blocker: 'Mic permission blocked',
       canStart: false,
     }
   }
-  if (input.workerStatus && input.workerStatus !== 'online') {
+  if (input.geminiConfigured && input.browserSupported) {
     return {
-      state: 'degraded' as const,
-      label: 'Voice degraded',
-      blocker: `Voice worker is ${input.workerStatus}`,
-      canStart: false,
+      state: 'ready' as const,
+      label: 'Gemini',
+      blocker: 'none',
+      canStart: true,
     }
   }
-  if (!input.configured && !input.browserSupported) {
+  if (input.realtimeConfigured) {
+    return {
+      state: 'ready' as const,
+      label: 'Realtime',
+      blocker: 'none',
+      canStart: true,
+    }
+  }
+  const canUseChromeLoop = input.browserSupported
+  if (
+    !input.configured &&
+    !input.geminiConfigured &&
+    !input.realtimeConfigured &&
+    !input.browserSupported
+  ) {
     return {
       state: 'unavailable' as const,
-      label: 'Voice unavailable',
-      blocker: 'LiveKit is not configured and browser speech is unavailable',
+      label: 'Blocked',
+      blocker: 'Realtime + speech missing',
       canStart: false,
+    }
+  }
+  if (input.realtimeConfigured) {
+    return {
+      state: 'ready' as const,
+      label: 'Realtime',
+      blocker: 'none',
+      canStart: true,
     }
   }
   if (
     !input.configured ||
     /no livekit token|unavailable/i.test(input.tokenStatus)
   ) {
+    if (input.browserSupported) {
+      return {
+        state: 'degraded' as const,
+        label: 'Chrome',
+        blocker: input.configured
+          ? 'Token inactive; Chrome ready'
+          : 'Keys missing; Chrome ready',
+        canStart: true,
+      }
+    }
     return {
       state: 'degraded' as const,
-      label: 'Typed fallback active',
-      blocker: input.configured
-        ? 'LiveKit token is not active yet'
-        : 'LiveKit keys are missing',
-      canStart: input.browserSupported,
+      label: 'Typed',
+      blocker: input.configured ? 'Token inactive' : 'Keys missing',
+      canStart: canUseChromeLoop,
     }
   }
   if (!input.browserSupported) {
     return {
       state: 'degraded' as const,
-      label: 'Voice transport only',
-      blocker: 'Browser Listen is unavailable',
+      label: 'Transport',
+      blocker: 'Listen unavailable',
       canStart: input.configured,
     }
   }
   return {
     state: 'ready' as const,
-    label: 'Voice ready',
-    blocker: 'none',
+    label: 'Voice',
+    blocker:
+      input.workerStatus && input.workerStatus !== 'online'
+        ? 'Worker offline; Chrome loop ready'
+        : 'none',
     canStart: true,
   }
 }
 
 export function getLilySetupChecklist(input: {
   configured: boolean
+  realtimeConfigured?: boolean
   micPermission: string
   browserSupported: boolean
   workerStatus?: string
   liveKitConnected: boolean
+  realtimeConnected?: boolean
 }) {
   return [
     {
       id: 'microphone',
-      label: 'Microphone permission',
+      label: 'Mic',
       status:
         input.micPermission === 'granted'
           ? 'ready'
           : input.micPermission === 'denied'
             ? 'blocked'
             : 'needs action',
-      action:
-        input.micPermission === 'denied'
-          ? 'Allow microphone in browser site settings, then retry.'
-          : 'Approve microphone when prompted.',
+      action: input.micPermission === 'denied' ? 'Allow mic.' : 'Approve mic.',
     },
     {
-      id: 'browser',
-      label: 'Browser speech',
+      id: 'speaker',
+      label: 'Speaker',
       status: input.browserSupported ? 'ready' : 'degraded',
       action: input.browserSupported
-        ? 'Browser Listen is available.'
-        : 'Use Chrome for wake-word listening, or continue with typed fallback.',
+        ? 'Tab audio ready.'
+        : 'Use Chrome or type.',
     },
     {
-      id: 'worker',
-      label: 'LILY voice worker',
+      id: 'realtime',
+      label: 'Realtime',
       status:
-        !input.workerStatus || input.workerStatus === 'online'
+        input.realtimeConnected ||
+        input.realtimeConfigured ||
+        input.liveKitConnected ||
+        input.workerStatus === 'online'
           ? 'ready'
-          : 'blocked',
-      action:
-        !input.workerStatus || input.workerStatus === 'online'
-          ? 'Worker is reachable.'
-          : 'Start the worker before relying on full voice mode.',
+          : input.browserSupported
+            ? 'degraded'
+            : 'blocked',
+      action: input.realtimeConnected
+        ? 'Realtime connected.'
+        : input.realtimeConfigured
+          ? 'Realtime ready.'
+          : input.liveKitConnected || input.workerStatus === 'online'
+            ? 'Media ready.'
+            : input.browserSupported
+              ? 'Chrome loop.'
+              : 'Start worker or Chrome.',
+    },
+  ]
+}
+
+export function buildLilyCockpitTiles(input: {
+  readiness: ReturnType<typeof getLilyVoiceReadiness>
+  micPermission: string
+  browserVoiceLabel: string
+  tokenStatus: string
+  workerStatus?: string
+  wakeLockStatus: string
+  memoryEnabled: boolean
+  conversationMemoryEnabled: boolean
+  timelineCount: number
+}) {
+  return [
+    {
+      id: 'readiness',
+      label: 'Voice',
+      value: input.readiness.label,
+      detail:
+        input.readiness.blocker === 'none'
+          ? 'Startable'
+          : input.readiness.blocker,
+      tone: input.readiness.state,
+    },
+    {
+      id: 'mic',
+      label: 'Mic',
+      value:
+        input.micPermission === 'granted'
+          ? 'Ready'
+          : input.micPermission === 'denied'
+            ? 'Blocked'
+            : 'Prompt',
+      detail: input.browserVoiceLabel,
+      tone:
+        input.micPermission === 'granted'
+          ? 'ready'
+          : input.micPermission === 'denied'
+            ? 'unavailable'
+            : 'degraded',
     },
     {
       id: 'transport',
-      label: 'LiveKit transport',
-      status: input.liveKitConnected
-        ? 'ready'
-        : input.configured
-          ? 'needs action'
+      label: 'Transport',
+      value: input.workerStatus === 'online' ? 'Worker' : 'Browser',
+      detail: input.tokenStatus,
+      tone:
+        input.workerStatus === 'online' ||
+        /active|ready/i.test(input.tokenStatus)
+          ? 'ready'
           : 'degraded',
-      action: input.configured
-        ? 'Start LILY to issue a fresh token.'
-        : 'Configure LiveKit keys in Settings.',
     },
-  ]
+    {
+      id: 'memory',
+      label: 'Memory',
+      value: input.memoryEnabled
+        ? input.conversationMemoryEnabled
+          ? 'Full'
+          : 'Workspace'
+        : 'Off',
+      detail: `${input.timelineCount} recent event${input.timelineCount === 1 ? '' : 's'} · wake ${input.wakeLockStatus}`,
+      tone: input.memoryEnabled ? 'ready' : 'degraded',
+    },
+  ] as const
 }
 
 export function getMicrophonePermissionGuidance(input: {
@@ -267,15 +523,15 @@ export function getMicrophonePermissionGuidance(input: {
   userAgent: string
 }) {
   if (input.micPermission !== 'denied') {
-    return 'Approve the microphone prompt when it appears. If no prompt appears, open browser site settings for this Workspace URL.'
+    return 'Approve mic. If no prompt, use site settings.'
   }
   if (/chrome|crios|chromium/i.test(input.userAgent)) {
-    return 'Chrome: click the site settings icon in the address bar, set Microphone to Allow, then retry LILY.'
+    return 'Chrome site settings: Mic Allow, then retry.'
   }
   if (/safari/i.test(input.userAgent)) {
-    return 'Safari: open Settings for This Website, allow Microphone, then retry LILY.'
+    return 'Safari website settings: Mic Allow, then retry.'
   }
-  return 'Open this browser site settings, allow Microphone for Hermes Workspace, then retry LILY.'
+  return 'Site settings: Mic Allow, then retry.'
 }
 
 export function normalizeLiveKitError(error?: string) {
@@ -288,6 +544,18 @@ export function normalizeLiveKitError(error?: string) {
     return 'Microphone access failed'
   }
   return value || 'LiveKit transport unavailable'
+}
+
+function normalizeRealtimeError(error?: string) {
+  const value = error || ''
+  if (/quota|429|billing/i.test(value)) {
+    return 'Realtime quota unavailable.'
+  }
+  if (/permission|microphone|audio/i.test(value)) return 'Mic unavailable.'
+  if (/network|timeout|failed to fetch/i.test(value)) {
+    return 'Realtime network unavailable.'
+  }
+  return 'Realtime unavailable.'
 }
 
 export function buildLilySessionSummary(
@@ -349,6 +617,10 @@ type LiveKitTokenPayload = {
   error?: string
 }
 
+type RealtimeDataChannel = RTCDataChannel & {
+  readyState: RTCDataChannelState
+}
+
 type WakeLockSentinelLike = {
   release: () => Promise<void>
   addEventListener?: (
@@ -366,6 +638,8 @@ type DustParticle = {
   opacity: number
   hue: number
   delay: number
+  z?: number
+  depth?: number
 }
 
 function buildOrbDust(count: number): Array<DustParticle> {
@@ -385,32 +659,35 @@ function buildOrbDust(count: number): Array<DustParticle> {
   })
 }
 
-function buildHelixDust(count: number): Array<DustParticle & { z: number }> {
+function buildHelixDust(count: number): Array<DustParticle> {
   return Array.from({ length: count }, (_, index) => {
-    const turn = (index / (count - 1)) * Math.PI * 5.6
+    const progress = index / (count - 1)
+    const turn = progress * Math.PI * 7.2
     const strand = index % 2 === 0 ? 0 : Math.PI
-    const depth = Math.cos(turn + strand)
-    const radius = 19 + Math.sin(index * 0.57) * 2.2
+    const phase = turn + strand
+    const depth = Math.cos(phase)
+    const radius = 56 + Math.sin(index * 0.67) * 8
     return {
       id: `helix-${index}`,
-      x: 50 + Math.sin(turn + strand) * radius,
-      y: 14 + (index / (count - 1)) * 72,
-      z: depth,
-      size: 1.35 + (depth + 1) * 0.55 + (index % 3) * 0.12,
-      opacity: 0.38 + (depth + 1) * 0.24,
-      hue: index % 2 === 0 ? 188 : 292,
-      delay: -index * 0.045,
+      x: Math.sin(phase) * radius,
+      y: -138 + progress * 276,
+      z: depth * 126,
+      depth,
+      size: 1.4 + (depth + 1) * 0.95 + (index % 5) * 0.12,
+      opacity: 0.28 + (depth + 1) * 0.29,
+      hue: index % 3 === 0 ? 175 : index % 3 === 1 ? 198 : 292,
+      delay: -index * 0.052,
     }
   })
 }
 
-const ORB_DUST = buildOrbDust(150)
-const HELIX_DUST = buildHelixDust(118)
+const ORB_DUST = buildOrbDust(90)
+const HELIX_DUST = buildHelixDust(186)
 
 const STARTER_MESSAGES: Array<LilyMessage> = [
   {
     role: 'assistant',
-    content: 'I am here. Type or start voice and we can talk back and forth.',
+    content: 'Ready.',
     localOnly: true,
   },
 ]
@@ -482,19 +759,6 @@ export function isFatalSpeechRecognitionError(error: string): boolean {
   ]).has(error)
 }
 
-function formatCheckedAt(value?: string): string {
-  if (!value) return 'not checked'
-  const time = Date.parse(value)
-  if (!Number.isFinite(time)) return 'not checked'
-  const diff = Date.now() - time
-  if (diff < 60_000) return 'just now'
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-  return new Date(time).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
 export function getLiveKitTokenRefreshDelay(
   expiresAt?: string,
   now = Date.now(),
@@ -521,27 +785,23 @@ export function getBrowserVoiceSupportForUserAgent({
   if (hasSpeechRecognition && isChrome) {
     return {
       supported: true,
-      label: 'Chrome speech recognition ready',
-      detail:
-        'Browser Listen can stream interim transcripts after mic approval.',
+      label: 'Chrome ready',
+      detail: 'Interim transcript after mic approval.',
     }
   }
   if (hasSpeechRecognition && isSafari) {
     return {
       supported: true,
-      label: 'Safari speech recognition available',
-      detail:
-        'Safari may stop recognition more aggressively; use typed chat if it drops.',
+      label: 'Safari ready',
+      detail: 'Safari may drop; type if needed.',
     }
   }
   return {
     supported: hasSpeechRecognition,
-    label: hasSpeechRecognition
-      ? 'Speech recognition ready'
-      : 'Speech recognition missing',
+    label: hasSpeechRecognition ? 'Speech ready' : 'Speech missing',
     detail: hasSpeechRecognition
-      ? 'Browser Listen is available.'
-      : 'Use Chrome for Browser Listen, or use typed chat and LiveKit transport.',
+      ? 'Listen ready.'
+      : 'Use Chrome, typed chat, or LiveKit.',
   }
 }
 
@@ -549,8 +809,8 @@ function getBrowserVoiceSupport() {
   if (typeof window === 'undefined') {
     return {
       supported: false,
-      label: 'Browser listen unavailable',
-      detail: 'Speech recognition is only available in the browser.',
+      label: 'Listen unavailable',
+      detail: 'Browser required.',
     }
   }
   return getBrowserVoiceSupportForUserAgent({
@@ -559,14 +819,23 @@ function getBrowserVoiceSupport() {
   })
 }
 
+function isPushToTalkIgnoredTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return Boolean(
+    target.closest(
+      'button,a,input,textarea,select,[contenteditable="true"],[role="button"],[data-lily-controls]',
+    ),
+  )
+}
+
 function LilyPage() {
   const [config, setConfig] = useState<LilyConfig | null>(null)
   const [messages, setMessages] = useState<Array<LilyMessage>>(STARTER_MESSAGES)
   const [status, setStatus] = useState('Initializing')
   const [typedFallback, setTypedFallback] = useState('')
   const [voiceTestStage, setVoiceTestStage] = useState('Not tested')
-  const [lastHeardAt, setLastHeardAt] = useState<string | null>(null)
-  const [lastSpokeAt, setLastSpokeAt] = useState<string | null>(null)
+  const [, setLastHeardAt] = useState<string | null>(null)
+  const [, setLastSpokeAt] = useState<string | null>(null)
   const [retentionMode, setRetentionMode] = useState<
     'session' | 'workspace-memory'
   >('session')
@@ -575,9 +844,14 @@ function LilyPage() {
     'idle' | 'armed' | 'listening' | 'thinking' | 'speaking' | 'connected'
   >('idle')
   const [handsFreeEnabled, setHandsFreeEnabled] = useState(false)
+  const [pushToTalkActive, setPushToTalkActive] = useState(false)
   const [heardWakeWord, setHeardWakeWord] = useState(false)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [liveKitConnected, setLiveKitConnected] = useState(false)
+  const [realtimeConnected, setRealtimeConnected] = useState(false)
+  const [, setRealtimeStatus] = useState('Realtime not connected')
+  const [geminiConnected, setGeminiConnected] = useState(false)
+  const [, setGeminiStatus] = useState('Gemini not connected')
   const [micPermission, setMicPermission] = useState<
     'unknown' | 'prompt' | 'requesting' | 'granted' | 'denied'
   >('unknown')
@@ -602,6 +876,18 @@ function LilyPage() {
   const audioRootRef = useRef<HTMLDivElement | null>(null)
   const transcriptEndRef = useRef<HTMLDivElement | null>(null)
   const roomRef = useRef<LiveKitRoom | null>(null)
+  const realtimePeerRef = useRef<RTCPeerConnection | null>(null)
+  const realtimeChannelRef = useRef<RealtimeDataChannel | null>(null)
+  const realtimeAudioRef = useRef<HTMLAudioElement | null>(null)
+  const realtimeAssistantDraftRef = useRef('')
+  const realtimeHandledCallIdsRef = useRef<Set<string>>(new Set())
+  const realtimeResponseActiveRef = useRef(false)
+  const geminiSessionRef = useRef<GeminiLiveSession | null>(null)
+  const geminiAssistantDraftRef = useRef('')
+  const geminiTurnResolveRef = useRef<((reply: string) => void) | null>(null)
+  const geminiTurnRejectRef = useRef<((error: Error) => void) | null>(null)
+  const geminiAudioContextRef = useRef<AudioContext | null>(null)
+  const geminiAudioCursorRef = useRef(0)
   const currentLiveKitRoomNameRef = useRef<string | null>(null)
   const reconnectingLiveKitRef = useRef(false)
   const recognitionRef = useRef<any>(null)
@@ -611,6 +897,9 @@ function LilyPage() {
   const speechAnimationRef = useRef<number | null>(null)
   const wakeWindowTimeoutRef = useRef<number | null>(null)
   const handsFreeRef = useRef(false)
+  const pushToTalkActiveRef = useRef(false)
+  const pushToTalkTranscriptRef = useRef('')
+  const pushToTalkDraftRef = useRef('')
   const heardWakeWordRef = useRef(false)
   const isSendingRef = useRef(false)
   const restartingRef = useRef(false)
@@ -620,36 +909,51 @@ function LilyPage() {
   const browserVoice = useMemo(getBrowserVoiceSupport, [])
   const voiceWorker = config?.voiceWorker
   const visualLevel = Math.max(micLevel, speechLevel)
-  const voiceActive = handsFreeEnabled || liveKitConnected
-  const awaitingReply =
-    isSending && messages[messages.length - 1]?.role === 'user'
-  const failureCta = getLilyFailureCta({
-    micPermission,
-    browserSupported: browserVoice.supported,
-    liveKitConnected,
-    workerStatus: voiceWorker?.status,
-    tokenStatus,
-  })
+  const voiceActive =
+    handsFreeEnabled ||
+    pushToTalkActive ||
+    geminiConnected ||
+    liveKitConnected ||
+    realtimeConnected
+  const lastMessage = messages[messages.length - 1]
+  const awaitingReply = isSending && lastMessage?.role === 'user'
   const voiceReadiness = getLilyVoiceReadiness({
     configured: Boolean(config?.configured),
+    geminiConfigured: Boolean(config?.gemini?.configured),
+    realtimeConfigured: Boolean(config?.realtime?.configured),
     micPermission,
     browserSupported: browserVoice.supported,
     workerStatus: voiceWorker?.status,
     tokenStatus,
     liveKitConnected,
+    geminiConnected,
+    realtimeConnected,
   })
-  const setupChecklist = getLilySetupChecklist({
-    configured: Boolean(config?.configured),
+  const lilyCockpitTiles = buildLilyCockpitTiles({
+    readiness: voiceReadiness,
     micPermission,
-    browserSupported: browserVoice.supported,
+    browserVoiceLabel: browserVoice.label,
+    tokenStatus,
     workerStatus: voiceWorker?.status,
-    liveKitConnected,
+    wakeLockStatus,
+    memoryEnabled: useWorkspaceMemory,
+    conversationMemoryEnabled: useConversationMemory,
+    timelineCount: timeline.length,
   })
-  const primaryBlocker =
-    setupChecklist.find((item) => item.status === 'blocked') ||
-    setupChecklist.find((item) => item.status === 'needs action') ||
-    setupChecklist.find((item) => item.status === 'degraded')
-
+  const lilyLoopStages = buildLilyVoiceLoopStages({
+    handsFreeEnabled,
+    pushToTalkActive,
+    browserVoiceLabel: browserVoice.label,
+    micPermission,
+    liveKitConnected,
+    realtimeConnected,
+    geminiConnected,
+    workerStatus: voiceWorker?.status,
+    tokenStatus,
+    voiceMode,
+    isSending,
+    lastTestStage: voiceTestStage,
+  })
   function addTimeline(event: Omit<LilyTimelineEvent, 'id' | 'createdAt'>) {
     const next: LilyTimelineEvent = {
       ...event,
@@ -659,9 +963,35 @@ function LilyPage() {
     setTimeline((current) => [next, ...current].slice(0, 8))
   }
 
+  async function persistLilyMemoryEvents(events: Array<LilyMemoryEvent>) {
+    if (!useWorkspaceMemory || events.length === 0) return
+    await fetch(apiPath('/lily/hermes-chat'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Persist LILY transcript and decision events only. No spoken reply needed.',
+          },
+        ],
+        personality,
+        useWorkspaceMemory,
+        useConversationMemory: false,
+        persistOnly: true,
+        memoryEvents: events,
+      }),
+    }).catch(() => {})
+  }
+
   useEffect(() => {
     handsFreeRef.current = handsFreeEnabled
   }, [handsFreeEnabled])
+
+  useEffect(() => {
+    pushToTalkActiveRef.current = pushToTalkActive
+  }, [pushToTalkActive])
 
   useEffect(() => {
     heardWakeWordRef.current = heardWakeWord
@@ -750,6 +1080,28 @@ function LilyPage() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || event.repeat) return
+      if (isPushToTalkIgnoredTarget(event.target)) return
+      event.preventDefault()
+      void startPushToTalk()
+    }
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      if (isPushToTalkIgnoredTarget(event.target)) return
+      event.preventDefault()
+      finishPushToTalk()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [browserVoice.supported, isSending])
+
+  useEffect(() => {
     let cancelled = false
     async function loadConfig(options?: { quiet?: boolean }) {
       try {
@@ -758,7 +1110,11 @@ function LilyPage() {
         if (cancelled) return
         setConfig(payload)
         if (!options?.quiet) {
-          setStatus(payload.configured ? 'Ready' : 'LiveKit keys needed')
+          setStatus(
+            payload.gemini?.configured || payload.configured
+              ? 'Ready'
+              : 'Voice keys needed',
+          )
         }
       } catch (err) {
         if (cancelled) return
@@ -778,6 +1134,8 @@ function LilyPage() {
       cancelled = true
       window.clearInterval(interval)
       roomRef.current?.disconnect()
+      disconnectGeminiLive()
+      disconnectRealtime()
       recognitionRef.current?.abort?.()
       clearWakeWindow()
       micStreamRef.current?.getTracks().forEach((track) => track.stop())
@@ -864,16 +1222,18 @@ function LilyPage() {
       setHeardWakeWord(false)
       setLiveTranscript('')
       if (handsFreeRef.current && !isSendingRef.current) {
-        setVoiceMode('armed')
-        setStatus('Listening for "LILY"')
+        setVoiceMode('listening')
+        setStatus('Listening')
       }
     }, 8_000)
   }
 
   function stopHandsFreeAfterSpeechError(speechError: string) {
     handsFreeRef.current = false
+    pushToTalkActiveRef.current = false
     clearWakeWindow()
     setHandsFreeEnabled(false)
+    setPushToTalkActive(false)
     heardWakeWordRef.current = false
     setHeardWakeWord(false)
     setLiveTranscript('')
@@ -983,6 +1343,627 @@ function LilyPage() {
       micAnimationRef.current = window.requestAnimationFrame(read)
     }
     read()
+  }
+
+  function sendRealtimeEvent(event: Record<string, unknown>) {
+    const channel = realtimeChannelRef.current
+    if (!channel || channel.readyState !== 'open') return false
+    channel.send(JSON.stringify(event))
+    return true
+  }
+
+  function setRealtimeMicEnabled(enabled: boolean) {
+    micStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = enabled
+    })
+  }
+
+  function shouldTryVoiceProvider(
+    provider: NonNullable<LilyConfig['voiceProvider']>,
+  ) {
+    const configuredProvider = config?.voiceProvider || 'auto'
+    return configuredProvider === 'auto' || configuredProvider === provider
+  }
+
+  async function handleRealtimeHermesTool(event: Record<string, unknown>) {
+    const callId = typeof event.call_id === 'string' ? event.call_id : ''
+    const name = typeof event.name === 'string' ? event.name : ''
+    if (!callId || name !== 'ask_hermes_workspace') return
+    if (realtimeHandledCallIdsRef.current.has(callId)) return
+    realtimeHandledCallIdsRef.current.add(callId)
+
+    let request = ''
+    try {
+      const args =
+        typeof event.arguments === 'string'
+          ? (JSON.parse(event.arguments) as Record<string, unknown>)
+          : {}
+      request = typeof args.request === 'string' ? args.request.trim() : ''
+    } catch {
+      request = ''
+    }
+
+    const toolMessages: Array<LilyMessage> = [
+      {
+        role: 'user',
+        content: request || 'Handle the current Hermes Workspace request.',
+      },
+    ]
+    try {
+      const response = await fetch(apiPath('/lily/hermes-chat'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          messages: toolMessages,
+          model: selectedModel,
+          personality,
+          useWorkspaceMemory,
+          useConversationMemory: false,
+        }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean
+        reply?: string
+        error?: string
+      }
+      const output =
+        response.ok && payload.ok
+          ? payload.reply || 'Hermes completed the request.'
+          : payload.error || `Hermes returned HTTP ${response.status}`
+      sendRealtimeEvent({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: callId,
+          output,
+        },
+      })
+      sendRealtimeEvent({ type: 'response.create' })
+    } catch (error) {
+      sendRealtimeEvent({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: callId,
+          output:
+            error instanceof Error
+              ? `Hermes delegation failed: ${error.message}`
+              : 'Hermes delegation failed.',
+        },
+      })
+      sendRealtimeEvent({ type: 'response.create' })
+    }
+  }
+
+  async function askHermesWorkspace(request: string): Promise<string> {
+    const toolMessages: Array<LilyMessage> = [
+      {
+        role: 'user',
+        content: request || 'Handle the current Hermes Workspace request.',
+      },
+    ]
+    const response = await fetch(apiPath('/lily/hermes-chat'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        messages: toolMessages,
+        model: selectedModel,
+        personality,
+        useWorkspaceMemory,
+        useConversationMemory: false,
+      }),
+    })
+    const payload = (await response.json().catch(() => ({}))) as {
+      ok?: boolean
+      reply?: string
+      error?: string
+    }
+    if (!response.ok || !payload.ok) {
+      throw new Error(
+        payload.error || `Hermes returned HTTP ${response.status}`,
+      )
+    }
+    return payload.reply || 'Hermes completed the request.'
+  }
+
+  function getGeminiAudioContext() {
+    const ExistingAudioContext =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext
+    if (!ExistingAudioContext) return null
+    if (!geminiAudioContextRef.current) {
+      geminiAudioContextRef.current = new ExistingAudioContext()
+    }
+    return geminiAudioContextRef.current
+  }
+
+  function playGeminiPcmAudio(base64Audio: string) {
+    if (!base64Audio) return
+    const audioContext = getGeminiAudioContext()
+    if (!audioContext) return
+    void audioContext.resume()
+    const raw = window.atob(base64Audio)
+    const samples = new Int16Array(raw.length / 2)
+    for (let index = 0; index < samples.length; index += 1) {
+      const low = raw.charCodeAt(index * 2)
+      const high = raw.charCodeAt(index * 2 + 1)
+      const value = (high << 8) | low
+      samples[index] = value >= 0x8000 ? value - 0x10000 : value
+    }
+    const sampleRate = 24_000
+    const buffer = audioContext.createBuffer(1, samples.length, sampleRate)
+    const channel = buffer.getChannelData(0)
+    for (let index = 0; index < samples.length; index += 1) {
+      channel[index] = samples[index] / 32768
+    }
+    const source = audioContext.createBufferSource()
+    source.buffer = buffer
+    source.connect(audioContext.destination)
+    const now = audioContext.currentTime
+    const startsAt = Math.max(now + 0.02, geminiAudioCursorRef.current)
+    geminiAudioCursorRef.current = startsAt + buffer.duration
+    source.start(startsAt)
+    setStatus('Replying')
+    setVoiceMode('speaking')
+    source.onended = () => {
+      if (audioContext.currentTime + 0.05 >= geminiAudioCursorRef.current) {
+        stopSpeechPulse()
+        setStatus(handsFreeRef.current ? 'Listening' : 'Gemini ready')
+        setVoiceMode(handsFreeRef.current ? 'listening' : 'connected')
+      }
+    }
+  }
+
+  async function handleGeminiToolCalls(
+    functionCalls: NonNullable<
+      NonNullable<GeminiLiveServerMessage['toolCall']>['functionCalls']
+    >,
+  ) {
+    const responses = await Promise.all(
+      functionCalls.map(async (call) => {
+        const request =
+          typeof call.args?.request === 'string' ? call.args.request.trim() : ''
+        try {
+          const output = await askHermesWorkspace(request)
+          return {
+            id: call.id,
+            name: call.name || 'ask_hermes_workspace',
+            response: { output },
+          }
+        } catch (error) {
+          return {
+            id: call.id,
+            name: call.name || 'ask_hermes_workspace',
+            response: {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Hermes delegation failed.',
+            },
+          }
+        }
+      }),
+    )
+    geminiSessionRef.current?.sendToolResponse({ functionResponses: responses })
+  }
+
+  function handleGeminiLiveMessage(message: GeminiLiveServerMessage) {
+    const outputText = message.serverContent?.outputTranscription?.text?.trim()
+    if (outputText) {
+      geminiAssistantDraftRef.current = [
+        geminiAssistantDraftRef.current,
+        outputText,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+    if (message.text?.trim()) {
+      geminiAssistantDraftRef.current = [
+        geminiAssistantDraftRef.current,
+        message.text.trim(),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+    if (message.data) {
+      startSpeechPulse('Gemini audio')
+      playGeminiPcmAudio(message.data)
+    }
+    if (message.toolCall?.functionCalls?.length) {
+      void handleGeminiToolCalls(message.toolCall.functionCalls)
+    }
+    if (message.serverContent?.interrupted) {
+      geminiAssistantDraftRef.current = ''
+      stopSpeechPulse()
+      setStatus('Interrupted')
+      setVoiceMode(handsFreeRef.current ? 'listening' : 'connected')
+    }
+    if (message.serverContent?.turnComplete) {
+      const reply = geminiAssistantDraftRef.current.trim()
+      geminiTurnResolveRef.current?.(reply || 'I am here.')
+      geminiTurnResolveRef.current = null
+      geminiTurnRejectRef.current = null
+      setLastSpokeAt(new Date().toISOString())
+    }
+  }
+
+  async function connectGeminiLive() {
+    if (geminiConnected && geminiSessionRef.current) return true
+    if (!config?.gemini?.configured) return false
+    setError('')
+    setStatus('Opening Gemini voice')
+    setGeminiStatus('Opening Gemini Live')
+    setVoiceMode('thinking')
+    try {
+      const response = await fetch(apiPath('/lily/gemini-live-token'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+      })
+      const payload = (await response.json()) as {
+        ok?: boolean
+        token?: string
+        model?: string
+        error?: string
+      }
+      if (!response.ok || !payload.ok || !payload.token) {
+        throw new Error(payload.error || 'Gemini Live token failed')
+      }
+      const model = payload.model || config.gemini.model
+      const modelName = model.startsWith('models/') ? model : `models/${model}`
+      const socket = await new Promise<WebSocket>((resolve, reject) => {
+        const websocket = new WebSocket(
+          `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(
+            payload.token || '',
+          )}`,
+        )
+        const timeout = window.setTimeout(() => {
+          reject(new Error('Gemini Live connection timed out'))
+          websocket.close()
+        }, 10_000)
+        websocket.onopen = () => {
+          window.clearTimeout(timeout)
+          websocket.send(
+            JSON.stringify({
+              setup: {
+                model: modelName,
+                generationConfig: {
+                  responseModalities: ['AUDIO'],
+                },
+              },
+            }),
+          )
+          resolve(websocket)
+        }
+        websocket.onerror = () => {
+          window.clearTimeout(timeout)
+          reject(new Error('Gemini Live WebSocket failed'))
+        }
+      })
+      socket.onmessage = (event) => {
+        try {
+          handleGeminiLiveMessage(
+            JSON.parse(event.data) as GeminiLiveServerMessage,
+          )
+        } catch {
+          // Ignore non-JSON Gemini diagnostics.
+        }
+      }
+      socket.onerror = () => {
+        setGeminiStatus('Gemini error')
+        geminiTurnRejectRef.current?.(new Error('Gemini Live WebSocket failed'))
+      }
+      socket.onclose = () => {
+        setGeminiConnected(false)
+        setGeminiStatus('Gemini not connected')
+        if (!handsFreeRef.current && !pushToTalkActiveRef.current) {
+          setVoiceMode(liveKitConnected ? 'connected' : 'idle')
+        }
+      }
+      const session: GeminiLiveSession = {
+        sendClientContent: (params) => {
+          socket.send(
+            JSON.stringify({
+              clientContent: {
+                turns: params.turns ? [params.turns] : undefined,
+                turnComplete: params.turnComplete ?? true,
+              },
+            }),
+          )
+        },
+        sendToolResponse: (params) => {
+          socket.send(
+            JSON.stringify({
+              toolResponse: {
+                functionResponses: params.functionResponses,
+              },
+            }),
+          )
+        },
+        close: () => socket.close(),
+      }
+      geminiSessionRef.current = session
+      setGeminiConnected(true)
+      setGeminiStatus('Gemini connected')
+      return true
+    } catch (error) {
+      disconnectGeminiLive()
+      setStatus('Gemini unavailable')
+      setGeminiStatus('Gemini unavailable')
+      setVoiceMode(liveKitConnected ? 'connected' : 'idle')
+      setError(error instanceof Error ? error.message : 'Gemini Live failed')
+      return false
+    }
+  }
+
+  function disconnectGeminiLive() {
+    geminiSessionRef.current?.close()
+    geminiSessionRef.current = null
+    geminiTurnRejectRef.current?.(new Error('Gemini Live disconnected'))
+    geminiTurnResolveRef.current = null
+    geminiTurnRejectRef.current = null
+    geminiAssistantDraftRef.current = ''
+    geminiAudioCursorRef.current = 0
+    setGeminiConnected(false)
+    setGeminiStatus('Gemini not connected')
+  }
+
+  async function sendGeminiTextTurn(
+    content: string,
+    nextMessages: Array<LilyMessage>,
+    options?: { resumeHandsFree?: boolean },
+  ) {
+    const session = geminiSessionRef.current
+    if (!session) return false
+    geminiAssistantDraftRef.current = ''
+    setStatus('Thinking')
+    setVoiceMode('thinking')
+    const reply = await new Promise<string>((resolve, reject) => {
+      geminiTurnResolveRef.current = resolve
+      geminiTurnRejectRef.current = reject
+      window.setTimeout(() => {
+        if (geminiTurnRejectRef.current === reject) {
+          reject(new Error('Gemini Live timed out'))
+        }
+      }, 45_000)
+      session.sendClientContent({
+        turns: { role: 'user', parts: [{ text: content }] },
+        turnComplete: true,
+      })
+    })
+    setMessages([...nextMessages, { role: 'assistant', content: reply }])
+    addTimeline({
+      kind: 'transcript',
+      label: 'Gemini voice prompt',
+      detail: content,
+    })
+    setLastFailedMessage('')
+    if (options?.resumeHandsFree && handsFreeRef.current) {
+      window.setTimeout(() => {
+        setStatus('Listening')
+        setVoiceMode('listening')
+        void startHandsFreeListening({ resume: true })
+      }, 250)
+    } else {
+      setStatus('Gemini ready')
+      setVoiceMode('connected')
+    }
+    return true
+  }
+
+  function handleRealtimeEvent(event: Record<string, unknown>) {
+    const type = typeof event.type === 'string' ? event.type : ''
+    if (!type) return
+    if (type === 'session.created' || type === 'session.updated') {
+      setRealtimeStatus('Realtime ready')
+      return
+    }
+    if (type === 'input_audio_buffer.speech_started') {
+      setStatus('Listening')
+      setVoiceMode('listening')
+      return
+    }
+    if (type === 'input_audio_buffer.committed') {
+      setStatus('Thinking')
+      setVoiceMode('thinking')
+      return
+    }
+    if (type === 'conversation.item.input_audio_transcription.completed') {
+      const transcript =
+        typeof event.transcript === 'string' ? event.transcript.trim() : ''
+      if (!transcript) return
+      setLastHeardAt(new Date().toISOString())
+      setLiveTranscript(transcript)
+      addTimeline({
+        kind: 'transcript',
+        label: 'Heard',
+        detail: transcript,
+      })
+      setMessages((current) => [
+        ...current,
+        { role: 'user', content: transcript },
+      ])
+      return
+    }
+    if (type === 'response.created') {
+      realtimeResponseActiveRef.current = true
+      realtimeAssistantDraftRef.current = ''
+      setStatus('Replying')
+      setVoiceMode('speaking')
+      return
+    }
+    if (type === 'response.audio_transcript.delta') {
+      const delta = typeof event.delta === 'string' ? event.delta : ''
+      if (!delta) return
+      realtimeAssistantDraftRef.current += delta
+      return
+    }
+    if (
+      type === 'response.audio_transcript.done' ||
+      type === 'response.output_text.done'
+    ) {
+      const transcript =
+        typeof event.transcript === 'string'
+          ? event.transcript.trim()
+          : typeof event.text === 'string'
+            ? event.text.trim()
+            : realtimeAssistantDraftRef.current.trim()
+      if (transcript) {
+        realtimeAssistantDraftRef.current = transcript
+        setMessages((current) => [
+          ...current,
+          { role: 'assistant', content: transcript },
+        ])
+      }
+      return
+    }
+    if (type === 'response.function_call_arguments.done') {
+      void handleRealtimeHermesTool(event)
+      return
+    }
+    if (type === 'response.done') {
+      realtimeResponseActiveRef.current = false
+      const reply = realtimeAssistantDraftRef.current.trim()
+      if (reply) {
+        setLastSpokeAt(new Date().toISOString())
+      }
+      setStatus(pushToTalkActiveRef.current ? 'Hold to talk' : 'Realtime ready')
+      setVoiceMode(pushToTalkActiveRef.current ? 'listening' : 'connected')
+      return
+    }
+    if (type === 'response.cancelled') {
+      realtimeResponseActiveRef.current = false
+      setRealtimeStatus('Realtime reply interrupted')
+      setStatus('Interrupted')
+      setVoiceMode(pushToTalkActiveRef.current ? 'listening' : 'connected')
+      return
+    }
+    if (type === 'error') {
+      const error = event.error as { message?: string } | undefined
+      setError(error?.message || 'OpenAI Realtime returned an error')
+      setRealtimeStatus('Realtime error')
+    }
+  }
+
+  async function connectRealtime() {
+    if (realtimeConnected) return true
+    if (!config?.realtime?.configured) return false
+    if (!(await ensureMicrophonePermission())) return false
+    if (typeof RTCPeerConnection === 'undefined') {
+      setError('This browser does not support WebRTC Realtime voice.')
+      return false
+    }
+
+    setError('')
+    setStatus('Opening Realtime voice')
+    setRealtimeStatus('Opening OpenAI Realtime')
+    setVoiceMode('thinking')
+
+    try {
+      disconnectRealtime()
+      const peer = new RTCPeerConnection()
+      realtimePeerRef.current = peer
+      const channel = peer.createDataChannel(
+        'oai-events',
+      ) as RealtimeDataChannel
+      realtimeChannelRef.current = channel
+      realtimeHandledCallIdsRef.current = new Set()
+
+      const audio = document.createElement('audio')
+      audio.autoplay = true
+      audio.setAttribute('playsinline', 'true')
+      audio.addEventListener('playing', () => {
+        setStatus('Replying')
+        setVoiceMode('speaking')
+      })
+      audio.addEventListener('ended', () => {
+        setStatus('Realtime ready')
+        setVoiceMode('connected')
+      })
+      realtimeAudioRef.current = audio
+      audioRootRef.current?.appendChild(audio)
+
+      peer.ontrack = (event) => {
+        audio.srcObject = event.streams[0]
+      }
+      peer.onconnectionstatechange = () => {
+        if (peer.connectionState === 'connected') {
+          setRealtimeConnected(true)
+          setRealtimeStatus('Realtime connected')
+          setStatus('Realtime ready')
+          setVoiceMode('connected')
+        }
+        if (
+          peer.connectionState === 'failed' ||
+          peer.connectionState === 'disconnected' ||
+          peer.connectionState === 'closed'
+        ) {
+          setRealtimeConnected(false)
+          setRealtimeStatus(`Realtime ${peer.connectionState}`)
+          if (!pushToTalkActiveRef.current) {
+            setVoiceMode(liveKitConnected ? 'connected' : 'idle')
+          }
+        }
+      }
+      channel.addEventListener('open', () => {
+        setRealtimeStatus('Realtime ready')
+      })
+      channel.addEventListener('message', (message) => {
+        try {
+          handleRealtimeEvent(
+            JSON.parse(message.data) as Record<string, unknown>,
+          )
+        } catch {
+          // Ignore malformed Realtime diagnostics.
+        }
+      })
+      micStreamRef.current?.getAudioTracks().forEach((track) => {
+        track.enabled = false
+        peer.addTrack(track, micStreamRef.current as MediaStream)
+      })
+      peer.addTransceiver('audio', { direction: 'recvonly' })
+
+      const offer = await peer.createOffer()
+      await peer.setLocalDescription(offer)
+      const response = await fetch(apiPath('/lily/realtime-session'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/sdp' },
+        body: offer.sdp || '',
+      })
+      const answer = await response.text()
+      if (!response.ok) {
+        throw new Error(answer || `Realtime session failed ${response.status}`)
+      }
+      await peer.setRemoteDescription({ type: 'answer', sdp: answer })
+      return true
+    } catch (error) {
+      disconnectRealtime()
+      setStatus('Realtime unavailable')
+      setRealtimeStatus('Realtime unavailable')
+      setVoiceMode(liveKitConnected ? 'connected' : 'idle')
+      setError(
+        normalizeRealtimeError(error instanceof Error ? error.message : ''),
+      )
+      return false
+    }
+  }
+
+  function disconnectRealtime() {
+    setRealtimeMicEnabled(false)
+    realtimeChannelRef.current?.close()
+    realtimeChannelRef.current = null
+    realtimePeerRef.current?.close()
+    realtimePeerRef.current = null
+    realtimeAudioRef.current?.remove()
+    realtimeAudioRef.current = null
+    realtimeAssistantDraftRef.current = ''
+    realtimeResponseActiveRef.current = false
+    setRealtimeConnected(false)
+    setRealtimeStatus('Realtime not connected')
   }
 
   async function connectLiveKit(options?: { reconnect?: boolean }) {
@@ -1170,6 +2151,10 @@ function LilyPage() {
     setStatus('Thinking')
     setVoiceMode('thinking')
     try {
+      if (geminiConnected && geminiSessionRef.current) {
+        const sent = await sendGeminiTextTurn(content, nextMessages, options)
+        if (sent) return
+      }
       const response = await fetch(apiPath('/lily/hermes-chat'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -1191,6 +2176,20 @@ function LilyPage() {
       }
       const reply = payload.reply || 'I am here.'
       setMessages([...nextMessages, { role: 'assistant', content: reply }])
+      const memoryEvents: Array<LilyMemoryEvent> = [
+        {
+          kind: 'transcript',
+          label: 'LILY prompt',
+          detail: content,
+          source: options?.resumeHandsFree ? 'hands-free' : 'typed',
+        },
+        {
+          kind: 'decision',
+          label: 'LILY reply',
+          detail: reply,
+          source: options?.resumeHandsFree ? 'hands-free' : 'typed',
+        },
+      ]
       addTimeline({
         kind: 'transcript',
         label: 'Typed or voice prompt',
@@ -1207,6 +2206,7 @@ function LilyPage() {
             ? 'Persist transcript, decisions, accepted suggestions to Hermes/PAI memory surface.'
             : 'Transcript retained only in this browser session.',
       })
+      void persistLilyMemoryEvents(memoryEvents)
       setLastFailedMessage('')
       setStatus(
         options?.resumeHandsFree
@@ -1221,8 +2221,8 @@ function LilyPage() {
       await speak(reply)
       stopSpeechPulse()
       if (options?.resumeHandsFree && handsFreeRef.current) {
-        setStatus('Listening for "LILY"')
-        setVoiceMode('armed')
+        setStatus('Listening')
+        setVoiceMode('listening')
         window.setTimeout(() => {
           void startHandsFreeListening({ resume: true })
         }, 250)
@@ -1243,8 +2243,8 @@ function LilyPage() {
         startSpeechPulse(spokenError)
         await speak(spokenError)
         stopSpeechPulse()
-        setStatus('Listening for "LILY"')
-        setVoiceMode('armed')
+        setStatus('Listening')
+        setVoiceMode('listening')
         window.setTimeout(() => {
           void startHandsFreeListening({ resume: true })
         }, 350)
@@ -1264,43 +2264,130 @@ function LilyPage() {
     setLastHeardAt(new Date().toISOString())
     addTimeline({
       kind: 'transcript',
-      label: 'Last heard',
+      label: 'Heard',
       detail: clean,
     })
     setLiveTranscript(clean)
-    const wake = extractWakeCommand(clean)
-    if (wake.heardWakeWord) {
-      clearWakeWindow()
-      heardWakeWordRef.current = true
-      setHeardWakeWord(true)
-      if (wake.command) {
-        void sendMessage(wake.command, { resumeHandsFree: true })
-        return
-      }
-      setStatus('I heard LILY. Ask me.')
-      setVoiceMode('listening')
-      armWakeWindow()
-      return
-    }
-    if (heardWakeWordRef.current) {
-      clearWakeWindow()
-      void sendMessage(clean, { resumeHandsFree: true })
-    }
+    clearWakeWindow()
+    heardWakeWordRef.current = true
+    setHeardWakeWord(true)
+    void sendMessage(clean, { resumeHandsFree: true })
   }
 
-  async function startHandsFreeListening(options?: { resume?: boolean }) {
+  function handlePushToTalkTranscript(transcript: string, final: boolean) {
+    const clean = transcript.trim()
+    if (!clean) return
+    if (final) {
+      pushToTalkTranscriptRef.current = [pushToTalkTranscriptRef.current, clean]
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      pushToTalkDraftRef.current = ''
+    }
+    const display = final
+      ? pushToTalkTranscriptRef.current
+      : [pushToTalkTranscriptRef.current, clean]
+          .filter(Boolean)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+    if (!final) pushToTalkDraftRef.current = display
+    setLiveTranscript(display)
+  }
+
+  async function startPushToTalk() {
+    if (pushToTalkActiveRef.current || isSendingRef.current) return
+    if (
+      shouldTryVoiceProvider('openai_realtime') &&
+      config?.realtime?.configured
+    ) {
+      const connected = realtimeConnected || (await connectRealtime())
+      if (connected) {
+        void requestWakeLock()
+        pushToTalkTranscriptRef.current = ''
+        pushToTalkDraftRef.current = ''
+        pushToTalkActiveRef.current = true
+        setPushToTalkActive(true)
+        setRealtimeMicEnabled(true)
+        setError('')
+        setStatus('Hold to talk')
+        setVoiceMode('listening')
+        sendRealtimeEvent({ type: 'input_audio_buffer.clear' })
+        if (realtimeResponseActiveRef.current) {
+          sendRealtimeEvent({ type: 'response.cancel' })
+          sendRealtimeEvent({ type: 'output_audio_buffer.clear' })
+        }
+        return
+      }
+    }
+    if (!browserVoice.supported) {
+      setError('Realtime unavailable. Use Chrome or type.')
+      return
+    }
+    if (!(await ensureMicrophonePermission())) return
+    void requestWakeLock()
+    pushToTalkTranscriptRef.current = ''
+    pushToTalkDraftRef.current = ''
+    pushToTalkActiveRef.current = true
+    setPushToTalkActive(true)
+    setError('')
+    setStatus('Hold to talk')
+    setVoiceMode('listening')
+    await startHandsFreeListening({ resume: true, pushToTalk: true })
+  }
+
+  function finishPushToTalk() {
+    if (!pushToTalkActiveRef.current) return
+    pushToTalkActiveRef.current = false
+    setPushToTalkActive(false)
+    if (realtimeConnected) {
+      setRealtimeMicEnabled(false)
+      sendRealtimeEvent({ type: 'input_audio_buffer.commit' })
+      sendRealtimeEvent({ type: 'response.create' })
+      setStatus('Thinking')
+      setVoiceMode('thinking')
+      setLiveTranscript('')
+      return
+    }
+    handsFreeRef.current = false
+    setHandsFreeEnabled(false)
+    stopRecognition()
+    const heard =
+      pushToTalkTranscriptRef.current.trim() ||
+      pushToTalkDraftRef.current.trim()
+    pushToTalkTranscriptRef.current = ''
+    pushToTalkDraftRef.current = ''
+    if (heard) {
+      setLiveTranscript(heard)
+      void sendMessage(heard)
+      return
+    }
+    setLiveTranscript('')
+    setVoiceMode(liveKitConnected || geminiConnected ? 'connected' : 'idle')
+    setStatus(
+      geminiConnected
+        ? 'Gemini ready'
+        : liveKitConnected
+          ? 'LiveKit connected'
+          : 'Ready',
+    )
+  }
+
+  async function startHandsFreeListening(options?: {
+    resume?: boolean
+    pushToTalk?: boolean
+  }) {
     if (!options?.resume) {
       if (!(await ensureMicrophonePermission())) return
       void requestWakeLock()
     }
     const Recognition = getSpeechRecognition()
     if (!Recognition) {
-      setError(
-        'Microphone is enabled, but this browser does not provide speech recognition. Use Chrome for wake-word mode, or use the message box with speaker replies.',
-      )
+      setError('Mic ready, speech missing. Use Chrome or type.')
       setHandsFreeEnabled(false)
       setVoiceMode(liveKitConnected ? 'connected' : 'idle')
-      setStatus('Microphone ready; browser listen unavailable')
+      setStatus('Mic ready; listen unavailable')
       return
     }
     if (restartingRef.current) return
@@ -1317,12 +2404,15 @@ function LilyPage() {
     recognition.onstart = () => {
       setError('')
       setHandsFreeEnabled(true)
-      setVoiceMode(heardWakeWordRef.current ? 'listening' : 'armed')
-      setStatus(heardWakeWordRef.current ? 'Listening' : 'Listening for "LILY"')
+      setVoiceMode('listening')
+      setStatus(options?.pushToTalk ? 'Hold to talk' : 'Listening')
     }
     recognition.onerror = (event: any) => {
       const speechError = event?.error ? String(event.error) : ''
-      if (handsFreeRef.current && speechError === 'no-speech') {
+      if (
+        (handsFreeRef.current || pushToTalkActiveRef.current) &&
+        speechError === 'no-speech'
+      ) {
         return
       }
       if (isFatalSpeechRecognitionError(speechError)) {
@@ -1330,18 +2420,20 @@ function LilyPage() {
         stopHandsFreeAfterSpeechError(speechError)
       } else {
         setVoiceMode(
-          handsFreeRef.current
-            ? 'armed'
+          handsFreeRef.current || pushToTalkActiveRef.current
+            ? 'listening'
             : liveKitConnected
               ? 'connected'
               : 'idle',
         )
         setStatus(
-          handsFreeRef.current
-            ? 'Listening for "LILY"'
-            : liveKitConnected
-              ? 'LiveKit connected'
-              : 'Ready',
+          pushToTalkActiveRef.current
+            ? 'Hold to talk'
+            : handsFreeRef.current
+              ? 'Listening'
+              : liveKitConnected
+                ? 'LiveKit connected'
+                : 'Ready',
         )
       }
       if (speechError !== 'aborted') {
@@ -1356,6 +2448,13 @@ function LilyPage() {
       recognitionRef.current = null
       if (speechRecognitionFatalErrorRef.current) {
         speechRecognitionFatalErrorRef.current = false
+        return
+      }
+      if (options?.pushToTalk) {
+        if (!pushToTalkActiveRef.current) {
+          setVoiceMode(liveKitConnected ? 'connected' : 'idle')
+          setStatus(liveKitConnected ? 'LiveKit connected' : 'Ready')
+        }
         return
       }
       if (handsFreeRef.current && !isSendingRef.current) {
@@ -1376,7 +2475,12 @@ function LilyPage() {
       ) {
         const transcript = event.results?.[index]?.[0]?.transcript
         if (typeof transcript !== 'string') continue
-        if (event.results[index].isFinal) {
+        if (options?.pushToTalk) {
+          handlePushToTalkTranscript(
+            transcript,
+            Boolean(event.results[index].isFinal),
+          )
+        } else if (event.results[index].isFinal) {
           handleHandsFreeTranscript(transcript)
         } else {
           interim += transcript
@@ -1407,7 +2511,10 @@ function LilyPage() {
 
   function stopHandsFree() {
     handsFreeRef.current = false
+    pushToTalkActiveRef.current = false
+    setRealtimeMicEnabled(false)
     setHandsFreeEnabled(false)
+    setPushToTalkActive(false)
     heardWakeWordRef.current = false
     setHeardWakeWord(false)
     clearWakeWindow()
@@ -1446,26 +2553,63 @@ function LilyPage() {
     setTokenExpiresAt(null)
     setTokenStatus('No LiveKit token')
     refreshLiveKitParticipants(null, 'none')
-    setVoiceMode(handsFreeEnabled ? 'armed' : 'idle')
-    setStatus(handsFreeEnabled ? 'Listening for "LILY"' : 'Ready')
+    setVoiceMode(handsFreeEnabled ? 'listening' : 'idle')
+    setStatus(handsFreeEnabled ? 'Listening' : 'Ready')
   }
 
   async function startLilyVoice() {
     const micReady = await ensureMicrophonePermission()
     if (!micReady) return
-    if (config?.configured) {
-      const connected = await connectLiveKit()
+    if (
+      shouldTryVoiceProvider('gemini_live') &&
+      config?.gemini?.configured &&
+      browserVoice.supported
+    ) {
+      const connected = await connectGeminiLive()
       if (connected) {
-        setStatus('LiveKit connected. Speak naturally.')
+        setError('')
+        setStatus('Listening')
+        setVoiceMode('listening')
+        await startHandsFreeListening({ resume: true })
+        return
+      }
+      setError('')
+      setStatus('Starting Hermes')
+    }
+    if (
+      shouldTryVoiceProvider('openai_realtime') &&
+      config?.realtime?.configured
+    ) {
+      const connected = await connectRealtime()
+      if (connected) {
+        setStatus('Ready')
         setVoiceMode('connected')
         return
       }
+      setError('')
+      setStatus('Starting Hermes')
+    }
+    if (
+      shouldTryVoiceProvider('livekit') &&
+      config?.configured &&
+      voiceWorker?.status === 'online'
+    ) {
+      const connected = await connectLiveKit()
+      if (connected) {
+        setStatus('Ready')
+        setVoiceMode('connected')
+        return
+      }
+      setError('')
+      setStatus('Starting Hermes')
     }
     await startHandsFreeListening({ resume: true })
   }
 
   function stopLilyVoice() {
     stopHandsFree()
+    disconnectGeminiLive()
+    disconnectRealtime()
     disconnectLiveKit()
   }
 
@@ -1482,14 +2626,20 @@ function LilyPage() {
     await speak('LILY speaker test complete.')
     stopSpeechPulse()
     setVoiceMode(
-      liveKitConnected ? 'connected' : handsFreeEnabled ? 'armed' : 'idle',
+      liveKitConnected || geminiConnected
+        ? 'connected'
+        : handsFreeEnabled
+          ? 'listening'
+          : 'idle',
     )
     setStatus(
-      liveKitConnected
-        ? 'LiveKit connected'
-        : handsFreeEnabled
-          ? 'Listening for "LILY"'
-          : 'Ready',
+      geminiConnected
+        ? 'Gemini ready'
+        : liveKitConnected
+          ? 'LiveKit connected'
+          : handsFreeEnabled
+            ? 'Listening'
+            : 'Ready',
     )
   }
 
@@ -1499,11 +2649,69 @@ function LilyPage() {
     const micReady = await ensureMicrophonePermission()
     if (!micReady) {
       setVoiceTestStage('failed at browser mic permission')
+      addTimeline({
+        kind: 'decision',
+        label: 'Voice loop test failed',
+        detail: 'browser mic permission',
+      })
+      return
+    }
+    if (config?.gemini?.configured && browserVoice.supported) {
+      setVoiceTestStage('transport: opening Gemini Live')
+      const connected = await connectGeminiLive()
+      if (!connected) {
+        setVoiceTestStage('failed at Gemini Live')
+        addTimeline({
+          kind: 'decision',
+          label: 'Voice loop test failed',
+          detail: 'Gemini Live transport',
+        })
+        return
+      }
+      setVoiceTestStage('passed: browser mic, Gemini Live, and speaker checked')
+      void persistLilyMemoryEvents([
+        {
+          kind: 'decision',
+          label: 'Voice loop test passed',
+          detail: 'browser mic, Gemini Live, and speaker checked',
+          source: 'test',
+        },
+      ])
+      return
+    }
+    if (config?.realtime?.configured) {
+      setVoiceTestStage('transport: opening OpenAI Realtime')
+      const connected = await connectRealtime()
+      if (!connected) {
+        setVoiceTestStage('failed at OpenAI Realtime WebRTC')
+        addTimeline({
+          kind: 'decision',
+          label: 'Voice loop test failed',
+          detail: 'OpenAI Realtime WebRTC',
+        })
+        return
+      }
+      setVoiceTestStage(
+        'passed: browser mic, OpenAI Realtime, and speaker checked',
+      )
+      void persistLilyMemoryEvents([
+        {
+          kind: 'decision',
+          label: 'Voice loop test passed',
+          detail: 'browser mic, OpenAI Realtime, and speaker checked',
+          source: 'test',
+        },
+      ])
       return
     }
     setVoiceTestStage('worker: checking voice worker')
     if (voiceWorker?.status && voiceWorker.status !== 'online') {
       setVoiceTestStage(`failed at worker online: ${voiceWorker.status}`)
+      addTimeline({
+        kind: 'decision',
+        label: 'Voice loop test failed',
+        detail: `worker online: ${voiceWorker.status}`,
+      })
       return
     }
     setVoiceTestStage('transport: refreshing LiveKit token')
@@ -1511,12 +2719,25 @@ function LilyPage() {
       const connected = await connectLiveKit({ reconnect: liveKitConnected })
       if (!connected) {
         setVoiceTestStage('failed at LiveKit transport/token refresh')
+        addTimeline({
+          kind: 'decision',
+          label: 'Voice loop test failed',
+          detail: 'LiveKit transport/token refresh',
+        })
         return
       }
     }
     setVoiceTestStage('speaker: testing output')
     await testSpeaker()
     setVoiceTestStage('passed: browser, worker, LiveKit, and speaker checked')
+    void persistLilyMemoryEvents([
+      {
+        kind: 'decision',
+        label: 'Voice loop test passed',
+        detail: 'browser, worker, LiveKit, and speaker checked',
+        source: 'test',
+      },
+    ])
   }
 
   async function sendTypedFallback() {
@@ -1538,8 +2759,137 @@ function LilyPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.18),transparent_32%),radial-gradient(circle_at_82%_18%,rgba(244,114,182,0.16),transparent_28%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(3,7,18,1))]" />
         <div className="absolute inset-0 lily-starfield" />
 
-        <section className="relative flex min-h-[calc(100vh-1px)] items-center justify-center px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex min-h-[min(700px,calc(100vh-32px))] w-full max-w-3xl flex-col items-center justify-center p-3 text-center sm:p-5">
+        <aside
+          data-lily-controls
+          className="absolute left-3 right-3 top-3 z-20 grid gap-2 rounded-[24px] border border-white/10 bg-slate-950/70 p-3 shadow-2xl backdrop-blur-xl sm:left-4 sm:right-auto sm:top-4 sm:w-[min(520px,calc(100vw-32px))]"
+          aria-label="LILY voice cockpit"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
+                Voice cockpit
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold text-white">
+                {config?.agentName || 'LILY'} · {voiceReadiness.label}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void testVoiceLoop()}
+              className="rounded-full border border-cyan-200/25 bg-cyan-200/10 px-3 py-1.5 text-xs font-semibold text-cyan-50 transition hover:bg-cyan-200/20"
+            >
+              Test loop
+            </button>
+          </div>
+          <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-cyan-200/15 bg-cyan-200/10 px-3 py-2 sm:hidden">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">
+                {voiceReadiness.canStart ? 'Ready' : voiceReadiness.blocker}
+              </p>
+              <p className="truncate text-xs text-slate-300">
+                {lilyLoopStages
+                  .map((stage) => `${stage.label}: ${stage.value}`)
+                  .join(' · ')}
+              </p>
+            </div>
+            <span
+              className={`size-3 rounded-full ${
+                voiceReadiness.canStart ? 'bg-emerald-300' : 'bg-amber-300'
+              }`}
+              aria-hidden="true"
+            />
+          </div>
+          <div className="hidden grid-cols-2 gap-2 sm:grid sm:grid-cols-4">
+            {lilyCockpitTiles.map((tile) => (
+              <div
+                key={tile.id}
+                title={tile.detail}
+                className={`min-h-20 rounded-xl border p-2.5 ${
+                  tile.tone === 'ready'
+                    ? 'border-emerald-300/25 bg-emerald-300/10'
+                    : tile.tone === 'unavailable'
+                      ? 'border-rose-300/25 bg-rose-300/10'
+                      : 'border-amber-300/25 bg-amber-300/10'
+                }`}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                  {tile.label}
+                </div>
+                <div className="mt-1 truncate text-sm font-semibold text-white">
+                  {tile.value}
+                </div>
+                <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-300">
+                  {tile.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden gap-2 sm:grid sm:grid-cols-4">
+            {lilyLoopStages.map((stage) => (
+              <div
+                key={stage.id}
+                title={stage.detail}
+                className={`rounded-xl border p-2 ${
+                  stage.tone === 'ready'
+                    ? 'border-cyan-300/25 bg-cyan-300/10'
+                    : stage.tone === 'unavailable'
+                      ? 'border-rose-300/25 bg-rose-300/10'
+                      : 'border-white/10 bg-white/10'
+                }`}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  {stage.label}
+                </div>
+                <div className="mt-1 truncate text-xs font-semibold text-white">
+                  {stage.value}
+                </div>
+                <div className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-300">
+                  {stage.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="flex flex-wrap gap-1.5">
+              {LILY_CONVERSATION_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setTypedFallback(preset.prompt)}
+                  className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-slate-100 transition hover:bg-white/15"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => void copySessionSummary()}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-100 transition hover:bg-white/15"
+            >
+              Copy summary
+            </button>
+          </div>
+        </aside>
+
+        <section
+          className="relative flex min-h-[calc(100vh-1px)] items-center justify-center px-4 pb-5 pt-52 sm:px-6 sm:pt-48 lg:px-8"
+          onPointerDown={(event) => {
+            if (event.pointerType === 'mouse' && event.button !== 0) return
+            if (isPushToTalkIgnoredTarget(event.target)) return
+            event.currentTarget.setPointerCapture?.(event.pointerId)
+            event.preventDefault()
+            void startPushToTalk()
+          }}
+          onPointerUp={(event) => {
+            if (isPushToTalkIgnoredTarget(event.target)) return
+            event.currentTarget.releasePointerCapture?.(event.pointerId)
+            finishPushToTalk()
+          }}
+          onPointerCancel={() => finishPushToTalk()}
+          onPointerLeave={() => finishPushToTalk()}
+        >
+          <div className="flex min-h-[min(720px,calc(100vh-32px))] w-full max-w-3xl flex-col items-center justify-center p-3 text-center sm:p-5">
             <div
               className={`lily-orb lily-orb-${voiceMode}`}
               style={
@@ -1575,9 +2925,10 @@ function LilyPage() {
                     className="lily-helix-particle"
                     style={
                       {
-                        '--x': `${particle.x}%`,
-                        '--y': `${particle.y}%`,
-                        '--z': particle.z,
+                        '--x': `${particle.x}px`,
+                        '--y': `${particle.y}px`,
+                        '--z': `${particle.z || 0}px`,
+                        '--depth': particle.depth || 0,
                         '--size': `${particle.size}px`,
                         '--opacity': particle.opacity,
                         '--hue': particle.hue,
@@ -1592,16 +2943,8 @@ function LilyPage() {
               <h1 className="text-4xl font-semibold text-white sm:text-5xl">
                 LILY
               </h1>
-              <div
-                className={`mt-3 rounded-full border px-4 py-1 text-xs font-semibold ${
-                  voiceReadiness.state === 'ready'
-                    ? 'border-emerald-300/40 bg-emerald-300/10 text-emerald-100'
-                    : voiceReadiness.state === 'degraded'
-                      ? 'border-amber-300/40 bg-amber-300/10 text-amber-100'
-                      : 'border-rose-300/40 bg-rose-300/10 text-rose-100'
-                }`}
-              >
-                {voiceReadiness.label}
+              <div className="mt-3 min-h-6 text-sm text-slate-300">
+                {pushToTalkActive ? 'Listening' : status}
               </div>
               <button
                 type="button"
@@ -1615,7 +2958,7 @@ function LilyPage() {
                   voiceActive ? stopLilyVoice() : void startLilyVoice()
                 }
                 disabled={!voiceActive && !voiceReadiness.canStart}
-                className={`mt-4 min-h-12 rounded-full px-6 text-sm font-semibold transition sm:min-w-52 ${
+                className={`mt-4 hidden min-h-12 rounded-full px-7 text-sm font-semibold transition sm:inline-flex sm:min-w-56 sm:items-center sm:justify-center ${
                   voiceActive
                     ? 'border border-rose-300/40 bg-rose-300/10 text-rose-100 hover:bg-rose-300/20'
                     : voiceReadiness.canStart
@@ -1623,7 +2966,7 @@ function LilyPage() {
                       : 'cursor-not-allowed border border-white/10 bg-white/10 text-slate-400'
                 }`}
               >
-                {voiceActive ? 'Stop LILY' : 'Start LILY'}
+                {voiceActive ? 'Stop' : 'Start conversation'}
               </button>
               {!voiceActive && !voiceReadiness.canStart ? (
                 <div className="mt-2 text-xs text-amber-100">
@@ -1631,78 +2974,22 @@ function LilyPage() {
                 </div>
               ) : null}
 
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-200">
-                <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1">
-                  {status}
-                </span>
-                <span className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1">
-                  Mic {micPermission}
-                </span>
-                <span className="rounded-full border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-1">
-                  Agent {voiceWorker?.status || 'checking'}
-                </span>
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1">
-                  Last spoke:{' '}
-                  {lastSpokeAt ? formatCheckedAt(lastSpokeAt) : 'none'}
-                </span>
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1">
-                  Last heard:{' '}
-                  {lastHeardAt ? formatCheckedAt(lastHeardAt) : 'none'}
-                </span>
+              <div className="mt-3 hidden items-center justify-center gap-2 text-xs text-slate-300 sm:flex">
+                <button
+                  type="button"
+                  onClick={() => void testMicrophone()}
+                  className="rounded-full border border-white/10 bg-white/10 px-3 py-1 hover:bg-white/15"
+                >
+                  Mic
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void testSpeaker()}
+                  className="rounded-full border border-white/10 bg-white/10 px-3 py-1 hover:bg-white/15"
+                >
+                  Speaker
+                </button>
               </div>
-
-              <section className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-left">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-100">
-                      Voice setup
-                    </div>
-                    <div className="mt-1 text-sm text-slate-300">
-                      Current blocker: {primaryBlocker?.action || 'none'}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <a
-                      href={withBasePath('/settings?section=providers')}
-                      className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-slate-200"
-                    >
-                      Model settings
-                    </a>
-                    <a
-                      href={withBasePath('/settings?section=voice')}
-                      className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-slate-200"
-                    >
-                      Voice settings
-                    </a>
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {setupChecklist.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`rounded-xl border px-3 py-2 ${
-                        item.status === 'ready'
-                          ? 'border-emerald-300/20 bg-emerald-300/10'
-                          : item.status === 'blocked'
-                            ? 'border-rose-300/30 bg-rose-400/10'
-                            : 'border-amber-300/30 bg-amber-300/10'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-medium text-slate-100">
-                          {item.label}
-                        </div>
-                        <span className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                          {item.status}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-xs leading-5 text-slate-400">
-                        {item.action}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
 
               {liveTranscript ? (
                 <div className="mt-4 max-w-xl rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-50">
@@ -1711,63 +2998,22 @@ function LilyPage() {
               ) : null}
 
               {error ? (
-                <div className="mt-4 max-w-xl rounded-2xl border border-rose-300/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                <div className="mt-4 max-w-xl rounded-full border border-rose-300/30 bg-rose-400/10 px-4 py-2 text-sm text-rose-100">
                   {error}
-                  <div className="mt-2 text-xs text-rose-100/80">
-                    {getMicrophonePermissionGuidance({
-                      micPermission,
-                      userAgent:
-                        typeof navigator === 'undefined'
-                          ? ''
-                          : navigator.userAgent,
-                    })}
-                  </div>
                 </div>
               ) : null}
 
-              <section
-                className="mt-4 flex w-full flex-1 flex-col rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-left shadow-2xl shadow-cyan-950/20"
-                aria-label="LILY conversation"
+              <div
+                className="mt-4 w-full max-w-xl text-center"
+                aria-live="polite"
               >
-                <div
-                  className="flex h-[24vh] min-h-40 flex-col gap-3 overflow-y-auto pr-1 sm:h-[28vh]"
-                  aria-live="polite"
-                >
-                  {messages.map((message, index) => (
-                    <div
-                      key={`${message.role}-${index}-${message.content.slice(
-                        0,
-                        24,
-                      )}`}
-                      className={`flex ${
-                        message.role === 'user'
-                          ? 'justify-end'
-                          : 'justify-start'
-                      }`}
-                    >
-                      <div
-                        className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 ${
-                          message.role === 'user'
-                            ? 'rounded-br-md bg-emerald-300 text-slate-950'
-                            : 'rounded-bl-md border border-white/10 bg-white/[0.08] text-slate-100'
-                        }`}
-                      >
-                        {message.content}
-                      </div>
-                    </div>
-                  ))}
-                  {awaitingReply ? (
-                    <div className="flex justify-start">
-                      <div className="rounded-2xl rounded-bl-md border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">
-                        LILY is thinking...
-                      </div>
-                    </div>
-                  ) : null}
-                  <div ref={transcriptEndRef} />
-                </div>
-
+                {awaitingReply || !lastMessage?.localOnly ? (
+                  <div className="min-h-12 text-base leading-7 text-slate-100 sm:text-lg">
+                    {awaitingReply ? 'Thinking...' : lastMessage?.content}
+                  </div>
+                ) : null}
                 <form
-                  className="mt-3 flex gap-2"
+                  className="mt-3 hidden gap-2 sm:flex"
                   onSubmit={(event) => {
                     event.preventDefault()
                     void sendTypedFallback()
@@ -1776,41 +3022,19 @@ function LilyPage() {
                   <input
                     value={typedFallback}
                     onChange={(event) => setTypedFallback(event.target.value)}
-                    placeholder="Message LILY..."
-                    className="min-h-12 flex-1 rounded-full border border-white/10 bg-black/40 px-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-200/70"
+                    placeholder="Type fallback"
+                    className="min-h-11 flex-1 rounded-full border border-white/10 bg-black/35 px-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-200/70"
                     aria-label="Message LILY"
                   />
                   <button
                     type="submit"
                     disabled={!typedFallback.trim() || isSending}
-                    className="min-h-12 rounded-full bg-emerald-300 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-45"
+                    className="min-h-11 rounded-full bg-emerald-300 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     Send
                   </button>
                 </form>
-
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                  <span>
-                    {liveKitConnected
-                      ? 'Voice transport connected'
-                      : browserVoice.supported
-                        ? 'Browser voice ready'
-                        : 'Typed chat active'}
-                  </span>
-                  <span>
-                    {retentionMode === 'workspace-memory'
-                      ? 'Workspace memory on'
-                      : 'Session memory'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void copySessionSummary()}
-                    className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-slate-200"
-                  >
-                    Copy summary
-                  </button>
-                </div>
-              </section>
+              </div>
 
               <div
                 className="mt-3 flex h-8 items-end justify-center gap-1"
@@ -1840,7 +3064,7 @@ function LilyPage() {
         </section>
       </div>
 
-      <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 sm:hidden">
+      <div className="fixed inset-x-0 bottom-[calc(var(--tabbar-h,80px)+0.75rem)] z-30 flex justify-center px-4 sm:hidden">
         <button
           type="button"
           aria-label={
@@ -1860,7 +3084,7 @@ function LilyPage() {
                 : 'cursor-not-allowed border border-white/10 bg-slate-800 text-slate-400'
           }`}
         >
-          {voiceActive ? 'Stop LILY' : 'Start LILY'}
+          {voiceActive ? 'Stop' : 'Start'}
         </button>
       </div>
 
@@ -1877,66 +3101,70 @@ function LilyPage() {
 
         .lily-orb {
           position: relative;
-          width: min(48vw, 270px);
+          width: min(64vw, 390px);
           aspect-ratio: 1;
-          border-radius: 999px;
-          overflow: hidden;
+          overflow: visible;
           isolation: isolate;
-          background:
-            radial-gradient(circle at 50% 48%, rgba(226,245,255,0.18), rgba(34,211,238,0.08) 28%, rgba(124,58,237,0.05) 54%, transparent 72%),
-            radial-gradient(circle at 50% 50%, transparent 58%, rgba(186,230,253,0.14) 59%, transparent 65%);
-          box-shadow:
-            0 0 calc(58px + (var(--lily-mic-level, 0) * 80px)) rgba(34,211,238,0.38),
-            inset 0 0 54px rgba(125,211,252,0.12),
-            inset 0 0 110px rgba(168,85,247,0.08);
-          transform: scale(calc(0.985 + (var(--lily-mic-level, 0) * 0.07)));
-          animation: lily-orb-breathe 5.5s ease-in-out infinite;
+          background: transparent;
+          perspective: 900px;
+          transform-style: preserve-3d;
+          filter:
+            drop-shadow(0 0 calc(22px + (var(--lily-mic-level, 0) * 38px)) rgba(34,211,238,0.28))
+            drop-shadow(0 0 calc(30px + (var(--lily-mic-level, 0) * 38px)) rgba(217,70,239,0.16));
+          transform: scale(calc(0.98 + (var(--lily-mic-level, 0) * 0.06)));
+          animation: lily-field-breathe 5.5s ease-in-out infinite;
         }
 
         .lily-orb::before {
           content: "";
           position: absolute;
-          inset: 8%;
-          border-radius: inherit;
-          border: 1px solid rgba(186,230,253,0.14);
-          box-shadow:
-            inset 0 0 28px rgba(103,232,249,0.18),
-            0 0 20px rgba(34,211,238,0.12);
-          opacity: calc(0.42 + (var(--lily-mic-level, 0) * 0.42));
-          transform: scaleY(0.96) rotateX(62deg);
-          animation: lily-shell-precess 12s linear infinite;
+          inset: 9%;
+          border-radius: 50%;
+          border: 1px solid rgba(186,230,253,0.08);
+          opacity: calc(0.16 + (var(--lily-mic-level, 0) * 0.28));
+          transform: scaleY(0.42) rotate(-10deg);
+          animation: lily-orbit-sketch 18s linear infinite;
         }
 
         .lily-orb::after {
           content: "";
           position: absolute;
-          inset: 18%;
-          border-radius: inherit;
-          background: radial-gradient(circle, rgba(255,255,255,0.2), transparent 58%);
-          filter: blur(18px);
-          opacity: calc(0.22 + (var(--lily-mic-level, 0) * 0.45));
-          transform: scale(calc(0.82 + (var(--lily-mic-level, 0) * 0.22)));
+          inset: 22%;
+          border-radius: 50%;
+          border: 1px solid rgba(125,211,252,0.07);
+          opacity: calc(0.1 + (var(--lily-mic-level, 0) * 0.24));
+          transform: scaleY(0.34) rotate(64deg);
+          animation: lily-orbit-sketch 23s linear reverse infinite;
         }
 
         .lily-dust-sphere,
         .lily-helix {
           position: absolute;
           inset: 0;
+          left: 50%;
+          top: 50%;
           transform-style: preserve-3d;
           pointer-events: none;
           will-change: transform, filter;
         }
 
         .lily-dust-sphere {
-          animation: lily-dust-sphere-spin calc(34s - (var(--lily-mic-level, 0) * 14s)) linear infinite;
+          width: 100%;
+          height: 100%;
+          left: 0;
+          top: 0;
+          opacity: 0.72;
+          animation: lily-dust-drift calc(28s - (var(--lily-mic-level, 0) * 10s)) ease-in-out infinite;
         }
 
         .lily-helix {
-          inset: 9%;
+          width: 1px;
+          height: 1px;
           filter:
-            drop-shadow(0 0 calc(8px + (var(--lily-mic-level, 0) * 16px)) rgba(103,232,249,0.72))
-            drop-shadow(0 0 22px rgba(217,70,239,0.28));
-          animation: lily-helix-rotate calc(13s - (var(--lily-mic-level, 0) * 6s)) linear infinite;
+            drop-shadow(0 0 calc(7px + (var(--lily-mic-level, 0) * 18px)) rgba(103,232,249,0.78))
+            drop-shadow(0 0 20px rgba(217,70,239,0.22));
+          transform: rotateX(63deg) rotateZ(-10deg);
+          animation: lily-helix-precess calc(18s - (var(--lily-mic-level, 0) * 7s)) ease-in-out infinite;
         }
 
         .lily-orb-particle,
@@ -1947,10 +3175,10 @@ function LilyPage() {
           width: var(--size);
           height: var(--size);
           border-radius: 999px;
-          opacity: calc(var(--opacity) + (var(--lily-mic-level, 0) * 0.34));
+          opacity: calc((var(--opacity) * 0.78) + (var(--lily-mic-level, 0) * 0.38));
           background: hsl(var(--hue) 94% 78%);
           box-shadow:
-            0 0 calc(4px + (var(--lily-mic-level, 0) * 12px)) hsl(var(--hue) 94% 70% / 0.72),
+            0 0 calc(5px + (var(--lily-mic-level, 0) * 14px)) hsl(var(--hue) 94% 70% / 0.72),
             0 0 1px rgba(255,255,255,0.96);
           pointer-events: none;
           will-change: transform, opacity, filter;
@@ -1959,16 +3187,21 @@ function LilyPage() {
         }
 
         .lily-orb-particle {
-          transform: translate(-50%, -50%) scale(calc(0.82 + (var(--lily-mic-level, 0) * 0.7)));
+          transform: translate(-50%, -50%) scale(calc(0.62 + (var(--lily-mic-level, 0) * 0.78)));
         }
 
         .lily-helix-particle {
+          left: 0;
+          top: 0;
           z-index: 2;
           opacity: calc(var(--opacity) + (var(--lily-mic-level, 0) * 0.42));
           transform:
-            translate(-50%, -50%)
-            translateZ(calc(var(--z) * 42px))
-            scale(calc((1 + var(--z) * 0.16) + (var(--lily-mic-level, 0) * 0.58)));
+            translate3d(var(--x), var(--y), var(--z))
+            scale(calc((0.76 + ((var(--depth) + 1) * 0.28)) + (var(--lily-mic-level, 0) * 0.55)));
+          animation:
+            lily-particle-twinkle 2.8s ease-in-out infinite,
+            lily-helix-float 6.4s ease-in-out infinite;
+          animation-delay: var(--delay), calc(var(--delay) * 1.7);
         }
 
         .lily-orb-particle:nth-child(11n),
@@ -2009,23 +3242,23 @@ function LilyPage() {
         }
 
         .lily-orb[data-state="listening"] {
-          box-shadow:
-            0 0 calc(82px + (var(--lily-mic-level, 0) * 80px)) rgba(52,211,153,0.45),
-            inset 0 0 66px rgba(110,231,183,0.16);
+          filter:
+            drop-shadow(0 0 calc(34px + (var(--lily-mic-level, 0) * 56px)) rgba(110,231,183,0.48))
+            drop-shadow(0 0 24px rgba(103,232,249,0.2));
         }
 
         .lily-orb[data-state="listening"] .lily-helix {
           filter:
             drop-shadow(0 0 18px rgba(110,231,183,0.78))
             drop-shadow(0 0 28px rgba(103,232,249,0.32));
-          animation-duration: calc(7s - (var(--lily-mic-level, 0) * 3.5s));
+          animation-duration: calc(10s - (var(--lily-mic-level, 0) * 4s));
           mix-blend-mode: screen;
         }
 
         .lily-orb[data-state="thinking"] {
-          box-shadow:
-            0 0 104px rgba(244,114,182,0.42),
-            inset 0 0 70px rgba(244,114,182,0.12);
+          filter:
+            drop-shadow(0 0 44px rgba(244,114,182,0.42))
+            drop-shadow(0 0 24px rgba(103,232,249,0.18));
           animation-duration: 1.8s;
         }
 
@@ -2038,16 +3271,16 @@ function LilyPage() {
 
         .lily-orb[data-state="speaking"],
         .lily-orb[data-state="connected"] {
-          box-shadow:
-            0 0 calc(96px + (var(--lily-mic-level, 0) * 92px)) rgba(34,211,238,0.52),
-            inset 0 0 78px rgba(255,255,255,0.14);
+          filter:
+            drop-shadow(0 0 calc(38px + (var(--lily-mic-level, 0) * 62px)) rgba(34,211,238,0.5))
+            drop-shadow(0 0 30px rgba(217,70,239,0.26));
         }
 
         .lily-orb[data-state="speaking"] .lily-helix {
           filter:
             drop-shadow(0 0 18px rgba(103,232,249,0.85))
             drop-shadow(0 0 28px rgba(217,70,239,0.36));
-          animation-duration: calc(7s - (var(--lily-mic-level, 0) * 3.5s));
+          animation-duration: calc(9s - (var(--lily-mic-level, 0) * 4s));
           mix-blend-mode: screen;
         }
 
@@ -2057,16 +3290,21 @@ function LilyPage() {
           mix-blend-mode: screen;
         }
 
-        .lily-orb[data-state="listening"] .lily-helix-particle,
-        .lily-orb[data-state="speaking"] .lily-helix-particle {
+        .lily-orb[data-state="listening"] .lily-helix-particle {
           transform:
-            translate(-50%, -50%)
-            translateZ(calc(var(--z) * 52px))
-            scale(calc((1.04 + var(--z) * 0.2) + (var(--lily-mic-level, 0) * 0.76)));
-          animation-duration: 1.35s;
+            translate3d(calc(var(--x) * 0.82), var(--y), calc(var(--z) * 1.2))
+            scale(calc((0.96 + ((var(--depth) + 1) * 0.32)) + (var(--lily-mic-level, 0) * 0.75)));
+          animation-duration: 1.25s;
         }
 
-        @keyframes lily-orb-breathe {
+        .lily-orb[data-state="speaking"] .lily-helix-particle {
+          transform:
+            translate3d(calc(var(--x) * 1.16), calc(var(--y) + (var(--depth) * -10px)), calc(var(--z) * 1.34))
+            scale(calc((1.04 + ((var(--depth) + 1) * 0.34)) + (var(--lily-mic-level, 0) * 0.92)));
+          animation-duration: 0.95s;
+        }
+
+        @keyframes lily-field-breathe {
           0%, 100% {
             filter: saturate(calc(1.05 + (var(--lily-mic-level, 0) * 0.55))) brightness(1);
           }
@@ -2075,20 +3313,39 @@ function LilyPage() {
           }
         }
 
-        @keyframes lily-shell-precess {
-          0% { transform: scaleY(0.96) rotateX(62deg) rotateZ(0deg); }
-          100% { transform: scaleY(0.96) rotateX(62deg) rotateZ(360deg); }
+        @keyframes lily-orbit-sketch {
+          0% { transform: scaleY(0.36) rotate(0deg); }
+          50% { transform: scaleY(0.5) rotate(180deg); }
+          100% { transform: scaleY(0.36) rotate(360deg); }
         }
 
-        @keyframes lily-dust-sphere-spin {
-          0% { transform: rotate(0deg) scale(1); }
-          50% { transform: rotate(180deg) scale(calc(1.01 + (var(--lily-mic-level, 0) * 0.04))); }
-          100% { transform: rotate(360deg) scale(1); }
+        @keyframes lily-dust-drift {
+          0%, 100% {
+            transform: rotate3d(0.4, 1, 0.2, 0deg) scale(1);
+          }
+          50% {
+            transform: rotate3d(0.4, 1, 0.2, 22deg) scale(calc(1.01 + (var(--lily-mic-level, 0) * 0.04)));
+          }
         }
 
-        @keyframes lily-helix-rotate {
-          0% { transform: perspective(680px) rotateX(12deg) rotateY(0deg) rotateZ(-8deg); }
-          100% { transform: perspective(680px) rotateX(12deg) rotateY(360deg) rotateZ(-8deg); }
+        @keyframes lily-helix-precess {
+          0%, 100% {
+            transform: rotateX(63deg) rotateY(-18deg) rotateZ(-10deg);
+          }
+          50% {
+            transform: rotateX(70deg) rotateY(18deg) rotateZ(10deg);
+          }
+        }
+
+        @keyframes lily-helix-float {
+          0%, 100% {
+            margin-top: 0;
+            filter: blur(0);
+          }
+          50% {
+            margin-top: calc((var(--depth) + 1) * -1.8px);
+            filter: blur(calc((1 - ((var(--depth) + 1) / 2)) * 0.7px));
+          }
         }
 
         @keyframes lily-particle-twinkle {

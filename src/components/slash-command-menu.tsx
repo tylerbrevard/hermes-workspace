@@ -36,7 +36,10 @@ export const DEFAULT_SLASH_COMMANDS: Array<SlashCommandDefinition> = [
   { command: '/model', description: 'Show or change the current model' },
   { command: '/save', description: 'Save the current conversation' },
   { command: '/skills', description: 'Browse and manage skills' },
-  { command: '/plugins', description: 'List installed plugins and their status' },
+  {
+    command: '/plugins',
+    description: 'List installed plugins and their status',
+  },
   { command: '/mcp', description: 'Manage MCP servers' },
   { command: '/skin', description: 'Change the display theme' },
   { command: '/help', description: 'Show available commands' },
@@ -63,7 +66,12 @@ export function mergeSlashCommands(
 }
 
 const SlashCommandMenu = forwardRef(function SlashCommandMenu(
-  { open, query, onSelect, commands = DEFAULT_SLASH_COMMANDS }: SlashCommandMenuProps,
+  {
+    open,
+    query,
+    onSelect,
+    commands = DEFAULT_SLASH_COMMANDS,
+  }: SlashCommandMenuProps,
   ref: Ref<SlashCommandMenuHandle>,
 ) {
   const [activeIndex, setActiveIndex] = useState(0)
@@ -170,6 +178,4 @@ const SlashCommandMenu = forwardRef(function SlashCommandMenu(
   )
 })
 
-export {
-  SlashCommandMenu,
-}
+export { SlashCommandMenu }

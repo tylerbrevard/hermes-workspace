@@ -1,8 +1,23 @@
 import { startTransition, useEffect, useMemo, useState } from 'react'
+import {
+  Award01Icon,
+  Calendar03Icon,
+  CalendarSyncIcon,
+  CheckListIcon,
+  Task01Icon,
+} from '@hugeicons/core-free-icons'
 import type { CreateTaskInput } from '@/lib/tasks-api'
+import type { HugeIcon } from '@/screens/dashboard/dashboard-ui'
 import { SetupEmptyState } from '@/components/setup-empty-state'
 import { apiPath, withBasePath } from '@/lib/base-path'
 import { createTask } from '@/lib/tasks-api'
+import { ToolsActionDock } from '@/components/tools-action-dock'
+import {
+  AppSectionHeader,
+  AppStatusPill,
+  AppSurface,
+  AppTile,
+} from '@/components/app-surface'
 
 type BarryMeetingStatus = 'upcoming' | 'completed' | 'archived'
 
@@ -34,6 +49,18 @@ type BarryPayload = {
   error?: string
 }
 
+type BarryCockpitAction = 'next' | 'prep' | 'follow-ups' | 'wins' | 'sync'
+
+type BarryCockpitTile = {
+  id: string
+  label: string
+  value: string
+  detail: string
+  tone: 'ok' | 'warn'
+  action: BarryCockpitAction
+  progress: number
+}
+
 function shellClassName() {
   return 'rounded-2xl border border-primary-200 bg-primary-50/85 p-4 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/92'
 }
@@ -56,10 +83,10 @@ function formatDate(iso: string) {
 }
 
 function formatFreshness(value?: string | null) {
-  if (!value) return 'Last synced unknown'
+  if (!value) return 'Sync unknown'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Last synced unknown'
-  return `Last synced ${date.toLocaleString([], {
+  if (Number.isNaN(date.getTime())) return 'Sync unknown'
+  return `Sync ${date.toLocaleString([], {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -81,6 +108,24 @@ function statusTone(status: BarryMeetingStatus) {
     return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200'
   }
   return 'border-neutral-200 bg-neutral-50 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300'
+}
+
+const BARRY_TILE_ICONS: Record<BarryCockpitAction, HugeIcon> = {
+  next: Calendar03Icon,
+  prep: CheckListIcon,
+  'follow-ups': Task01Icon,
+  wins: Award01Icon,
+  sync: CalendarSyncIcon,
+}
+
+function compactBarryTileValue(tile: BarryCockpitTile) {
+  if (tile.action !== 'next') return tile.value
+  const parsed = Date.parse(tile.value)
+  if (Number.isNaN(parsed)) return tile.value
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+  }).format(parsed)
 }
 
 function followUpKey(meetingId: string, index: number, item: ActionItem) {
@@ -164,19 +209,99 @@ export function buildBarryMeetingBrief(meeting: BarryMeeting | null) {
 }
 
 export function getBarryNextAction(meeting: BarryMeeting | null) {
-  if (!meeting) return 'Schedule Barry 1-on-1'
+  if (!meeting) return 'New 1-on-1'
   const summary = getBarryPrepSummary(meeting)
-  if (summary.completeness < 70) return 'Prep next 1-on-1'
-  if (summary.openActions > 0) return 'Create follow-up tasks'
-  if (meeting.status === 'upcoming') return 'Copy Barry brief'
-  return 'Review Barry history'
+  if (summary.completeness < 70) return 'Prep'
+  if (summary.openActions > 0) return 'Tasks'
+  if (meeting.status === 'upcoming') return 'Brief'
+  return 'History'
 }
 
 export function getBarryLastInteraction(meetings: Array<BarryMeeting>) {
   const latest = meetings
     .filter((meeting) => meeting.status !== 'upcoming')
     .sort((left, right) => right.date.localeCompare(left.date))[0]
-  return latest ? formatDate(latest.date) : 'no previous interaction'
+  return latest ? formatDate(latest.date) : 'none'
+}
+
+export function buildBarryCockpitTiles({
+  meetings,
+  wins,
+  nextMeeting,
+  refreshedAt,
+}: {
+  meetings: Array<BarryMeeting>
+  wins: Array<BarryWin>
+  nextMeeting: BarryMeeting | null
+  refreshedAt?: string
+}): Array<BarryCockpitTile> {
+  const nextPrep = getBarryPrepSummary(nextMeeting)
+  const openActions = meetings.reduce(
+    (count, meeting) =>
+      count + meeting.actionItems.filter((item) => !item.done).length,
+    0,
+  )
+  const completed = meetings.filter(
+    (meeting) => meeting.status === 'completed',
+  ).length
+  const activeWins = wins.length
+
+  return [
+    {
+      id: 'next',
+      label: 'Next 1-on-1',
+      value: nextMeeting ? formatDate(nextMeeting.date) : 'None',
+      detail: nextMeeting ? 'Barry meeting on deck' : 'Schedule the next slot',
+      tone: nextMeeting ? 'ok' : 'warn',
+      action: 'next',
+      progress: nextMeeting ? 100 : 0,
+    },
+    {
+      id: 'prep',
+      label: 'Prep readiness',
+      value: `${nextPrep.completeness}%`,
+      detail:
+        nextPrep.completeness >= 70
+          ? 'Agenda and context are staged'
+          : 'Agenda, notes, wins, or actions need work',
+      tone: nextPrep.completeness >= 70 ? 'ok' : 'warn',
+      action: 'prep',
+      progress: nextPrep.completeness,
+    },
+    {
+      id: 'follow-ups',
+      label: 'Follow-ups',
+      value: String(openActions),
+      detail:
+        openActions > 0
+          ? 'Open Barry actions need ownership'
+          : 'No open Barry actions',
+      tone: openActions > 0 ? 'warn' : 'ok',
+      action: 'follow-ups',
+      progress: Math.min(100, openActions * 20),
+    },
+    {
+      id: 'wins',
+      label: 'Wins bank',
+      value: String(activeWins),
+      detail:
+        activeWins > 0
+          ? 'Available wins for discussion'
+          : 'No wins ready for Barry',
+      tone: activeWins > 0 ? 'ok' : 'warn',
+      action: 'wins',
+      progress: Math.min(100, activeWins * 20),
+    },
+    {
+      id: 'sync',
+      label: 'Source health',
+      value: formatFreshness(refreshedAt).replace(/^Sync\s*/, ''),
+      detail: `${completed} completed meeting${completed === 1 ? '' : 's'} in history`,
+      tone: refreshedAt ? 'ok' : 'warn',
+      action: 'sync',
+      progress: refreshedAt ? 100 : 35,
+    },
+  ]
 }
 
 export function BarryScreen() {
@@ -295,7 +420,51 @@ export function BarryScreen() {
   )
   const nextBarryAction = getBarryNextAction(nextMeeting)
   const lastInteraction = getBarryLastInteraction(meetings)
-
+  const cockpitTiles = useMemo(
+    () =>
+      buildBarryCockpitTiles({
+        meetings,
+        wins,
+        nextMeeting,
+        refreshedAt: data?.refreshedAt,
+      }),
+    [data?.refreshedAt, meetings, nextMeeting, wins],
+  )
+  const commandPosture = useMemo(() => {
+    if (!nextMeeting) {
+      return {
+        label: 'Schedule next 1-on-1',
+        detail: 'No upcoming Barry meeting is on deck.',
+        tone: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100',
+      }
+    }
+    if (nextPrepSummary.completeness < 70) {
+      return {
+        label: 'Prep agenda',
+        detail: 'Agenda, notes, wins, and actions are not fully staged.',
+        tone: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100',
+      }
+    }
+    if (nextPrepSummary.openActions > 0) {
+      return {
+        label: 'Clear follow-ups',
+        detail: `${nextPrepSummary.openActions} open action${nextPrepSummary.openActions === 1 ? '' : 's'} need ownership.`,
+        tone: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-100',
+      }
+    }
+    return {
+      label: 'Brief ready',
+      detail: 'Next meeting has enough context to run.',
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100',
+    }
+  }, [nextMeeting, nextPrepSummary.completeness, nextPrepSummary.openActions])
+  const commandMeetings = useMemo(() => {
+    const uniqueMeetings = new Map<string, BarryMeeting>()
+    ;[nextMeeting, selectedMeeting, ...visibleMeetings].forEach((meeting) => {
+      if (meeting) uniqueMeetings.set(meeting.id, meeting)
+    })
+    return Array.from(uniqueMeetings.values()).slice(0, 4)
+  }, [nextMeeting, selectedMeeting, visibleMeetings])
   useEffect(() => {
     setNotesDraft(selectedMeeting?.notes || '')
   }, [selectedMeeting?.id, selectedMeeting?.notes])
@@ -531,6 +700,28 @@ export function BarryScreen() {
     setSelectedId(visibleMeetings[nextIndex]?.id ?? '')
   }
 
+  function activateCockpitTile(action: BarryCockpitAction) {
+    if (action === 'sync') {
+      void load()
+      return
+    }
+    if (action === 'next' || action === 'prep') {
+      if (nextMeeting) {
+        setSelectedId(nextMeeting.id)
+        return
+      }
+      void createMeeting()
+      return
+    }
+    if (action === 'follow-ups') {
+      setStatusFilter('all')
+      setSelectedId(nextMeeting?.id ?? selectedMeeting?.id ?? '')
+      return
+    }
+    setSearch('')
+    setStatusFilter('all')
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-1 pb-6 sm:px-2">
       <div className={shellClassName()}>
@@ -543,14 +734,14 @@ export function BarryScreen() {
               Barry
             </h1>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              Workspace-native 1-on-1 planning, wins review, and follow-through.
+              1-on-1 prep, wins, follow-up.
             </p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                Role: 1-on-1 prep and follow-through
+                Role 1-on-1
               </span>
               <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                Last interaction: {lastInteraction}
+                Last {lastInteraction}
               </span>
             </div>
           </div>
@@ -561,7 +752,7 @@ export function BarryScreen() {
                 checked={showArchived}
                 onChange={(event) => setShowArchived(event.target.checked)}
               />
-              Show archived
+              Archived
             </label>
             <input
               type="search"
@@ -569,7 +760,7 @@ export function BarryScreen() {
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}
               placeholder="Search Barry"
-              className="min-w-0 flex-1 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 sm:min-w-44 sm:flex-none"
+              className="order-last w-full rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 sm:order-none sm:min-w-44 sm:w-auto sm:flex-none"
             />
             <select
               aria-label="Filter Barry meetings by status"
@@ -581,19 +772,19 @@ export function BarryScreen() {
               }
               className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
             >
-              <option value="all">All statuses</option>
-              <option value="upcoming">Upcoming</option>
-              <option value="completed">Completed</option>
+              <option value="all">All</option>
+              <option value="upcoming">Next</option>
+              <option value="completed">Done</option>
               <option value="archived">Archived</option>
             </select>
             <button
               type="button"
               onClick={() =>
-                nextBarryAction === 'Copy Barry brief'
+                nextBarryAction === 'Brief'
                   ? void copyBarryBrief()
-                  : nextBarryAction === 'Create follow-up tasks'
+                  : nextBarryAction === 'Tasks'
                     ? setSelectedId(nextMeeting?.id ?? '')
-                    : nextBarryAction === 'Prep next 1-on-1'
+                    : nextBarryAction === 'Prep'
                       ? setSelectedId(nextMeeting?.id ?? '')
                       : void createMeeting()
               }
@@ -609,115 +800,263 @@ export function BarryScreen() {
             Today
           </div>
           <div className="mt-1 font-semibold text-primary-900 dark:text-neutral-100">
-            {nextMeeting ? formatDate(nextMeeting.date) : 'No next Barry 1-on-1'}
+            {nextMeeting ? formatDate(nextMeeting.date) : 'No next 1-on-1'}
           </div>
           <div className="mt-1 text-primary-600 dark:text-neutral-400">
             Prep {nextPrepSummary.completeness}% · actions{' '}
             {nextPrepSummary.openActions} · {formatFreshness(data?.refreshedAt)}
           </div>
         </section>
-        <div className="mt-4 grid gap-2 md:grid-cols-4">
+        <div className="mt-4 hidden gap-2 md:grid md:grid-cols-4">
           <span
             className={`rounded-xl border px-3 py-2 text-xs ${stripTone(nextMeeting ? 'ok' : 'warn')}`}
           >
-            Next 1-on-1{' '}
-            {nextMeeting ? formatDate(nextMeeting.date) : 'not scheduled'}
+            Next {nextMeeting ? formatDate(nextMeeting.date) : 'not scheduled'}
           </span>
           <span
             className={`rounded-xl border px-3 py-2 text-xs ${stripTone(openActionCount > 0 ? 'warn' : 'ok')}`}
           >
-            {openActionCount} open action item(s)
+            {openActionCount} open
           </span>
           <span className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200">
-            Private 1-on-1 notes
+            Private notes
           </span>
           <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
             {formatFreshness(data?.refreshedAt)}
           </span>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-primary-500 dark:text-neutral-400">
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            First card: next 1-on-1 {nextPrepSummary.nextDate} · prep{' '}
-            {nextPrepSummary.completeness}% · open actions{' '}
-            {nextPrepSummary.openActions}
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Quick create 1-on-1 flow with agenda template
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Sections: wins · blockers · asks · follow-ups · decisions
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Historical action carryover from previous meetings
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Filters: upcoming · completed · archived · needs prep
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Integrated with Meetings and Tasks
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            What should I bring up suggestions from sessions and tasks
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Privacy/visibility: private 1-on-1 notes
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Export brief for next meeting
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Post-meeting closeout action extraction
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Mobile prep card for quick review
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Stale calendar/source badge
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Reminder when no next 1-on-1 is scheduled
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Related ConnectWise/direct-report context links
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Decision log section
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Empty next-meeting state tested
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Keyboard shortcut/new item action
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            LILY readout for prep summary
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Recurring agenda templates
-          </span>
-          <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-            Clear archive/restore behavior
-          </span>
-        </div>
+        <ToolsActionDock
+          className="mt-4 hidden md:block"
+          label="Barry quick actions"
+          items={[
+            {
+              id: 'next',
+              label: nextBarryAction,
+              icon: nextBarryAction === 'New 1-on-1' ? 'add' : 'calendar',
+              onClick: () =>
+                nextBarryAction === 'Brief'
+                  ? void copyBarryBrief()
+                  : nextBarryAction === 'Tasks'
+                    ? setSelectedId(nextMeeting?.id ?? '')
+                    : nextBarryAction === 'Prep'
+                      ? setSelectedId(nextMeeting?.id ?? '')
+                      : void createMeeting(),
+              disabled: working,
+              tone: 'primary',
+              meta: 'Primary',
+            },
+            {
+              id: 'brief',
+              label: 'Brief',
+              icon: 'download',
+              onClick: () => void copyBarryBrief(),
+              disabled: working,
+              meta: 'Copy',
+            },
+            {
+              id: 'tasks',
+              label: 'Tasks',
+              icon: 'task',
+              onClick: () => setSelectedId(nextMeeting?.id ?? ''),
+              disabled: !nextMeeting,
+              tone: openActionCount > 0 ? 'warning' : 'good',
+              meta: `${openActionCount} open`,
+            },
+            {
+              id: 'meetings',
+              label: 'Meetings',
+              icon: 'calendar',
+              href: withBasePath('/meetings'),
+              meta: 'Calendar',
+            },
+            {
+              id: 'sync',
+              label: 'Sync',
+              icon: 'refresh',
+              onClick: () => void load(),
+              disabled: working,
+              meta: formatFreshness(data?.refreshedAt),
+            },
+          ]}
+        />
+        <AppSurface className="mt-4">
+          <AppSectionHeader
+            title="Barry command center"
+            meta={commandPosture.label}
+            action={
+              <AppStatusPill
+                tone={
+                  !nextMeeting || nextPrepSummary.completeness < 70
+                    ? 'amber'
+                    : nextPrepSummary.openActions > 0
+                      ? 'blue'
+                      : 'green'
+                }
+              >
+                Prep {nextPrepSummary.completeness}%
+              </AppStatusPill>
+            }
+          />
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+            {cockpitTiles.map((tile) => (
+              <AppTile
+                key={tile.id}
+                title={tile.label}
+                value={compactBarryTileValue(tile)}
+                detail={tile.detail}
+                icon={BARRY_TILE_ICONS[tile.action]}
+                tone={tile.tone === 'warn' ? 'amber' : 'green'}
+                actionLabel={
+                  tile.action === 'sync'
+                    ? 'Refresh'
+                    : tile.action === 'next'
+                      ? nextBarryAction
+                      : 'Open'
+                }
+                className="min-h-[118px]"
+                onClick={() => activateCockpitTile(tile.action)}
+              />
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-4">
+            {commandMeetings.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-primary-300 bg-primary-50/70 p-4 text-sm text-primary-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 lg:col-span-4">
+                No Barry meetings yet. Create the first 1-on-1 to stage agenda,
+                wins, notes, and follow-ups.
+              </div>
+            ) : null}
+            {commandMeetings.map((meeting) => {
+              const summary = getBarryPrepSummary(meeting)
+              const openActions = meeting.actionItems.filter(
+                (item) => !item.done,
+              ).length
+              return (
+                <article
+                  key={meeting.id}
+                  className="rounded-2xl border border-primary-200 bg-primary-50/80 p-3 dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-primary-900 dark:text-neutral-100">
+                        {formatDate(meeting.date)}
+                      </div>
+                      <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
+                        Prep {summary.completeness}% · open {openActions}
+                      </div>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] ${statusTone(meeting.status)}`}
+                    >
+                      {meeting.status}
+                    </span>
+                  </div>
+                  <div className="mt-3 h-2 rounded-full bg-primary-100 dark:bg-neutral-800">
+                    <div
+                      className="h-2 rounded-full bg-primary-700 dark:bg-neutral-200"
+                      style={{ width: `${summary.completeness}%` }}
+                    />
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="rounded-xl border border-primary-200 bg-white/70 px-2 py-2 dark:border-neutral-800 dark:bg-neutral-950">
+                      <div className="font-semibold text-primary-900 dark:text-neutral-100">
+                        {meeting.agenda.length}
+                      </div>
+                      <div className="text-primary-500 dark:text-neutral-500">
+                        Agenda
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-primary-200 bg-white/70 px-2 py-2 dark:border-neutral-800 dark:bg-neutral-950">
+                      <div className="font-semibold text-primary-900 dark:text-neutral-100">
+                        {meeting.winsDiscussed.length}
+                      </div>
+                      <div className="text-primary-500 dark:text-neutral-500">
+                        Wins
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-primary-200 bg-white/70 px-2 py-2 dark:border-neutral-800 dark:bg-neutral-950">
+                      <div className="font-semibold text-primary-900 dark:text-neutral-100">
+                        {meeting.actionItems.length}
+                      </div>
+                      <div className="text-primary-500 dark:text-neutral-500">
+                        Tasks
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(meeting.id)}
+                      className="flex-1 rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void navigator.clipboard.writeText(
+                          buildBarryMeetingBrief(meeting),
+                        )
+                      }
+                      className="rounded-xl border border-primary-200 bg-white px-3 py-2 text-xs font-medium text-primary-700 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
+                    >
+                      Brief
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => void createMeeting()}
+              disabled={working}
+              className="rounded-xl border border-primary-200 bg-primary-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              New 1-on-1
+            </button>
+            <button
+              type="button"
+              onClick={() => void copyBarryBrief()}
+              disabled={working}
+              className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
+            >
+              Copy brief
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter('all')
+                setSelectedId(nextMeeting?.id ?? selectedMeeting?.id ?? '')
+              }}
+              disabled={working || meetings.length === 0}
+              className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm font-medium text-primary-700 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
+            >
+              Review follow-ups
+            </button>
+          </div>
+        </AppSurface>
       </div>
 
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-          <div className="font-semibold">Barry data is unavailable</div>
+          <div className="font-semibold">Barry unavailable</div>
           <div className="mt-1">{error}</div>
           <button
             type="button"
             onClick={() => void load()}
             className="mt-3 rounded-xl border border-red-300 bg-red-100/60 px-3 py-2 text-xs font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-100"
           >
-            Retry Barry refresh
+            Retry
           </button>
         </div>
       ) : null}
 
       {followUpError ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-          <div className="font-semibold">Follow-up task was not created</div>
+          <div className="font-semibold">Task not created</div>
           <div className="mt-1">{followUpError}</div>
         </div>
       ) : null}
@@ -740,10 +1079,10 @@ export function BarryScreen() {
           <div className="mt-3 grid gap-2">
             {visibleMeetings.length === 0 ? (
               <SetupEmptyState
-                title="No Barry meetings in this view."
-                description="Barry is ready, but this filter has no 1-on-1 agenda or history to work from."
-                nextAction="Create the next Barry 1-on-1 so the page can seed agenda notes, action items, and follow-up task handoff."
-                detail="Barry > New 1-on-1"
+                title="No meetings"
+                description="No agenda for this filter."
+                nextAction="Create next 1-on-1."
+                detail="Barry > New"
                 action={
                   <button
                     type="button"
@@ -751,7 +1090,7 @@ export function BarryScreen() {
                     disabled={working}
                     className="rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
                   >
-                    New 1-on-1
+                    New
                   </button>
                 }
               />
@@ -803,12 +1142,9 @@ export function BarryScreen() {
             <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center text-sm text-primary-500 dark:text-neutral-400">
               <div>
                 <div className="font-medium text-primary-800 dark:text-neutral-200">
-                  Select a meeting or create a new one.
+                  Select or create.
                 </div>
-                <div className="mt-1">
-                  Barry agenda templates are applied automatically to new
-                  1-on-1s.
-                </div>
+                <div className="mt-1">New uses the Barry agenda template.</div>
               </div>
               <button
                 type="button"
@@ -816,7 +1152,7 @@ export function BarryScreen() {
                 disabled={working}
                 className="rounded-xl bg-primary-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
               >
-                New 1-on-1
+                New
               </button>
             </div>
           ) : (
@@ -875,7 +1211,7 @@ export function BarryScreen() {
                     disabled={working}
                     className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-700 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
                   >
-                    Export summary
+                    Export
                   </button>
                   <button
                     type="button"
@@ -885,7 +1221,7 @@ export function BarryScreen() {
                     disabled={working}
                     className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-700 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300"
                   >
-                    Copy source id
+                    ID
                   </button>
                   <button
                     type="button"
@@ -958,12 +1294,12 @@ export function BarryScreen() {
 
                 <section className={panelClassName()}>
                   <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                    Wins To Share
+                    Wins
                   </h3>
                   <div className="mt-3 grid max-h-72 gap-2 overflow-y-auto">
                     {wins.length === 0 ? (
                       <div className="text-sm text-primary-500 dark:text-neutral-400">
-                        No wins flagged for Barry.
+                        No wins flagged.
                       </div>
                     ) : null}
                     {wins.map((win) => {
@@ -999,17 +1335,17 @@ export function BarryScreen() {
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-primary-500 dark:text-neutral-400">
-                        Action Items
+                        Actions
                       </h3>
                       <p className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                        Open items can be handed off to the real task board.
+                        Task handoff.
                       </p>
                     </div>
                     <a
                       href={withBasePath('/tasks')}
                       className="text-xs font-medium text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
                     >
-                      Open tasks
+                      Tasks
                     </a>
                   </div>
                   <div className="mt-3 grid gap-2">
@@ -1059,7 +1395,7 @@ export function BarryScreen() {
                               {createdFollowUps[
                                 followUpKey(selectedMeeting.id, index, item)
                               ]
-                                ? 'Task created'
+                                ? 'Created'
                                 : 'Create task'}
                             </button>
                             {createdFollowUps[

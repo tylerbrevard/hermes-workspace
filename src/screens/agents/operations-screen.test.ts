@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildOperationsCockpitTiles,
   buildOperationsHealthRows,
   filterOperationsHealthRows,
   getOperationsPrimaryAction,
@@ -9,9 +10,10 @@ import type { OperationsAgent } from './hooks/use-operations'
 function agent(
   patch: Partial<OperationsAgent> & Pick<OperationsAgent, 'id' | 'name'>,
 ): OperationsAgent {
+  const { id, name, ...rest } = patch
   return {
-    id: patch.id,
-    name: patch.name,
+    id,
+    name,
     model: 'gpt-5',
     workspace: `/tmp/${patch.id}`,
     agentDir: `/tmp/${patch.id}`,
@@ -35,11 +37,52 @@ function agent(
     progressStatus: 'queued',
     recentOutputs: [],
     needsSetup: false,
-    ...patch,
+    ...rest,
   }
 }
 
 describe('operations health helpers', () => {
+  it('builds cockpit tiles for active, failed, blocked, waiting, and freshness lanes', () => {
+    const rows = buildOperationsHealthRows(
+      [
+        agent({
+          id: 'active',
+          name: 'Active',
+          status: 'active',
+          lastActivityAt: Date.parse('2026-05-26T19:55:00.000Z'),
+        }),
+        agent({
+          id: 'failed',
+          name: 'Failed',
+          status: 'error',
+          lastActivityAt: Date.parse('2026-05-26T19:50:00.000Z'),
+        }),
+        agent({
+          id: 'waiting',
+          name: 'Waiting',
+          jobs: [
+            {
+              id: 'job-1',
+              name: 'ops:waiting:queued',
+              enabled: true,
+              schedule: 'daily',
+            } as OperationsAgent['jobs'][number],
+          ],
+          lastActivityAt: Date.parse('2026-05-24T19:50:00.000Z'),
+        }),
+      ],
+      Date.parse('2026-05-26T20:00:00.000Z'),
+    )
+
+    expect(buildOperationsCockpitTiles(rows)).toMatchObject([
+      { id: 'active', value: '1', filter: 'active', tone: 'good' },
+      { id: 'failed', value: '1', filter: 'failed', tone: 'danger' },
+      { id: 'blocked', value: '1', filter: 'needs Tyler', tone: 'warning' },
+      { id: 'waiting', value: '1', filter: 'all', tone: 'warning' },
+      { id: 'freshness', value: '2/3', filter: 'recently changed' },
+    ])
+  })
+
   it('builds health rows with setup, freshness, source, and model signals', () => {
     const rows = buildOperationsHealthRows(
       [

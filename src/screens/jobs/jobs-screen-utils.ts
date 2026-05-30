@@ -42,6 +42,15 @@ export type JobRunMetadata = {
   changedSinceLastRun: string
 }
 export type JobActionState = 'pause' | 'resume' | 'run' | 'delete' | null
+export type JobsCockpitTile = {
+  id: 'failed' | 'running' | 'next-due' | 'blocked' | 'paid'
+  label: string
+  value: string
+  detail: string
+  tone: 'good' | 'warning' | 'danger' | 'neutral'
+  progress: number
+  filter: JobSavedFilter
+}
 
 export function formatNextRun(nextRun?: string | null): string {
   if (!nextRun) return '-'
@@ -136,22 +145,21 @@ export function isDailyCheckJob(job: ClaudeJob): boolean {
 
 export function getJobRetryPolicy(job: ClaudeJob): string {
   if (job.repeat?.times) {
-    return `Retry ${job.repeat.completed ?? 0}/${job.repeat.times}; next retry ${formatNextRun(job.next_run_at)}`
+    return `Retry ${job.repeat.completed ?? 0}/${job.repeat.times} · ${formatNextRun(job.next_run_at)}`
   }
   if (getJobHealth(job) === 'failed' && job.next_run_at) {
-    return `Manual recovery or scheduled retry ${formatNextRun(job.next_run_at)}`
+    return `Retry ${formatNextRun(job.next_run_at)}`
   }
-  return `No explicit retry policy; next run ${formatNextRun(job.next_run_at)}`
+  return `Next ${formatNextRun(job.next_run_at)}`
 }
 
 export function getJobCompletionSla(job: ClaudeJob): string {
   const promptLength = job.prompt.length
-  if (promptLength > 400 || job.skills?.length)
-    return 'Expected duration: 15-30m'
+  if (promptLength > 400 || job.skills?.length) return '15-30m'
   if (/backup|sync|export|digest|report/i.test(`${job.name} ${job.prompt}`)) {
-    return 'Expected duration: 5-15m'
+    return '5-15m'
   }
-  return 'Expected duration: <5m'
+  return '<5m'
 }
 
 export function buildJobDependencyMap(job: ClaudeJob): string {
@@ -160,14 +168,15 @@ export function buildJobDependencyMap(job: ClaudeJob): string {
     job.deliver && job.deliver.length > 0
       ? job.deliver.join(', ')
       : 'workspace output'
-  return `Upstream: ${upstream}; downstream: ${downstream}`
+  return `${upstream} -> ${downstream}`
 }
 
 export function getJobRunMetadata(job: ClaudeJob): JobRunMetadata {
   const updatedAt = readJobTime(job.updated_at)
   const lastRunAt = readJobTime(job.last_run_at)
   const createdAt = readJobTime(job.created_at)
-  const durationMs = updatedAt && lastRunAt ? Math.abs(updatedAt - lastRunAt) : 0
+  const durationMs =
+    updatedAt && lastRunAt ? Math.abs(updatedAt - lastRunAt) : 0
   const lastDuration =
     durationMs > 0 && durationMs < 12 * 3_600_000
       ? formatDuration(durationMs)
@@ -187,12 +196,13 @@ export function getJobRunMetadata(job: ClaudeJob): JobRunMetadata {
 }
 
 export function getNoOpContractLabel(job: ClaudeJob): string | null {
-  const text = `${job.name} ${job.prompt} ${job.last_run_error || ''} ${job.error || ''}`.toLowerCase()
+  const text =
+    `${job.name} ${job.prompt} ${job.last_run_error || ''} ${job.error || ''}`.toLowerCase()
   if (/\bno_reply\b|\bno reply\b|\[silent\]|\bsilent\b/.test(text)) {
-    return 'No-op contract: silent/no reply'
+    return 'Silent'
   }
   if (/\bno[- ]?op\b|nothing to do|no changes/.test(text)) {
-    return 'No-op contract: report only on work'
+    return 'Report on work'
   }
   return null
 }
@@ -344,14 +354,13 @@ export function sortJobsForAttention(jobs: Array<ClaudeJob>): Array<ClaudeJob> {
   })
 }
 
-export function getNextScheduledJob(
-  jobs: Array<ClaudeJob>,
-): ClaudeJob | null {
+export function getNextScheduledJob(jobs: Array<ClaudeJob>): ClaudeJob | null {
   return (
     jobs
       .filter((job) => job.enabled && readJobTime(job.next_run_at) > 0)
-      .sort((a, b) => readJobTime(a.next_run_at) - readJobTime(b.next_run_at))[0] ??
-    null
+      .sort(
+        (a, b) => readJobTime(a.next_run_at) - readJobTime(b.next_run_at),
+      )[0] ?? null
   )
 }
 
@@ -359,8 +368,9 @@ export function getLastFailedJob(jobs: Array<ClaudeJob>): ClaudeJob | null {
   return (
     jobs
       .filter((job) => getJobHealth(job) === 'failed')
-      .sort((a, b) => readJobTime(b.last_run_at) - readJobTime(a.last_run_at))[0] ??
-    null
+      .sort(
+        (a, b) => readJobTime(b.last_run_at) - readJobTime(a.last_run_at),
+      )[0] ?? null
   )
 }
 
@@ -381,8 +391,13 @@ export function groupJobsByOwner(
   }
   for (const job of jobs) {
     const owner = getJobOwnerSource(job)
-    const group =
-      groups.get(owner) ?? { owner, total: 0, failed: 0, running: 0, stale: 0 }
+    const group = groups.get(owner) ?? {
+      owner,
+      total: 0,
+      failed: 0,
+      running: 0,
+      stale: 0,
+    }
     const health = getJobHealth(job)
     group.total += 1
     if (health === 'failed') group.failed += 1
@@ -475,4 +490,70 @@ export function serializeJobsCsv(jobs: Array<ClaudeJob>): string {
       .join(','),
   )
   return [headers.join(','), ...rows].join('\n')
+}
+
+export function buildJobsCockpitTiles(
+  jobs: Array<ClaudeJob>,
+): Array<JobsCockpitTile> {
+  const total = Math.max(1, jobs.length)
+  const failed = jobs.filter((job) => getJobHealth(job) === 'failed').length
+  const running = jobs.filter((job) => getJobHealth(job) === 'running').length
+  const nextDue = jobs.filter(
+    (job) => job.enabled && readJobTime(job.next_run_at) > 0,
+  ).length
+  const blocked = jobs.filter(jobNeedsTyler).length
+  const paid = jobs.filter(jobUsesPaidCall).length
+  const recoverable = jobs.filter(
+    (job) =>
+      getJobHealth(job) === 'failed' &&
+      classifyJobFailureFamily(job) !== 'auth',
+  ).length
+
+  return [
+    {
+      id: 'failed',
+      label: 'Failure lane',
+      value: String(failed),
+      detail: failed > 0 ? `${recoverable} recoverable` : 'Clear',
+      tone: failed > 0 ? 'danger' : 'good',
+      progress: Math.round((failed / total) * 100),
+      filter: 'failing',
+    },
+    {
+      id: 'running',
+      label: 'Running now',
+      value: String(running),
+      detail: running > 0 ? 'In flight' : 'Idle',
+      tone: running > 0 ? 'good' : 'neutral',
+      progress: Math.round((running / total) * 100),
+      filter: 'active',
+    },
+    {
+      id: 'next-due',
+      label: 'Scheduled lane',
+      value: String(nextDue),
+      detail: nextDue > 0 ? 'Queued' : 'None',
+      tone: nextDue > 0 ? 'good' : 'neutral',
+      progress: Math.round((nextDue / total) * 100),
+      filter: 'daily',
+    },
+    {
+      id: 'blocked',
+      label: 'Needs Tyler',
+      value: String(blocked),
+      detail: blocked > 0 ? 'Review' : 'Clear',
+      tone: blocked > 0 ? 'warning' : 'good',
+      progress: Math.round((blocked / total) * 100),
+      filter: 'blocked',
+    },
+    {
+      id: 'paid',
+      label: 'Paid calls',
+      value: String(paid),
+      detail: paid > 0 ? 'Cost visible' : 'None',
+      tone: paid > 0 ? 'warning' : 'neutral',
+      progress: Math.round((paid / total) * 100),
+      filter: 'paid',
+    },
+  ]
 }

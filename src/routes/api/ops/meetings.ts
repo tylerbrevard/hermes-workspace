@@ -124,12 +124,16 @@ export const Route = createFileRoute('/api/ops/meetings')({
           const search = url.searchParams.get('search') || ''
           const limit = url.searchParams.get('limit') || '50'
           const forceRefresh = url.searchParams.get('forceRefresh') === 'true'
-          const selectedMeetingId = url.searchParams.get('selectedMeetingId') || ''
+          const selectedMeetingId =
+            url.searchParams.get('selectedMeetingId') || ''
           const detailOnly = url.searchParams.get('detailOnly') === 'true'
 
           if (detailOnly) {
             if (!selectedMeetingId) {
-              return json({ error: 'selectedMeetingId is required' }, { status: 400 })
+              return json(
+                { error: 'selectedMeetingId is required' },
+                { status: 400 },
+              )
             }
 
             const [meetingPayload, briefPayload] = await Promise.all([
@@ -149,22 +153,23 @@ export const Route = createFileRoute('/api/ops/meetings')({
             })
           }
 
-          const [meetingsPayload, todayPayload, heatmapPayload] = await Promise.all([
-            Promise.resolve({
-              ...listMeetings({
-                search,
-                limit: Number.parseInt(limit, 10) || 50,
+          const [meetingsPayload, todayPayload, heatmapPayload] =
+            await Promise.all([
+              Promise.resolve({
+                ...listMeetings({
+                  search,
+                  limit: Number.parseInt(limit, 10) || 50,
+                }),
+                analytics: getMeetingStats(),
+                sparkline: getWeeklySparkline(),
+                graphSource: 'sqlite',
+                dataWarning: forceRefresh
+                  ? 'Force refresh is handled by the Hermes meeting pipeline; showing current SQLite data while it runs.'
+                  : undefined,
               }),
-              analytics: getMeetingStats(),
-              sparkline: getWeeklySparkline(),
-              graphSource: 'sqlite',
-              dataWarning: forceRefresh
-                ? 'Force refresh is handled by the Hermes meeting pipeline; showing current SQLite data while it runs.'
-                : undefined,
-            }),
-            Promise.resolve({ meetings: getTodayMeetings(5) }),
-            Promise.resolve({ days: getWeekHeatmap() }),
-          ])
+              Promise.resolve({ meetings: getTodayMeetings(5) }),
+              Promise.resolve({ days: getWeekHeatmap() }),
+            ])
 
           const selectedId =
             selectedMeetingId ||
@@ -227,8 +232,7 @@ export const Route = createFileRoute('/api/ops/meetings')({
                 text: typeof body.text === 'string' ? body.text : '',
                 assignee:
                   typeof body.assignee === 'string' ? body.assignee : '',
-                dueDate:
-                  typeof body.dueDate === 'string' ? body.dueDate : '',
+                dueDate: typeof body.dueDate === 'string' ? body.dueDate : '',
                 priority:
                   typeof body.priority === 'string' ? body.priority : 'medium',
               }),
@@ -274,7 +278,10 @@ export const Route = createFileRoute('/api/ops/meetings')({
             return json(updateDecision(body.decision))
           }
 
-          if (kind === 'send-issues-to-todo' || kind === 'send-decisions-to-todo') {
+          if (
+            kind === 'send-issues-to-todo' ||
+            kind === 'send-decisions-to-todo'
+          ) {
             const items = Array.isArray(body.items) ? body.items : []
             return json(sendMeetingItemsToTodo(items))
           }
@@ -302,7 +309,9 @@ export const Route = createFileRoute('/api/ops/meetings')({
           return json(
             {
               error:
-                error instanceof Error ? error.message : 'Meetings action failed',
+                error instanceof Error
+                  ? error.message
+                  : 'Meetings action failed',
             },
             { status: 502 },
           )

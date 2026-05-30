@@ -10,6 +10,45 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { ProviderIcon } from './components/provider-icon'
 import { ProviderWizard } from './components/provider-wizard'
+import {
+  DEFAULT_STREAM_READ_TIMEOUT_SECONDS,
+  DEFAULT_STREAM_STALE_TIMEOUT_SECONDS,
+  MODEL_PRESETS,
+  MODEL_PROVIDER_OPTIONS,
+  buildModelOptions,
+  buildProviderSummaries,
+  coerceBoolean,
+  coerceString,
+  formatStringList,
+  getDraftValue,
+  hasModelConfigValue,
+  parseModelProvider,
+  parseNumberValue,
+  parseStringList,
+  parseTextValue,
+  parseTimeoutInput,
+  readFallbackModelConfig,
+  readPath,
+  readPerformanceConfig,
+  readPrimaryModelConfig,
+  searchMatchesSetting,
+  stripProviderPrefix,
+} from './providers-workflow'
+import type {
+  ClaudeConfig,
+  ConfigPatchResponse,
+  ConfigQueryResponse,
+  ModelConfigDraft,
+  ModelProviderOption,
+  PerformanceDraft,
+  ProviderStatus,
+  ProviderSummary,
+  ProvidersScreenProps,
+  SaveSettingPayload,
+  SelectOption,
+  SettingDefinition,
+  SettingsTabId,
+} from './providers-workflow'
 import type { ModelCatalogEntry } from '@/lib/model-types'
 import type { ProviderSummaryForEdit } from './components/provider-wizard'
 import BackendUnavailableState from '@/components/backend-unavailable-state'
@@ -20,11 +59,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from '@/components/ui/toast'
 import { getUnavailableReason } from '@/lib/feature-gates'
 import { useFeatureAvailable } from '@/hooks/use-feature-available'
-import {
-  getProviderDisplayName,
-  getProviderInfo,
-  normalizeProviderId,
-} from '@/lib/provider-catalog'
 import { cn } from '@/lib/utils'
 
 // FIX: replaced direct server module imports with workspace API calls to avoid
@@ -32,11 +66,13 @@ import { cn } from '@/lib/utils'
 async function getConfig(): Promise<Record<string, unknown>> {
   const res = await fetch('/api/claude-config')
   if (!res.ok) throw new Error(`Failed to load config: HTTP ${res.status}`)
-  const data = await res.json() as { config?: Record<string, unknown> }
+  const data = (await res.json()) as { config?: Record<string, unknown> }
   return data.config ?? {}
 }
 
-async function patchConfig(patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function patchConfig(
+  patch: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   const res = await fetch('/api/claude-config', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -45,97 +81,6 @@ async function patchConfig(patch: Record<string, unknown>): Promise<Record<strin
   if (!res.ok) throw new Error(`Failed to save config: HTTP ${res.status}`)
   return res.json() as Promise<Record<string, unknown>>
 }
-
-/**
- * Strip the provider prefix that hermes-agent adds internally via litellm.
- * e.g. "openrouter/nvidia/nemotron-..." → "nvidia/nemotron-..."
- *      "anthropic/claude-3-5-sonnet"    → "claude-3-5-sonnet"
- * Only strips the first path segment if it matches a known provider ID.
- */
-const KNOWN_PROVIDER_PREFIXES = [
-  'openrouter',
-  'anthropic',
-  'openai',
-  'openai-codex',
-  'nous',
-  'ollama',
-  'atomic-chat',
-  'zai',
-  'kimi-coding',
-  'minimax',
-  'minimax-cn',
-]
-
-function stripProviderPrefix(model: string): string {
-  if (!model) return model
-  const slash = model.indexOf('/')
-  if (slash === -1) return model
-  const prefix = model.slice(0, slash)
-  if (KNOWN_PROVIDER_PREFIXES.includes(prefix)) {
-    return model.slice(slash + 1)
-  }
-  return model
-}
-
-type ProviderStatus = 'active' | 'configured'
-type SettingsTabId = 'providers' | 'models' | 'agents' | 'session' | 'memory'
-type SettingKind = 'text' | 'number' | 'select' | 'boolean' | 'multiline'
-
-type ProviderSummary = {
-  id: string
-  name: string
-  description: string
-  modelCount: number
-  status: ProviderStatus
-}
-
-type ProvidersScreenProps = {
-  embedded?: boolean
-}
-
-type ClaudeConfig = Record<string, unknown>
-
-type ConfigQueryResponse = {
-  ok?: boolean
-  payload?: ClaudeConfig
-  error?: string
-}
-
-type ConfigPatchResponse = {
-  ok?: boolean
-  error?: string
-}
-
-type SelectOption = {
-  label: string
-  value: string
-}
-
-type SettingDefinition = {
-  id: string
-  tab: SettingsTabId
-  label: string
-  description: string
-  path?: string
-  kind: SettingKind
-  options?: Array<SelectOption>
-  placeholder?: string
-  min?: number
-  step?: number
-  rows?: number
-  unsupported?: boolean
-  formatter?: (value: unknown) => string
-  parser?: (value: string) => unknown
-}
-
-type SaveSettingPayload = {
-  path: string
-  value: unknown
-  label: string
-}
-
-// Models are fetched through the workspace API proxy to support Docker and
-// reverse-proxy deployments where the browser cannot reach Hermes Agent directly.
 
 type ClaudeCatalogEntry =
   | string
@@ -351,189 +296,6 @@ const SETTINGS: Array<SettingDefinition> = [
     step: 5,
   },
 ]
-
-function formatStringList(value: unknown): string {
-  if (!Array.isArray(value)) return ''
-  return value
-    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-    .filter(Boolean)
-    .join('\n')
-}
-
-function parseStringList(value: string): Array<string> {
-  return value
-    .split(/[\n,]/)
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-}
-
-function readProviderId(entry: ModelCatalogEntry): string | null {
-  if (typeof entry === 'string') return null
-  const provider = typeof entry.provider === 'string' ? entry.provider : ''
-  const normalized = normalizeProviderId(provider)
-  return normalized || null
-}
-
-function buildProviderSummaries(payload: {
-  models?: Array<ModelCatalogEntry>
-  configuredProviders?: Array<string>
-}): Array<ProviderSummary> {
-  const modelCounts = new Map<string, number>()
-
-  for (const entry of payload.models ?? []) {
-    const providerId = readProviderId(entry)
-    if (!providerId) continue
-
-    const current = modelCounts.get(providerId) ?? 0
-    modelCounts.set(providerId, current + 1)
-  }
-
-  const configuredSet = new Set<string>()
-  for (const providerId of payload.configuredProviders ?? []) {
-    const normalized = normalizeProviderId(providerId)
-    if (normalized) configuredSet.add(normalized)
-  }
-
-  for (const providerId of modelCounts.keys()) {
-    configuredSet.add(providerId)
-  }
-
-  const summaries: Array<ProviderSummary> = []
-
-  for (const providerId of configuredSet) {
-    const metadata = getProviderInfo(providerId)
-    const modelCount = modelCounts.get(providerId) ?? 0
-
-    summaries.push({
-      id: providerId,
-      name: getProviderDisplayName(providerId),
-      description:
-        metadata?.description ||
-        'Configured provider in your local Hermes setup.',
-      modelCount,
-      status: modelCount > 0 ? 'active' : 'configured',
-    })
-  }
-
-  summaries.sort(function sortByName(a, b) {
-    return a.name.localeCompare(b.name)
-  })
-
-  return summaries
-}
-
-function readPath(source: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>((current, segment) => {
-    if (!current || typeof current !== 'object') return undefined
-    return (current as Record<string, unknown>)[segment]
-  }, source)
-}
-
-function coerceBoolean(value: unknown): boolean {
-  return value === true
-}
-
-function coerceString(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function coerceNumber(value: unknown): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? String(value)
-    : ''
-}
-
-function defaultFormatValue(
-  setting: SettingDefinition,
-  value: unknown,
-): string {
-  if (setting.kind === 'number') return coerceNumber(value)
-  if (setting.kind === 'boolean') return coerceBoolean(value) ? 'true' : 'false'
-  return coerceString(value)
-}
-
-function getDraftValue(
-  setting: SettingDefinition,
-  config: ClaudeConfig | undefined,
-  draftValues: Record<string, string>,
-): string {
-  if (draftValues[setting.id] !== undefined) return draftValues[setting.id]
-  if (!setting.path) return ''
-  const rawValue = readPath(config, setting.path)
-  if (setting.formatter) return setting.formatter(rawValue)
-  return defaultFormatValue(setting, rawValue)
-}
-
-function parseTextValue(setting: SettingDefinition, rawValue: string): unknown {
-  if (setting.parser) return setting.parser(rawValue)
-  return rawValue.trim()
-}
-
-function parseNumberValue(rawValue: string): number | null {
-  const trimmed = rawValue.trim()
-  if (!trimmed) return null
-  const parsed = Number(trimmed)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function buildModelOptions(
-  models: Array<ModelCatalogEntry>,
-): Array<SelectOption> {
-  const seen = new Set<string>()
-  const options: Array<SelectOption> = []
-
-  for (const entry of models) {
-    const modelId =
-      typeof entry === 'string'
-        ? entry
-        : typeof entry.id === 'string'
-          ? entry.id
-          : typeof entry.alias === 'string'
-            ? entry.alias
-            : typeof entry.model === 'string'
-              ? entry.model
-              : ''
-
-    if (!modelId.trim() || seen.has(modelId)) continue
-    seen.add(modelId)
-
-    const label =
-      typeof entry === 'string'
-        ? entry
-        : typeof entry.displayName === 'string'
-          ? entry.displayName
-          : typeof entry.label === 'string'
-            ? entry.label
-            : typeof entry.name === 'string'
-              ? entry.name
-              : modelId
-
-    options.push({ label, value: modelId })
-  }
-
-  options.sort(function sortOptions(a, b) {
-    return a.label.localeCompare(b.label)
-  })
-
-  return options
-}
-
-function searchMatchesSetting(
-  setting: SettingDefinition,
-  query: string,
-): boolean {
-  const haystack = [
-    setting.label,
-    setting.description,
-    setting.path,
-    setting.tab,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-
-  return haystack.includes(query)
-}
 
 function ProviderStatusBadge({ status }: { status: ProviderStatus }) {
   return (
@@ -767,121 +529,6 @@ function SettingCard(props: {
   )
 }
 
-type ModelProviderOption = 'custom' | 'openrouter' | 'anthropic' | 'openai'
-
-type ModelConfigDraft = {
-  provider: ModelProviderOption
-  model: string
-  baseUrl: string
-}
-
-type PerformanceDraft = {
-  streamStaleTimeout: string
-  streamReadTimeout: string
-}
-
-const MODEL_PROVIDER_OPTIONS: Array<SelectOption> = [
-  { label: 'Custom', value: 'custom' },
-  { label: 'OpenRouter', value: 'openrouter' },
-  { label: 'Anthropic', value: 'anthropic' },
-  { label: 'OpenAI', value: 'openai' },
-]
-
-const MODEL_PRESETS = [
-  {
-    id: 'atomic-chat',
-    label: 'Atomic Chat',
-    provider: 'custom' as const,
-    baseUrl: 'http://127.0.0.1:1337/v1',
-  },
-  {
-    id: 'ollama',
-    label: 'Ollama',
-    provider: 'custom' as const,
-    baseUrl: 'http://127.0.0.1:11434/v1',
-  },
-  {
-    id: 'llama-server',
-    label: 'llama-server',
-    provider: 'custom' as const,
-    baseUrl: 'http://127.0.0.1:8080/v1',
-  },
-]
-
-const DEFAULT_STREAM_STALE_TIMEOUT_SECONDS = 90
-const DEFAULT_STREAM_READ_TIMEOUT_SECONDS = 60
-const MODEL_PROVIDER_VALUES = new Set<ModelProviderOption>(
-  MODEL_PROVIDER_OPTIONS.map((option) => option.value as ModelProviderOption),
-)
-
-function readRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined
-}
-
-function parseModelProvider(value: unknown): ModelProviderOption {
-  return typeof value === 'string' &&
-    MODEL_PROVIDER_VALUES.has(value as ModelProviderOption)
-    ? (value as ModelProviderOption)
-    : 'custom'
-}
-
-function readPrimaryModelConfig(
-  config: ClaudeConfig | undefined,
-): ModelConfigDraft {
-  const modelBlock = readRecord(config?.model)
-  const flatModel = typeof config?.model === 'string' ? config.model : ''
-
-  return {
-    provider: parseModelProvider(modelBlock?.provider ?? config?.provider),
-    model: coerceString(modelBlock?.default ?? flatModel),
-    baseUrl: coerceString(modelBlock?.base_url ?? config?.base_url),
-  }
-}
-
-function readFallbackModelConfig(
-  config: ClaudeConfig | undefined,
-): ModelConfigDraft {
-  const fallbackBlock = readRecord(config?.fallback_model)
-
-  return {
-    provider: parseModelProvider(fallbackBlock?.provider),
-    model: coerceString(fallbackBlock?.model),
-    baseUrl: coerceString(fallbackBlock?.base_url),
-  }
-}
-
-function readPerformanceConfig(
-  config: ClaudeConfig | undefined,
-): PerformanceDraft {
-  const performanceBlock = readRecord(config?.performance)
-  const staleTimeout =
-    performanceBlock?.stream_stale_timeout ?? config?.stream_stale_timeout
-  const readTimeout =
-    performanceBlock?.stream_read_timeout ?? config?.stream_read_timeout
-
-  return {
-    streamStaleTimeout:
-      typeof staleTimeout === 'number' && Number.isFinite(staleTimeout)
-        ? String(staleTimeout)
-        : String(DEFAULT_STREAM_STALE_TIMEOUT_SECONDS),
-    streamReadTimeout:
-      typeof readTimeout === 'number' && Number.isFinite(readTimeout)
-        ? String(readTimeout)
-        : String(DEFAULT_STREAM_READ_TIMEOUT_SECONDS),
-  }
-}
-
-function hasModelConfigValue(value: ModelConfigDraft): boolean {
-  return Boolean(value.model.trim() || value.baseUrl.trim())
-}
-
-function parseTimeoutInput(value: string, fallback: number): number {
-  const parsed = Number(value.trim())
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
-}
-
 function ModelConfigSection(props: {
   title: string
   description: string
@@ -1098,12 +745,9 @@ function ActiveModelCard({
     <section className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm md:p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
-          <h3 className="text-base font-medium text-primary-900">
-            Model Configuration
-          </h3>
+          <h3 className="text-base font-medium text-primary-900">Model</h3>
           <p className="text-sm text-primary-600">
-            Update the primary model, optional fallback, and stream timeout
-            settings saved in the active profile configuration.
+            Primary, fallback, and stream timeouts.
           </p>
         </div>
         <Button
@@ -1116,9 +760,7 @@ function ActiveModelCard({
       </div>
 
       {configQuery.isPending ? (
-        <p className="mt-4 text-sm text-primary-500">
-          Loading configuration...
-        </p>
+        <p className="mt-4 text-sm text-primary-500">Loading config...</p>
       ) : configQuery.error ? (
         <p className="mt-4 text-sm text-red-500">
           Could not load config — is Hermes Agent running?
@@ -1142,8 +784,8 @@ function ActiveModelCard({
                   Fallback Model
                 </h3>
                 <p className="text-sm text-primary-600">
-                  Optional secondary model Hermes Agent can use if the primary path
-                  fails.
+                  Optional secondary model Hermes Agent can use if the primary
+                  path fails.
                 </p>
               </div>
               <Button
@@ -1304,7 +946,8 @@ function ProviderManagementSection(props: {
         {modelsQuery.error ? (
           <div className="rounded-xl border border-primary-200 bg-white px-4 py-3">
             <p className="mb-2 text-sm text-primary-700">
-              Unable to load providers right now. Check your Hermes Agent connection.
+              Unable to load providers right now. Check your Hermes Agent
+              connection.
             </p>
             <Button
               variant="outline"
@@ -1697,14 +1340,14 @@ export function ProvidersScreen({ embedded = false }: ProvidersScreenProps) {
                 <TabsContent key={tab.id} value={tab.id} className="space-y-4">
                   {configQuery.isPending ? (
                     <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-600">
-                      Loading current configuration...
+                      Loading config...
                     </div>
                   ) : null}
 
                   {configQuery.error ? (
                     <div className="rounded-xl border border-primary-200 bg-white px-4 py-3">
                       <p className="text-sm text-primary-700">
-                        Unable to load configuration right now.
+                        Unable to load config.
                       </p>
                       <Button
                         variant="outline"

@@ -4,11 +4,12 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SwarmSession } from '@/stores/agent-swarm-store'
-import type {AgentActivity, AgentBehaviorState} from '@/components/agent-swarm/agent-behaviors';
+import type {
+  AgentActivity,
+  AgentBehaviorState,
+} from '@/components/agent-swarm/agent-behaviors'
 import { assignPersona, releasePersona } from '@/lib/agent-personas'
 import {
-
-
   DESK_POSITIONS,
   createBehaviorState,
   getBreakType,
@@ -16,7 +17,7 @@ import {
   getLocationForActivity,
   getRandomMessage,
   isAtTarget,
-  lerpPosition
+  lerpPosition,
 } from '@/components/agent-swarm/agent-behaviors'
 
 const TICK_MS = 1000

@@ -137,20 +137,24 @@ describe('VtCapitalScreen', () => {
   it('renders a plugin-scoped observability cockpit, not a generic dashboard clone', async () => {
     const { container, unmount } = await renderScreen()
 
-    expect(container.querySelector('[data-plugin-surface="vt-capital"]')).not.toBeNull()
+    expect(
+      container.querySelector('[data-plugin-surface="vt-capital"]'),
+    ).not.toBeNull()
     expect(container.textContent).toContain('Plugin VT Capital')
-    expect(container.textContent).toContain('Modalità osservazione')
-    expect(container.textContent).toContain('Esecuzione disattivata')
-    expect(container.textContent).toContain('Scope: solo plugin')
+    expect(container.textContent).toContain('Observe')
+    expect(container.textContent).toContain('Exec off')
+    expect(container.textContent).toContain('Scope: plugin')
     expect(container.textContent).toContain('BTC')
     expect(container.textContent).toContain('Guardian / OMS')
-    expect(container.textContent).toContain('require_order_scope attivo')
-    expect(container.textContent).toContain('Ultimo risk.check')
-    expect(container.textContent).toContain('Ultimo order.proposed')
-    expect(container.textContent).toContain('Ultimo order.executed')
+    expect(container.textContent).toContain('scope required')
+    expect(container.textContent).toContain('Risk')
+    expect(container.textContent).toContain('Proposed')
+    expect(container.textContent).toContain('Executed')
     expect(container.textContent).toContain('demo_guardian_intraday')
     expect(container.textContent).toContain('DUPLICATE_OPEN_ORDER')
-    expect(global.fetch).toHaveBeenCalledWith('/api/vt-capital', { cache: 'no-store' })
+    expect(global.fetch).toHaveBeenCalledWith('/api/vt-capital', {
+      cache: 'no-store',
+    })
 
     await unmount()
   })

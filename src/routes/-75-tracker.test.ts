@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getSeventyFiveCommandCards,
   getSeventyFiveHabitItems,
   getSeventyFiveHabitSummary,
   getSeventyFiveHeatmapDays,
@@ -101,13 +102,13 @@ describe('75 tracker route helpers', () => {
     expect(getSeventyFiveStreakRisk({ remaining: 3, percent: 40 }, 21)).toEqual(
       {
         severity: 'danger',
-        message: 'Streak at risk: more than one item remains after 8 PM.',
+        message: 'Risk: >1 item after 8 PM.',
       },
     )
     expect(getSeventyFiveStreakRisk({ remaining: 1, percent: 83 }, 18)).toEqual(
       {
         severity: 'warning',
-        message: 'Streak watch: pick the smallest remaining item now.',
+        message: 'Watch: do smallest now.',
       },
     )
   })
@@ -115,8 +116,34 @@ describe('75 tracker route helpers', () => {
   it('describes trend states without relying on color alone', () => {
     expect(getSeventyFiveTrendLegend()).toEqual([
       { label: 'On track', detail: '100% complete today.' },
-      { label: 'Recoverable', detail: '50-99% complete; finish smallest next.' },
-      { label: 'Needs push', detail: 'Below 50%; front-load required items.' },
+      {
+        label: 'Recoverable',
+        detail: '50-99%; finish smallest next.',
+      },
+      { label: 'Needs push', detail: 'Below 50%; front-load.' },
     ])
+  })
+
+  it('builds command cards for the native challenge cockpit', () => {
+    const nextHabit = getSeventyFiveHabitItems('hard')[0]
+    const cards = getSeventyFiveCommandCards({
+      summary: { completed: 2, total: 6, remaining: 4, percent: 33 },
+      trend: getSeventyFiveWeeklyTrend(33),
+      streakRisk: getSeventyFiveStreakRisk({ remaining: 4, percent: 33 }, 21),
+      nextHabit,
+    })
+
+    expect(cards.map((card) => card.label)).toEqual([
+      'Progress',
+      'Next',
+      'Risk',
+      'Trend',
+    ])
+    expect(cards[1]).toMatchObject({
+      value: 'Water',
+      detail: '1 gallon',
+      tone: 'warn',
+    })
+    expect(cards[2]).toMatchObject({ value: 'High', tone: 'danger' })
   })
 })

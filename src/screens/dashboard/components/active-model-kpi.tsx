@@ -92,13 +92,13 @@ export function ActiveModelKpi({
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-25 blur-2xl"
+        className="pointer-events-none absolute right-0 top-0 h-16 w-16 rounded-full opacity-20 blur-xl"
         style={{ background: tone }}
       />
 
       <div className="flex items-center justify-between">
         <span
-          className="text-[10px] font-semibold uppercase tracking-[0.18em]"
+          className="text-[10px] font-semibold uppercase tracking-[0.08em]"
           style={{ color: 'var(--theme-muted)' }}
         >
           Active Model
@@ -145,7 +145,7 @@ export function ActiveModelKpi({
 
       <div className="flex items-center justify-between gap-2 text-[10px]">
         <span
-          className="truncate font-mono uppercase tracking-[0.12em]"
+          className="min-w-0 break-words font-mono uppercase tracking-[0.08em] [overflow-wrap:anywhere]"
           style={{ color: 'var(--theme-muted)' }}
         >
           {connected
@@ -163,7 +163,7 @@ export function ActiveModelKpi({
       </div>
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--theme-border)]/70 pt-2 text-[10px]">
         <span
-          className="truncate font-mono uppercase tracking-[0.1em]"
+          className="min-w-0 break-words font-mono uppercase tracking-[0.08em] [overflow-wrap:anywhere]"
           style={{ color: 'var(--theme-muted)' }}
           title={probeLabel}
         >

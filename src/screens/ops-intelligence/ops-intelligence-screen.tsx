@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiPath, withBasePath } from '@/lib/base-path'
+import {
+  normalizeWorkspaceStatusTone,
+  workspaceStatusClass,
+} from '@/lib/source-freshness'
 
 type OpsSeverity = 'ok' | 'info' | 'warn' | 'error'
 
@@ -116,19 +120,37 @@ function panelClass() {
 }
 
 function statusClass(status: OpsSeverity | RecommendationCapability['status']) {
-  if (status === 'ok' || status === 'live')
-    return 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/35 dark:text-emerald-200'
-  if (status === 'warn' || status === 'partial')
-    return 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-200'
-  if (status === 'error')
-    return 'border-red-300 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/35 dark:text-red-200'
-  return 'border-primary-200 bg-primary-100 text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300'
+  if (status === 'planned') return workspaceStatusClass('info')
+  return workspaceStatusClass(normalizeWorkspaceStatusTone(status))
 }
 
 function bytes(value: number) {
   if (value > 1024 * 1024) return `${Math.round(value / 1024 / 1024)} MB`
   if (value > 1024) return `${Math.round(value / 1024)} KB`
   return `${value} B`
+}
+
+function compactOpsEvidence(value: string, maxLength = 54) {
+  const cleaned = value
+    .replace(/^Evidence:\s*/i, '')
+    .replace(/^\{.*$/s, 'network map JSON')
+    .replace(/^ai\.hermes\.workspace:.*$/i, 'workspace service log')
+    .replace(/^ai\.hermes\.office-bridge:.*$/i, 'office bridge log')
+    .replace(/^ai\.hermes\.([a-z0-9-]+):.*$/i, 'Hermes service log')
+    .replace(
+      /^\.runtime\/workspace-visual-smoke\/manifest\.json:/i,
+      'desktop smoke',
+    )
+    .replace(
+      /^\.runtime\/workspace-visual-smoke-mobile\/manifest\.json:/i,
+      'mobile smoke',
+    )
+    .replace(/^\.runtime\/(.+)$/i, 'runtime proof $1')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (cleaned.length <= maxLength) return cleaned
+  return `${cleaned.slice(0, maxLength - 3).replace(/[.,;:\s]+$/, '')}...`
 }
 
 export function classifyOpsRiskFamily(value: string): OpsRiskFamily {
@@ -218,14 +240,15 @@ export function buildOpsEmptyReportMessage(
     snapshot.reports.length +
     snapshot.productionChecks.length
   if (evidenceCount === 0) {
-    return 'No Ops Intelligence evidence loaded yet. Refresh after the runtime probes finish.'
+    return 'No Ops Intelligence evidence loaded yet. Sync after runtime probes finish.'
   }
   return 'Ops Intelligence evidence is loaded.'
 }
 
 export function getOpsActionRoute(text: string): string {
   const value = text.toLowerCase()
-  if (/task|todo|remediation/.test(value)) return '/tasks?source=ops-intelligence'
+  if (/task|todo|remediation/.test(value))
+    return '/tasks?source=ops-intelligence'
   if (/job|schedule|automation|launchd/.test(value)) return '/jobs'
   if (/profile|agent/.test(value)) return '/profiles'
   if (/setting|provider|model|token|secret/.test(value)) return '/settings'
@@ -357,6 +380,74 @@ export function OpsIntelligenceScreen() {
         .includes(q),
     )
   }, [search, snapshot])
+  const visibleProductionChecks = filteredProductionChecks.slice(0, 4)
+  const visibleCapabilities = filteredCapabilities.slice(0, 6)
+  const visibleDependencies = (snapshot?.dependencies ?? []).slice(0, 4)
+  const visibleIncidents = (snapshot?.incidents ?? []).slice(0, 3)
+  const productionTotal =
+    (snapshot?.summary.productionOk ?? 0) +
+    (snapshot?.summary.productionWarn ?? 0) +
+    (snapshot?.summary.productionError ?? 0)
+  const dependencyTotal =
+    (snapshot?.summary.dependenciesOk ?? 0) +
+    (snapshot?.summary.dependenciesWarn ?? 0) +
+    (snapshot?.summary.dependenciesError ?? 0)
+  const activeRiskCount =
+    (snapshot?.summary.productionWarn ?? 0) +
+    (snapshot?.summary.productionError ?? 0) +
+    (snapshot?.summary.incidents ?? 0)
+  const healthScore =
+    productionTotal === 0 && dependencyTotal === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.round(
+            (((snapshot?.summary.productionOk ?? 0) +
+              (snapshot?.summary.dependenciesOk ?? 0) -
+              (snapshot?.summary.productionError ?? 0) * 2 -
+              (snapshot?.summary.dependenciesError ?? 0) * 2 -
+              (snapshot?.summary.productionWarn ?? 0) -
+              (snapshot?.summary.dependenciesWarn ?? 0)) /
+              Math.max(1, productionTotal + dependencyTotal)) *
+              100,
+          ),
+        )
+  const opsCommandCards = [
+    {
+      label: 'Observe',
+      value: dependencyTotal.toString(),
+      detail: `${snapshot?.summary.dependenciesOk ?? 0} healthy probes`,
+      status:
+        (snapshot?.summary.dependenciesError ?? 0) > 0
+          ? 'error'
+          : (snapshot?.summary.dependenciesWarn ?? 0) > 0
+            ? 'warn'
+            : 'ok',
+    },
+    {
+      label: 'Triage',
+      value: activeRiskCount.toString(),
+      detail: `${topRisks.length} promoted risks`,
+      status: activeRiskCount > 0 ? 'warn' : 'ok',
+    },
+    {
+      label: 'Route',
+      value: (snapshot?.summary.scriptsMapped ?? 0).toString(),
+      detail: `${riskyScripts.length} approval seeds`,
+      status: riskyScripts.length > 0 ? 'info' : 'ok',
+    },
+    {
+      label: 'Prove',
+      value: (snapshot?.summary.reportsIndexed ?? 0).toString(),
+      detail: `${filteredReports.length} visible artifacts`,
+      status: filteredReports.length > 0 ? 'ok' : 'info',
+    },
+  ] satisfies Array<{
+    label: string
+    value: string
+    detail: string
+    status: OpsSeverity
+  }>
 
   function exportSnapshot() {
     if (!snapshot) return
@@ -398,16 +489,13 @@ export function OpsIntelligenceScreen() {
             </div>
             <h1 className="mt-1 text-xl font-semibold">Ops Intelligence</h1>
             <p className="mt-1 max-w-3xl text-sm text-primary-600 dark:text-neutral-400">
-              Dependency probes, incident classification, script ownership,
-              route coverage, reports, and the 50 recommendation rollout
-              tracker.
+              Probes, routes, reports.
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <span className={`rounded-full border px-2 py-1 capitalize ${statusClass(freshness === 'stale' ? 'warn' : freshness === 'unknown' ? 'info' : 'ok')}`}>
-                snapshot {freshness}
-              </span>
-              <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                source api/ops-intelligence
+              <span
+                className={`rounded-full border px-2 py-1 capitalize ${statusClass(freshness === 'stale' ? 'warn' : freshness === 'unknown' ? 'info' : 'ok')}`}
+              >
+                {freshness}
               </span>
               <span className="rounded-full border border-primary-200 bg-primary-100/70 px-2 py-1 text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
                 generated{' '}
@@ -423,7 +511,7 @@ export function OpsIntelligenceScreen() {
             disabled={loading}
             className="rounded-xl bg-primary-900 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
           >
-            Refresh
+            Sync
           </button>
           <button
             type="button"
@@ -431,7 +519,7 @@ export function OpsIntelligenceScreen() {
             disabled={!snapshot}
             className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
           >
-            Export JSON
+            JSON
           </button>
           <button
             type="button"
@@ -446,7 +534,7 @@ export function OpsIntelligenceScreen() {
             disabled={!snapshot}
             className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
           >
-            Export Markdown
+            MD
           </button>
           <button
             type="button"
@@ -459,7 +547,7 @@ export function OpsIntelligenceScreen() {
             disabled={!snapshot}
             className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
           >
-            Export task list
+            Tasks
           </button>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -467,7 +555,7 @@ export function OpsIntelligenceScreen() {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.currentTarget.value)}
-            placeholder="Search checks, recommendations, reports"
+            placeholder="Search checks and reports"
             className="min-w-[240px] flex-1 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
           />
           <span className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-xs text-primary-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
@@ -493,6 +581,101 @@ export function OpsIntelligenceScreen() {
             </button>
           ))}
         </div>
+        <section className="mt-4 rounded-2xl border border-primary-200 bg-white/80 p-4 dark:border-neutral-800 dark:bg-neutral-950/80">
+          <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="rounded-2xl border border-primary-200 bg-primary-50/80 p-4 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
+                Ops cockpit
+              </div>
+              <div className="mt-3 flex items-end gap-2">
+                <div className="text-5xl font-semibold text-primary-900 dark:text-neutral-100">
+                  {healthScore}
+                </div>
+                <div className="pb-2 text-sm text-primary-500 dark:text-neutral-500">
+                  /100
+                </div>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-primary-100 dark:bg-neutral-800">
+                <div
+                  className={`h-2 rounded-full ${
+                    healthScore >= 85
+                      ? 'bg-emerald-600 dark:bg-emerald-300'
+                      : healthScore >= 65
+                        ? 'bg-amber-500 dark:bg-amber-300'
+                        : 'bg-red-600 dark:bg-red-300'
+                  }`}
+                  style={{ width: `${healthScore}%` }}
+                />
+              </div>
+              <div className="mt-3 text-sm text-primary-600 dark:text-neutral-400">
+                {activeRiskCount > 0
+                  ? `${activeRiskCount} active risk signals need ownership.`
+                  : 'No active risk signals are promoted.'}
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-4">
+              {opsCommandCards.map((card) => (
+                <div
+                  key={card.label}
+                  className={`rounded-2xl border p-3 ${statusClass(card.status)}`}
+                >
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">
+                    {card.label}
+                  </div>
+                  <div className="mt-2 text-3xl font-semibold">
+                    {card.value}
+                  </div>
+                  <div className="mt-1 text-xs opacity-80">{card.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {topRisks.length === 0 ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100 lg:col-span-3">
+                No promoted risks.
+              </div>
+            ) : null}
+            {topRisks.map((risk, index) => (
+              <article
+                key={`cockpit-${risk.id}`}
+                className={`rounded-2xl border p-3 text-sm ${statusClass(risk.status)}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-75">
+                      Queue {index + 1}
+                    </div>
+                    <div className="mt-1 font-semibold">{risk.label}</div>
+                  </div>
+                  <span className="rounded-full border border-current px-2 py-0.5 text-[10px] uppercase">
+                    {risk.status}
+                  </span>
+                </div>
+                <div className="mt-2 line-clamp-1 text-xs opacity-85">
+                  {risk.detail}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <a
+                    href={withBasePath(getOpsActionRoute(risk.nextAction))}
+                    className="rounded-lg border border-current px-2 py-1"
+                  >
+                    Fix
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => acknowledgeFinding(risk.id)}
+                    className="rounded-lg border border-current px-2 py-1"
+                  >
+                    {acknowledged[risk.id] ? 'Acked' : 'Ack'}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       </section>
 
       <section className="grid gap-3 md:hidden">
@@ -506,7 +689,8 @@ export function OpsIntelligenceScreen() {
               : buildOpsEmptyReportMessage(snapshot)}
           </div>
           <div className="mt-2 text-sm text-primary-600 dark:text-neutral-400">
-            {topRisks[0]?.detail ?? 'No blocker is currently promoted above the report.'}
+            {topRisks[0]?.detail ??
+              'No blocker is currently promoted above the report.'}
           </div>
           {firstNextAction ? (
             <a
@@ -519,161 +703,68 @@ export function OpsIntelligenceScreen() {
         </div>
       </section>
 
-      <section className="sticky top-0 z-20 grid gap-3 rounded-2xl border border-primary-200 bg-primary-50/95 p-3 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95 md:grid-cols-3">
-        {topRisks.map((risk) => (
-          <article
-            key={risk.id}
-            className={`rounded-xl border px-3 py-3 text-sm ${statusClass(risk.status)}`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="font-semibold">Top risk: {risk.label}</div>
-              <span className="text-xs uppercase">{risk.status}</span>
-            </div>
-            <div className="mt-1 line-clamp-2 text-xs opacity-80">
-              {risk.detail}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-lg border border-current px-2 py-1">
-                Suppression window:{' '}
-                {acknowledged[risk.id] ? 'active' : 'not active'}
-              </span>
-              <span className="rounded-lg border border-current px-2 py-1">
-                confidence{' '}
-                {getOpsConfidenceLabel(risk.status, snapshot?.checkedAt)}
-              </span>
-              <a
-                href={withBasePath(getOpsActionRoute(risk.nextAction))}
-                className="rounded-lg border border-current px-2 py-1"
-              >
-                Open fix path
-              </a>
-              <button
-                type="button"
-                onClick={() => acknowledgeFinding(risk.id)}
-                className="rounded-lg border border-current px-2 py-1"
-              >
-                {acknowledged[risk.id] ? 'Acknowledged' : 'Acknowledge 24h'}
-              </button>
-            </div>
-          </article>
-        ))}
-        {!loading && topRisks.length === 0 ? (
-          <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/35 dark:text-emerald-200">
-            No top production risks found in the current snapshot.
-          </div>
-        ) : null}
-      </section>
-
       {error ? (
         <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
           {error}
         </div>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-4">
-        {[
-          [
-            'Dependencies OK',
-            snapshot?.summary.dependenciesOk ?? 0,
-            'healthy probes',
-          ],
-          ['Incidents', snapshot?.summary.incidents ?? 0, 'classified buckets'],
-          [
-            'Scripts Mapped',
-            snapshot?.summary.scriptsMapped ?? 0,
-            'owned paths',
-          ],
-          [
-            'Production Checks',
-            snapshot?.summary.productionOk ?? 0,
-            `${snapshot?.summary.productionWarn ?? 0} warn · ${snapshot?.summary.productionError ?? 0} error`,
-          ],
-        ].map(([label, value, detail]) => (
-          <div key={label} className={panelClass()}>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-500 dark:text-neutral-400">
-              {label}
-            </div>
-            <div className="mt-2 text-3xl font-semibold">{value}</div>
-            <div className="mt-1 text-sm text-primary-600 dark:text-neutral-400">
-              {detail}
-            </div>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <section className="hidden gap-4 md:grid xl:grid-cols-[0.9fr_1.1fr]">
         <div className={panelClass()}>
-          <details open>
+          <details>
             <summary className="cursor-pointer text-base font-semibold">
-              Changes Since Last Update
+              Changes
             </summary>
             <div className="mt-3 grid gap-2 text-sm text-primary-600 dark:text-neutral-400">
-              <span>
-                Diff from previous report: current snapshot compared against the
-                latest indexed runtime reports.
-              </span>
-              <span>
-                Stable findings are suppressed unless status, evidence, or next
-                action changed.
-              </span>
-              <span>
-                Recommendation rollout progress is tied to task IDs in the
-                tracker below.
-              </span>
-              <span>
-                CI comparison: local build and focused tests are tracked against
-                latest remote checks when GitHub data is available.
-              </span>
+              <span>Diff: latest indexed runtime report.</span>
+              <span>Stable findings stay hidden.</span>
+              <span>Rollout progress maps to task IDs.</span>
+              <span>CI: local checks vs remote when available.</span>
             </div>
           </details>
         </div>
-        <div className={panelClass()}>
-          <h2 className="text-base font-semibold">Operational Audit Summary</h2>
+        <details className={panelClass()}>
+          <summary className="cursor-pointer text-base font-semibold">
+            Audit
+          </summary>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900/70">
               <div className="text-xs uppercase text-primary-500 dark:text-neutral-400">
                 Model/provider/cost
               </div>
-              <div className="mt-1 font-semibold">Guarded fallback path</div>
+              <div className="mt-1 font-semibold">Fallback guard</div>
               <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                Model, provider, paid-call, and token budget findings classify
-                under model/cost filters.
+                Model, provider, paid-call, token budget.
               </div>
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900/70">
               <div className="text-xs uppercase text-primary-500 dark:text-neutral-400">
-                Safe restart readiness
+                Restart
               </div>
-              <div className="mt-1 font-semibold">Preflight required</div>
+              <div className="mt-1 font-semibold">Preflight</div>
               <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                Verify launchd status, active jobs, backup freshness, and
-                current errors before restarting.
+                Check launchd, jobs, backups, errors.
               </div>
             </div>
             <div className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900/70">
               <div className="text-xs uppercase text-primary-500 dark:text-neutral-400">
-                Severity scoring
+                Severity
               </div>
-              <div className="mt-1 font-semibold">
-                Reason · confidence · blast radius
-              </div>
+              <div className="mt-1 font-semibold">Reason · confidence</div>
               <div className="mt-1 text-xs text-primary-600 dark:text-neutral-400">
-                Error = high blast radius, warn = medium confidence drift, info
-                = watch only.
+                Error: high blast. Warn: drift. Info: watch.
               </div>
             </div>
           </div>
-        </div>
+        </details>
       </section>
 
-      <section className={panelClass()}>
+      <section className={`${panelClass()} hidden md:block`}>
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-base font-semibold">Production Readiness</h2>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              Read-only checks for launchd, scheduler state, Tailscale, DB path
-              drift, automation memory, secrets, git state, backups, context,
-              Chrome, health freshness, patch queue, and report bundles.
+              Runtime checks.
             </p>
           </div>
           <div className="text-sm text-primary-600 dark:text-neutral-400">
@@ -682,7 +773,7 @@ export function OpsIntelligenceScreen() {
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {filteredProductionChecks.map((item) => (
+          {visibleProductionChecks.map((item) => (
             <article
               key={item.id}
               className={`rounded-xl border px-3 py-3 text-sm ${statusClass(item.status)}`}
@@ -693,7 +784,6 @@ export function OpsIntelligenceScreen() {
               </div>
               <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                 <span className="rounded-full border border-current px-2 py-1">
-                  family{' '}
                   {classifyOpsRiskFamily(
                     [
                       item.label,
@@ -704,27 +794,23 @@ export function OpsIntelligenceScreen() {
                   )}
                 </span>
                 <span className="rounded-full border border-current px-2 py-1">
-                  confidence {getOpsConfidenceLabel(item.status, snapshot?.checkedAt)}
+                  {getOpsConfidenceLabel(item.status, snapshot?.checkedAt)}
                 </span>
                 <span className="rounded-full border border-current px-2 py-1">
-                  blast radius{' '}
-                  {item.status === 'error' ? 'workflow' : 'single probe'}
-                </span>
-                <span className="rounded-full border border-current px-2 py-1">
-                  suppression window{' '}
-                  {acknowledged[item.id] ? 'active' : 'inactive'}
+                  {item.status === 'error' ? 'workflow' : 'probe'}
                 </span>
               </div>
               <div className="mt-2 text-xs opacity-85">{item.detail}</div>
               {item.evidence.length > 0 ? (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2 flex flex-wrap gap-1">
                   {item.evidence.slice(0, 3).map((entry) => (
                     <a
                       key={entry}
                       href={withBasePath('/files')}
-                      className="block truncate text-xs underline-offset-2 opacity-75 hover:underline"
+                      title={entry}
+                      className="rounded-full border border-current px-2 py-1 text-[11px] opacity-75 hover:underline"
                     >
-                      Evidence: {entry}
+                      {compactOpsEvidence(entry, 32)}
                     </a>
                   ))}
                 </div>
@@ -735,14 +821,14 @@ export function OpsIntelligenceScreen() {
                   href={withBasePath(getOpsActionRoute(item.nextAction))}
                   className="rounded-lg border border-current px-2 py-1"
                 >
-                  Open fix path
+                  Fix
                 </a>
                 <button
                   type="button"
                   onClick={() => acknowledgeFinding(item.id)}
                   className="rounded-lg border border-current px-2 py-1"
                 >
-                  {acknowledged[item.id] ? 'Acknowledged' : 'Acknowledge'}
+                  {acknowledged[item.id] ? 'Acked' : 'Ack'}
                 </button>
               </div>
             </article>
@@ -752,13 +838,21 @@ export function OpsIntelligenceScreen() {
               No production checks match the current search.
             </div>
           ) : null}
+          {filteredProductionChecks.length > visibleProductionChecks.length ? (
+            <div className="rounded-xl border border-primary-200 bg-primary-100/60 px-3 py-3 text-sm text-primary-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400">
+              {filteredProductionChecks.length - visibleProductionChecks.length}{' '}
+              more hidden.
+            </div>
+          ) : null}
         </div>
       </section>
 
-      <section className={panelClass()}>
-        <h2 className="text-base font-semibold">Owner / System / Risk / Action</h2>
+      <details className={`${panelClass()} hidden md:block`}>
+        <summary className="cursor-pointer text-base font-semibold">
+          Owner / System / Risk / Action
+        </summary>
         <div className="mt-4 overflow-auto rounded-xl border border-primary-200 dark:border-neutral-800">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full table-fixed text-left text-sm">
             <thead className="bg-primary-100 text-xs uppercase tracking-[0.12em] text-primary-500 dark:bg-neutral-900 dark:text-neutral-400">
               <tr>
                 <th className="px-3 py-2">Owner</th>
@@ -773,19 +867,26 @@ export function OpsIntelligenceScreen() {
                   key={`compact-${item.id}`}
                   className="border-t border-primary-200 dark:border-neutral-800"
                 >
-                  <td className="px-3 py-2">Ops</td>
+                  <td className="break-words px-3 py-2">Ops</td>
                   <td className="px-3 py-2 capitalize">
                     {classifyOpsRiskFamily(
-                      [item.label, item.detail, item.nextAction, ...item.evidence].join(' '),
+                      [
+                        item.label,
+                        item.detail,
+                        item.nextAction,
+                        ...item.evidence,
+                      ].join(' '),
                     )}
                   </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(item.status)}`}>
+                  <td className="break-words px-3 py-2">
+                    <span
+                      className={`rounded-full border px-2 py-1 text-xs ${statusClass(item.status)}`}
+                    >
                       {item.status}
                     </span>{' '}
                     {item.label}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="break-words px-3 py-2">
                     <a
                       href={withBasePath(getOpsActionRoute(item.nextAction))}
                       className="text-primary-700 underline-offset-2 hover:underline dark:text-neutral-300"
@@ -798,16 +899,15 @@ export function OpsIntelligenceScreen() {
             </tbody>
           </table>
         </div>
-      </section>
+      </details>
 
-      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="hidden gap-4 md:grid xl:grid-cols-[1.1fr_0.9fr]">
         <div className={panelClass()}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold">Dependency Sentinel</h2>
               <p className="text-sm text-primary-600 dark:text-neutral-400">
-                Fast probes that explain why automations will fail before they
-                run.
+                Failure probes.
               </p>
             </div>
             {loading ? (
@@ -815,7 +915,7 @@ export function OpsIntelligenceScreen() {
             ) : null}
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2">
-            {(snapshot?.dependencies ?? []).map((probe) => (
+            {visibleDependencies.map((probe) => (
               <div
                 key={probe.id}
                 className={`rounded-xl border px-3 py-2 text-sm ${statusClass(probe.status)}`}
@@ -830,15 +930,9 @@ export function OpsIntelligenceScreen() {
                 <div className="mt-1 text-xs opacity-70">
                   {probe.kind} · {probe.latencyMs ?? 0}ms
                 </div>
-                <div className="mt-1 text-xs opacity-70">
-                  Last success:{' '}
-                  {probe.checkedAt
-                    ? new Date(probe.checkedAt).toLocaleString()
-                    : 'unknown'}
-                </div>
                 <details className="mt-2 text-xs opacity-80">
                   <summary className="cursor-pointer font-medium">
-                    Dependency drill-down
+                    Drilldown
                   </summary>
                   <div className="mt-1 space-y-1">
                     <div>Target: {probe.target}</div>
@@ -862,10 +956,10 @@ export function OpsIntelligenceScreen() {
         <div className={panelClass()}>
           <h2 className="text-base font-semibold">Incident Inbox</h2>
           <p className="text-sm text-primary-600 dark:text-neutral-400">
-            Grouped by root cause instead of raw log noise.
+            Root-cause groups.
           </p>
           <div className="mt-4 space-y-3">
-            {(snapshot?.incidents ?? []).slice(0, 8).map((incident) => (
+            {visibleIncidents.map((incident) => (
               <div
                 key={incident.code}
                 className={`rounded-xl border px-3 py-2 text-sm ${statusClass(incident.severity)}`}
@@ -874,7 +968,7 @@ export function OpsIntelligenceScreen() {
                   <span className="font-semibold">{incident.label}</span>
                   <span className="text-xs">{incident.count}</span>
                 </div>
-                <div className="mt-1 text-xs opacity-80">
+                <div className="mt-1 line-clamp-2 text-xs opacity-80">
                   {incident.latestEvidence}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1">
@@ -884,11 +978,11 @@ export function OpsIntelligenceScreen() {
                       href={withBasePath('/files')}
                       className="rounded-full border border-current px-2 py-1 text-[11px] opacity-80"
                     >
-                      Evidence link
+                      Evidence
                     </a>
                   ))}
                 </div>
-                <div className="mt-2 text-xs font-medium">
+                <div className="mt-2 line-clamp-2 text-xs font-medium">
                   {incident.nextAction}
                 </div>
                 <button
@@ -896,14 +990,8 @@ export function OpsIntelligenceScreen() {
                   onClick={() => acknowledgeFinding(incident.code)}
                   className="mt-2 rounded-lg border border-current px-2 py-1 text-xs"
                 >
-                  {acknowledged[incident.code]
-                    ? 'Suppression window active'
-                    : 'Acknowledge incident'}
+                  {acknowledged[incident.code] ? 'Suppressed' : 'Ack incident'}
                 </button>
-                <div className="mt-2 text-xs opacity-80">
-                  Suppression window:{' '}
-                  {acknowledged[incident.code] ? 'active' : 'not active'}
-                </div>
               </div>
             ))}
             {!loading && (snapshot?.incidents.length ?? 0) === 0 ? (
@@ -915,39 +1003,43 @@ export function OpsIntelligenceScreen() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className={panelClass()}>
-          <h2 className="text-base font-semibold">Script Ownership Registry</h2>
+      <section className="hidden gap-4 md:grid xl:grid-cols-2">
+        <details className={panelClass()}>
+          <summary className="cursor-pointer text-base font-semibold">
+            Script Ownership Registry
+          </summary>
           <p className="text-sm text-primary-600 dark:text-neutral-400">
             Dependency, side-effect, approval, and preflight mapping for live
             scripts.
           </p>
           <div className="mt-4 max-h-[34rem] overflow-auto rounded-xl border border-primary-200 dark:border-neutral-800">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-primary-100 text-xs uppercase tracking-[0.12em] text-primary-500 dark:bg-neutral-900 dark:text-neutral-400">
                 <tr>
                   <th className="px-3 py-2">Script</th>
                   <th className="px-3 py-2">Domain</th>
-                  <th className="px-3 py-2">Dependencies</th>
-                  <th className="px-3 py-2">Side effects</th>
+                  <th className="px-3 py-2">Deps</th>
+                  <th className="px-3 py-2">Effects</th>
                   <th className="px-3 py-2">Approval</th>
                 </tr>
               </thead>
               <tbody>
-                {(snapshot?.scripts ?? []).slice(0, 36).map((script) => (
+                {(snapshot?.scripts ?? []).slice(0, 16).map((script) => (
                   <tr
                     key={script.path}
                     className="border-t border-primary-200 dark:border-neutral-800"
                   >
-                    <td className="px-3 py-2 font-medium">{script.name}</td>
-                    <td className="px-3 py-2">{script.domain}</td>
-                    <td className="px-3 py-2 text-primary-600 dark:text-neutral-400">
+                    <td className="break-words px-3 py-2 font-medium">
+                      {script.name}
+                    </td>
+                    <td className="break-words px-3 py-2">{script.domain}</td>
+                    <td className="break-words px-3 py-2 text-primary-600 dark:text-neutral-400">
                       {script.dependencies.join(', ') || 'local'}
                     </td>
-                    <td className="px-3 py-2 text-primary-600 dark:text-neutral-400">
+                    <td className="break-words px-3 py-2 text-primary-600 dark:text-neutral-400">
                       {script.sideEffects.join(', ') || 'read'}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="break-words px-3 py-2">
                       {script.approvalRequired ? 'yes' : 'no'}
                     </td>
                   </tr>
@@ -955,10 +1047,12 @@ export function OpsIntelligenceScreen() {
               </tbody>
             </table>
           </div>
-        </div>
+        </details>
 
-        <div className={panelClass()}>
-          <h2 className="text-base font-semibold">Approval Queue Seeds</h2>
+        <details className={panelClass()}>
+          <summary className="cursor-pointer text-base font-semibold">
+            Approval Queue Seeds
+          </summary>
           <p className="text-sm text-primary-600 dark:text-neutral-400">
             Scripts whose side effects should stay explicitly approved.
           </p>
@@ -1009,15 +1103,15 @@ export function OpsIntelligenceScreen() {
               </div>
             ))}
           </div>
-        </div>
+        </details>
       </section>
 
-      <section className={panelClass()}>
+      <details className={`${panelClass()} hidden md:block`}>
+        <summary className="cursor-pointer text-base font-semibold">
+          Recommendation Rollout Tracker
+        </summary>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-base font-semibold">
-              Recommendation Rollout Tracker
-            </h2>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
               The 50 requested ideas are tracked here with current proof and
               next implementation step.
@@ -1037,7 +1131,7 @@ export function OpsIntelligenceScreen() {
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {filteredCapabilities.map((capability) => (
+          {visibleCapabilities.map((capability) => (
             <article
               key={capability.id}
               className={`rounded-xl border px-3 py-3 text-sm ${statusClass(capability.status)}`}
@@ -1060,10 +1154,12 @@ export function OpsIntelligenceScreen() {
             </article>
           ))}
         </div>
-      </section>
+      </details>
 
-      <section className={panelClass()}>
-        <h2 className="text-base font-semibold">Latest Report Artifacts</h2>
+      <details className={`${panelClass()} hidden md:block`}>
+        <summary className="cursor-pointer text-base font-semibold">
+          Latest Report Artifacts
+        </summary>
         <div className="mt-4 grid gap-2 md:grid-cols-2">
           {filteredReports.slice(0, 12).map((report) => (
             <div
@@ -1083,27 +1179,26 @@ export function OpsIntelligenceScreen() {
                 onClick={() => navigator.clipboard.writeText(report.path)}
                 className="mt-2 text-xs text-primary-600 underline-offset-2 hover:underline dark:text-neutral-400"
               >
-                Copy source path
+                Copy path
               </button>
             </div>
           ))}
           {!loading && filteredReports.length === 0 ? (
             <div className="rounded-xl border border-dashed border-primary-200 px-3 py-5 text-sm text-primary-500 dark:border-neutral-800 dark:text-neutral-400">
-              No report artifacts match the current search.
+              No reports match.
             </div>
           ) : null}
         </div>
-      </section>
+      </details>
 
-      <section className={`${panelClass()} print:block`}>
+      <details className={`${panelClass()} hidden md:block print:block`}>
+        <summary className="cursor-pointer text-base font-semibold">
+          Executive Summary
+        </summary>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h2 className="text-base font-semibold">
-              Printable Executive Summary
-            </h2>
             <p className="text-sm text-primary-600 dark:text-neutral-400">
-              Weekly-review ready summary with top risks, local/remote check
-              comparison, and remediation tasks.
+              Top risks, check comparison, and remediation tasks.
             </p>
           </div>
           <button
@@ -1111,15 +1206,15 @@ export function OpsIntelligenceScreen() {
             onClick={() => window.print()}
             className="rounded-xl border border-primary-200 bg-primary-100/70 px-3 py-2 text-sm text-primary-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
           >
-            Print weekly summary
+            Print
           </button>
         </div>
         <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-primary-200 bg-primary-100/70 p-3 text-xs text-primary-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
           {snapshot
             ? buildOpsExecutiveSummary(snapshot)
-            : 'No Ops Intelligence snapshot loaded.'}
+            : 'No snapshot loaded.'}
         </pre>
-      </section>
+      </details>
     </main>
   )
 }

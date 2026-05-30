@@ -1,12 +1,12 @@
-import {  useMemo } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { OfficeView } from './components/office-view'
-import type {CSSProperties} from 'react';
+import type { CSSProperties } from 'react'
 import type { AgentWorkingRow } from './components/agents-working-panel'
 import type { AgentHubLayoutProps } from './components/hub-constants'
-import type {GatewaySession} from '@/lib/gateway-api';
-import {  fetchSessions } from '@/lib/gateway-api'
+import type { GatewaySession } from '@/lib/gateway-api'
+import { fetchSessions } from '@/lib/gateway-api'
 
 export { AgentAvatar } from './components/agent-avatar'
 
@@ -35,22 +35,40 @@ function readTimestamp(value: unknown): number {
 }
 
 function getSessionLabel(session: GatewaySession): string {
-  return readText(session.label) || readText(session.title) || readText(session.friendlyId) || readText(session.key) || 'Untitled'
+  return (
+    readText(session.label) ||
+    readText(session.title) ||
+    readText(session.friendlyId) ||
+    readText(session.key) ||
+    'Untitled'
+  )
 }
 
-function deriveAgentRows(agents: AgentHubLayoutProps['agents'], sessions: Array<GatewaySession>): Array<AgentWorkingRow> {
+function deriveAgentRows(
+  agents: AgentHubLayoutProps['agents'],
+  sessions: Array<GatewaySession>,
+): Array<AgentWorkingRow> {
   if (agents.length > 0) {
     return agents.map((agent) => {
       const session = sessions.find((s) => {
         const label = getSessionLabel(s).toLowerCase()
-        return label === agent.name.toLowerCase() || label.startsWith(`${agent.name.toLowerCase()} `)
+        return (
+          label === agent.name.toLowerCase() ||
+          label.startsWith(`${agent.name.toLowerCase()} `)
+        )
       })
       const updatedAt = readTimestamp(session?.updatedAt)
-      const statusText = `${readText(session?.status)} ${readText(session?.kind)}`.toLowerCase()
-      const status = !session ? 'idle'
-        : /error|failed/.test(statusText) ? 'error'
-        : /pause/.test(statusText) ? 'paused'
-        : Date.now() - updatedAt < 120_000 ? 'active' : 'idle'
+      const statusText =
+        `${readText(session?.status)} ${readText(session?.kind)}`.toLowerCase()
+      const status = !session
+        ? 'idle'
+        : /error|failed/.test(statusText)
+          ? 'error'
+          : /pause/.test(statusText)
+            ? 'paused'
+            : Date.now() - updatedAt < 120_000
+              ? 'active'
+              : 'idle'
 
       return {
         id: agent.id,
@@ -75,10 +93,15 @@ function deriveAgentRows(agents: AgentHubLayoutProps['agents'], sessions: Array<
 
   return recent.map((session, i) => {
     const updatedAt = readTimestamp(session.updatedAt)
-    const statusText = `${readText(session.status)} ${readText(session.kind)}`.toLowerCase()
-    const status = /error|failed/.test(statusText) ? 'error' as const
-      : /pause/.test(statusText) ? 'paused' as const
-      : Date.now() - updatedAt < 120_000 ? 'active' as const : 'idle' as const
+    const statusText =
+      `${readText(session.status)} ${readText(session.kind)}`.toLowerCase()
+    const status = /error|failed/.test(statusText)
+      ? ('error' as const)
+      : /pause/.test(statusText)
+        ? ('paused' as const)
+        : Date.now() - updatedAt < 120_000
+          ? ('active' as const)
+          : ('idle' as const)
 
     return {
       id: readText(session.key) || `session-${i}`,
@@ -103,13 +126,22 @@ export function AgentHubLayout({ agents }: AgentHubLayoutProps) {
   })
 
   const sessions = sessionsQuery.data ?? []
-  const agentRows = useMemo(() => deriveAgentRows(agents, sessions), [agents, sessions])
+  const agentRows = useMemo(
+    () => deriveAgentRows(agents, sessions),
+    [agents, sessions],
+  )
   const hasActive = agentRows.some((row) => row.status === 'active')
 
   return (
-    <div className="flex min-h-dvh flex-col bg-[var(--theme-bg)] text-[var(--theme-text)]" style={THEME_STYLE}>
+    <div
+      className="flex min-h-dvh flex-col bg-[var(--theme-bg)] text-[var(--theme-text)]"
+      style={THEME_STYLE}
+    >
       <main className="mx-auto flex w-full max-w-[960px] flex-1 flex-col items-stretch justify-center gap-6 px-4 pb-24 md:px-6">
-        <section className="overflow-hidden rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] shadow-sm" style={{ height: 520 }}>
+        <section
+          className="overflow-hidden rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] shadow-sm"
+          style={{ height: 520 }}
+        >
           <OfficeView
             agentRows={agentRows}
             missionRunning={hasActive}

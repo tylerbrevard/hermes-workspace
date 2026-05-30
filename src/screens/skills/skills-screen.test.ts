@@ -10,6 +10,7 @@ import {
   getSkillSearchSnippet,
   normalizeSkillUsageKey,
   resolveSkillDataSourceState,
+  sourceTail,
 } from './skills-workflow'
 
 describe('SkillsScreen helpers', () => {
@@ -100,5 +101,12 @@ describe('SkillsScreen helpers', () => {
     expect(getSkillMutationRisk('install', skill)).toBe('medium')
     expect(getSkillMutationRisk('uninstall', skill)).toBe('high')
     expect(getSkillMutationRisk('toggle', skill)).toBe('low')
+  })
+
+  it('keeps source path labels compact for extracted grid cards', () => {
+    expect(sourceTail('/Users/tylerlyon/.codex/skills/browser/SKILL.md')).toBe(
+      'browser/SKILL.md',
+    )
+    expect(sourceTail('')).toBe('unknown source')
   })
 })

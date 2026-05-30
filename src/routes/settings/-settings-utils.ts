@@ -58,6 +58,15 @@ export type SettingsRecoveryAction = {
   severity: 'critical' | 'warning' | 'ok'
 }
 
+export type SettingsCockpitTile = {
+  id: SettingsValidationItem['id']
+  label: string
+  section: SettingsNavId
+  status: SettingsValidationStatus
+  metric: string
+  detail: string
+}
+
 export type SettingsImportValidationResult =
   | { ok: true; settings: Partial<StudioSettings>; errors: [] }
   | { ok: false; settings?: undefined; errors: Array<string> }
@@ -126,8 +135,8 @@ export function getSettingsValidationStates(
       status: merged.claudeToken || merged.claudeUrl ? 'ok' : 'warning',
       detail:
         merged.claudeToken || merged.claudeUrl
-          ? 'Workspace auth override is present; credential values stay hidden.'
-          : 'No workspace auth override is saved; env or gateway defaults must carry auth.',
+          ? 'Auth override saved; secrets stay hidden.'
+          : 'Using env or gateway auth.',
     },
     {
       id: 'model',
@@ -138,23 +147,22 @@ export function getSettingsValidationStates(
           : 'warning',
       detail:
         merged.preferredBudgetModel || merged.preferredPremiumModel
-          ? 'A preferred fallback model is pinned for routing.'
-          : 'Routing falls back to auto-detect until a default model is pinned.',
+          ? 'Fallback model pinned.'
+          : 'Routing is auto-detect.',
     },
     {
       id: 'provider',
       label: 'Provider',
       status: merged.claudeUrl ? 'ok' : 'missing',
       detail: merged.claudeUrl
-        ? 'Provider endpoint override is saved in local workspace settings.'
-        : 'Provider health depends on server config because no endpoint override is saved.',
+        ? 'Endpoint override saved.'
+        : 'Using server provider config.',
     },
     {
       id: 'voice',
       label: 'Voice',
       status: 'ok',
-      detail:
-        'Voice credentials are validated in the Voice section without exposing secrets.',
+      detail: 'Voice secrets stay masked.',
     },
     {
       id: 'display',
@@ -219,6 +227,75 @@ export function getPrimarySettingsRecoveryAction(
           ? 'ok'
           : 'warning',
   }
+}
+
+export function calculateSettingsHealthScore(
+  settings: Partial<StudioSettings> = {},
+) {
+  const penalty: Record<SettingsValidationStatus, number> = {
+    ok: 0,
+    warning: 9,
+    stale: 14,
+    missing: 24,
+  }
+  const totalPenalty = getSettingsValidationStates(settings).reduce(
+    (total, item) => total + penalty[item.status],
+    0,
+  )
+  return Math.max(0, Math.min(100, 100 - totalPenalty))
+}
+
+export function getSettingsCockpitTiles(
+  settings: Partial<StudioSettings> = {},
+): Array<SettingsCockpitTile> {
+  const health = getSettingsValidationStates(settings)
+  const labelById: Record<SettingsValidationItem['id'], string> = {
+    auth: 'Auth',
+    provider: 'Endpoint',
+    model: 'Routing',
+    voice: 'Voice',
+    display: 'Theme',
+    notifications: 'Alerts',
+  }
+  const metricByStatus: Record<SettingsValidationStatus, string> = {
+    ok: 'Ready',
+    warning: 'Review',
+    stale: 'Refresh',
+    missing: 'Fix',
+  }
+  const rank: Record<SettingsValidationStatus, number> = {
+    missing: 0,
+    stale: 1,
+    warning: 2,
+    ok: 3,
+  }
+
+  return health
+    .map((item) => ({
+      id: item.id,
+      label: labelById[item.id],
+      section: getSettingsSectionForValidation(item.id),
+      status: item.status,
+      metric: metricByStatus[item.status],
+      detail: item.detail,
+    }))
+    .sort((a, b) => rank[a.status] - rank[b.status])
+}
+
+export function getSettingsPrioritySections(
+  settings: Partial<StudioSettings> = {},
+) {
+  const sectionIds = new Set<SettingsNavId>()
+  getSettingsCockpitTiles(settings).forEach((tile) => {
+    if (tile.status !== 'ok') sectionIds.add(tile.section)
+  })
+  ;(['connection', 'routing', 'notifications'] as Array<SettingsNavId>).forEach(
+    (section) => sectionIds.add(section),
+  )
+  return SETTINGS_NAV_ITEMS.filter((item) => sectionIds.has(item.id)).slice(
+    0,
+    5,
+  )
 }
 
 export function getSettingsMobileGroup(section: SettingsNavId) {

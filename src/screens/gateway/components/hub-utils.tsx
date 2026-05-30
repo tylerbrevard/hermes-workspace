@@ -9,22 +9,18 @@ import {
   MISSION_REPORTS_STORAGE_KEY,
   MODEL_PRESETS,
   MODEL_PRESET_MAP,
-
-
-
-
-
-
   TEMPLATE_DISPLAY_NAMES,
-  TEMPLATE_MODEL_SUGGESTIONS
+  TEMPLATE_MODEL_SUGGESTIONS,
 } from './hub-constants'
-import {
-  TEAM_TEMPLATES
-
-
-} from './team-panel'
-import type {MissionAgentSummary, MissionReportPayload, MissionTaskStats, SavedTeamConfig, StoredMissionReport} from './hub-constants';
-import type {TeamMember, TeamTemplateId} from './team-panel';
+import { TEAM_TEMPLATES } from './team-panel'
+import type {
+  MissionAgentSummary,
+  MissionReportPayload,
+  MissionTaskStats,
+  SavedTeamConfig,
+  StoredMissionReport,
+} from './hub-constants'
+import type { TeamMember, TeamTemplateId } from './team-panel'
 import type { MissionCheckpoint } from '../lib/mission-checkpoint'
 import type { GatewayModelCatalogEntry } from '@/lib/gateway-api'
 import type { HubTask } from './task-board'
@@ -36,7 +32,8 @@ export function readGatewayModelId(entry: GatewayModelCatalogEntry): string {
   if (alias) return alias
   const id = typeof entry.id === 'string' ? entry.id.trim() : ''
   if (id) return id
-  const provider = typeof entry.provider === 'string' ? entry.provider.trim() : ''
+  const provider =
+    typeof entry.provider === 'string' ? entry.provider.trim() : ''
   const model = typeof entry.model === 'string' ? entry.model.trim() : ''
   if (provider && model) return `${provider}/${model}`
   if (model) return model
@@ -44,7 +41,8 @@ export function readGatewayModelId(entry: GatewayModelCatalogEntry): string {
   if (name) return name
   const label = typeof entry.label === 'string' ? entry.label.trim() : ''
   if (label) return label
-  const displayName = typeof entry.displayName === 'string' ? entry.displayName.trim() : ''
+  const displayName =
+    typeof entry.displayName === 'string' ? entry.displayName.trim() : ''
   return displayName
 }
 
@@ -56,9 +54,11 @@ export function buildDetectedAgentName(
   if (label) return label
   const title = typeof session.title === 'string' ? session.title.trim() : ''
   if (title) return title
-  const derivedTitle = typeof session.derivedTitle === 'string' ? session.derivedTitle.trim() : ''
+  const derivedTitle =
+    typeof session.derivedTitle === 'string' ? session.derivedTitle.trim() : ''
   if (derivedTitle) return derivedTitle
-  const friendlyId = typeof session.friendlyId === 'string' ? session.friendlyId.trim() : ''
+  const friendlyId =
+    typeof session.friendlyId === 'string' ? session.friendlyId.trim() : ''
   if (friendlyId) return friendlyId
   return `Detected Agent ${fallbackIndex + 1}`
 }
@@ -99,14 +99,20 @@ export function toTitleCase(value: string): string {
 }
 
 export function createMemberId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID()
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 export function createTaskId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID().slice(0, 8)
   }
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
@@ -154,7 +160,11 @@ function extractMissionItems(goal: string): Array<string> {
   return uniqueSegments
 }
 
-export function parseMissionGoal(goal: string, teamMembers: Array<TeamMember>, missionId?: string): Array<HubTask> {
+export function parseMissionGoal(
+  goal: string,
+  teamMembers: Array<TeamMember>,
+  missionId?: string,
+): Array<HubTask> {
   const trimmedGoal = goal.trim()
   if (!trimmedGoal) return []
   const now = Date.now()
@@ -163,14 +173,19 @@ export function parseMissionGoal(goal: string, teamMembers: Array<TeamMember>, m
 
   let missionItems: Array<string>
   if (segments.length >= 2) {
-    const withoutFullGoal = segments.filter((segment) => segment !== normalizedGoal)
+    const withoutFullGoal = segments.filter(
+      (segment) => segment !== normalizedGoal,
+    )
     missionItems = withoutFullGoal.length >= 1 ? withoutFullGoal : segments
   } else {
     missionItems = normalizedGoal ? [normalizedGoal] : []
   }
 
   return missionItems.map((segment, index) => {
-    const member = teamMembers.length > 0 ? teamMembers[index % teamMembers.length] : undefined
+    const member =
+      teamMembers.length > 0
+        ? teamMembers[index % teamMembers.length]
+        : undefined
     const createdAt = now + index
     return {
       id: createTaskId(),
@@ -191,7 +206,9 @@ export function truncateMissionGoal(goal: string, max = 110): string {
   return `${goal.slice(0, max - 1).trimEnd()}…`
 }
 
-export function buildTeamFromTemplate(templateId: TeamTemplateId): Array<TeamMember> {
+export function buildTeamFromTemplate(
+  templateId: TeamTemplateId,
+): Array<TeamMember> {
   const template = TEAM_TEMPLATES.find((entry) => entry.id === templateId)
   if (!template) return []
 
@@ -230,12 +247,15 @@ export function toTeamMember(value: unknown): TeamMember | null {
   const row = value as Record<string, unknown>
   const id = typeof row.id === 'string' ? row.id.trim() : ''
   const name = typeof row.name === 'string' ? row.name.trim() : ''
-  const status = typeof row.status === 'string' ? row.status.trim() : 'available'
-  const roleDescription = typeof row.roleDescription === 'string' ? row.roleDescription : ''
+  const status =
+    typeof row.status === 'string' ? row.status.trim() : 'available'
+  const roleDescription =
+    typeof row.roleDescription === 'string' ? row.roleDescription : ''
   const avatar = typeof row.avatar === 'number' ? row.avatar : undefined
   const goal = typeof row.goal === 'string' ? row.goal : ''
   const backstory = typeof row.backstory === 'string' ? row.backstory : ''
-  const modelIdRaw = typeof row.modelId === 'string' ? row.modelId.trim() : 'auto'
+  const modelIdRaw =
+    typeof row.modelId === 'string' ? row.modelId.trim() : 'auto'
   const modelId = modelIdRaw || 'auto'
 
   if (!id || !name) return null
@@ -257,8 +277,10 @@ export function toSavedTeamConfig(value: unknown): SavedTeamConfig | null {
   const row = value as Record<string, unknown>
   const id = typeof row.id === 'string' ? row.id.trim() : ''
   const name = typeof row.name === 'string' ? row.name.trim() : ''
-  const createdAt = typeof row.createdAt === 'number' ? row.createdAt : Date.now()
-  const updatedAt = typeof row.updatedAt === 'number' ? row.updatedAt : createdAt
+  const createdAt =
+    typeof row.createdAt === 'number' ? row.createdAt : Date.now()
+  const updatedAt =
+    typeof row.updatedAt === 'number' ? row.updatedAt : createdAt
   const teamRaw = Array.isArray(row.team) ? row.team : []
   const team = teamRaw
     .map((entry) => toTeamMember(entry))
@@ -280,9 +302,23 @@ export function toSavedTeamConfig(value: unknown): SavedTeamConfig | null {
 
 export function suggestTemplate(goal: string): TeamTemplateId {
   const normalized = goal.toLowerCase()
-  const hasAny = (keywords: Array<string>) => keywords.some((keyword) => normalized.includes(keyword))
+  const hasAny = (keywords: Array<string>) =>
+    keywords.some((keyword) => normalized.includes(keyword))
 
-  if (hasAny(['coding', 'code', 'dev', 'build', 'ship', 'fix', 'bug', 'api', 'rest', 'endpoint'])) {
+  if (
+    hasAny([
+      'coding',
+      'code',
+      'dev',
+      'build',
+      'ship',
+      'fix',
+      'bug',
+      'api',
+      'rest',
+      'endpoint',
+    ])
+  ) {
     return 'coding'
   }
   if (hasAny(['research', 'analyze', 'investigate', 'report', 'competitor'])) {
@@ -294,7 +330,9 @@ export function suggestTemplate(goal: string): TeamTemplateId {
   return 'coding'
 }
 
-export function resolveActiveTemplate(team: Array<TeamMember>): TeamTemplateId | undefined {
+export function resolveActiveTemplate(
+  team: Array<TeamMember>,
+): TeamTemplateId | undefined {
   return TEAM_TEMPLATES.find((template) => {
     if (team.length !== template.agents.length) return false
     return template.agents.every((agentName) =>
@@ -307,10 +345,16 @@ export function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-export function computeMissionTaskStats(tasks: Array<HubTask>): MissionTaskStats {
+export function computeMissionTaskStats(
+  tasks: Array<HubTask>,
+): MissionTaskStats {
   const total = tasks.length
-  const completed = tasks.filter((task) => task.status === 'done' || (task.status as string) === 'completed').length
-  const failed = tasks.filter((task) => (task.status as string) === 'blocked').length
+  const completed = tasks.filter(
+    (task) => task.status === 'done' || (task.status as string) === 'completed',
+  ).length
+  const failed = tasks.filter(
+    (task) => (task.status as string) === 'blocked',
+  ).length
   return { total, completed, failed }
 }
 
@@ -336,7 +380,9 @@ function getAgentOutputMarkdown(lines: Array<string>): string {
   return cleanAgentOutputLines(lines).join('\n').trim()
 }
 
-function getLongestAgentOutput(agentSummaries: Array<MissionAgentSummary>): string {
+function getLongestAgentOutput(
+  agentSummaries: Array<MissionAgentSummary>,
+): string {
   const outputs = agentSummaries
     .map((summary) => getAgentOutputMarkdown(summary.lines))
     .filter((output) => output.length > 0)
@@ -346,13 +392,19 @@ function getLongestAgentOutput(agentSummaries: Array<MissionAgentSummary>): stri
   return outputs[0] ?? ''
 }
 
-function extractExecutiveSummary(agentSummaries: Array<MissionAgentSummary>): string {
+function extractExecutiveSummary(
+  agentSummaries: Array<MissionAgentSummary>,
+): string {
   const longestOutput = getLongestAgentOutput(agentSummaries)
   if (!longestOutput) return ''
-  return longestOutput.length > 500 ? `${longestOutput.slice(0, 500).trimEnd()}…` : longestOutput
+  return longestOutput.length > 500
+    ? `${longestOutput.slice(0, 500).trimEnd()}…`
+    : longestOutput
 }
 
-function extractKeyFindings(agentSummaries: Array<MissionAgentSummary>): Array<string> {
+function extractKeyFindings(
+  agentSummaries: Array<MissionAgentSummary>,
+): Array<string> {
   const findings: Array<string> = []
   const seen = new Set<string>()
 
@@ -371,11 +423,17 @@ function extractKeyFindings(agentSummaries: Array<MissionAgentSummary>): Array<s
   return findings
 }
 
-function determineMissionOutcome(taskStats: MissionTaskStats, agentSummaries: Array<MissionAgentSummary>): string {
-  const hasOutput = agentSummaries.some((summary) => cleanAgentOutputLines(summary.lines).length > 0)
+function determineMissionOutcome(
+  taskStats: MissionTaskStats,
+  agentSummaries: Array<MissionAgentSummary>,
+): string {
+  const hasOutput = agentSummaries.some(
+    (summary) => cleanAgentOutputLines(summary.lines).length > 0,
+  )
   if (!hasOutput) return '**Outcome:** ❌ No output'
   if (taskStats.failed > 0) return '**Outcome:** ⚠️ Partial'
-  if (taskStats.total > 0 && taskStats.completed >= taskStats.total) return '**Outcome:** ✅ Complete'
+  if (taskStats.total > 0 && taskStats.completed >= taskStats.total)
+    return '**Outcome:** ✅ Complete'
   if (taskStats.total === 0 && hasOutput) return '**Outcome:** ✅ Complete'
   return '**Outcome:** ⚠️ Partial'
 }
@@ -425,7 +483,11 @@ export function generateMissionReport(payload: MissionReportPayload): string {
     lines.push('## Key Findings')
     keyFindings.forEach((finding) => {
       const normalized = finding.replace(/^\d+\.\s+/, '- ')
-      lines.push(normalized.startsWith('- ') || normalized.startsWith('* ') ? normalized : `- ${normalized}`)
+      lines.push(
+        normalized.startsWith('- ') || normalized.startsWith('* ')
+          ? normalized
+          : `- ${normalized}`,
+      )
     })
     lines.push('')
   }
@@ -447,8 +509,11 @@ export function generateMissionReport(payload: MissionReportPayload): string {
     lines.push('*None*')
   } else {
     payload.artifacts.forEach((artifact) => {
-      const typeEmoji = artifact.type === 'code' ? '📄' : artifact.type === 'html' ? '🌐' : '📝'
-      lines.push(`- ${typeEmoji} **${artifact.title}** [${artifact.type}] — ${artifact.agentName}`)
+      const typeEmoji =
+        artifact.type === 'code' ? '📄' : artifact.type === 'html' ? '🌐' : '📝'
+      lines.push(
+        `- ${typeEmoji} **${artifact.title}** [${artifact.type}] — ${artifact.agentName}`,
+      )
     })
   }
   lines.push('')
@@ -460,21 +525,30 @@ export function generateMissionReport(payload: MissionReportPayload): string {
   return lines.join('\n')
 }
 
-export function getStoredMissionReportMissionId(report: StoredMissionReport): string {
+export function getStoredMissionReportMissionId(
+  report: StoredMissionReport,
+): string {
   return report.missionId ?? report.id
 }
 
-export function buildStoredMissionReportFromCheckpoint(cp: MissionCheckpoint): StoredMissionReport | null {
+export function buildStoredMissionReportFromCheckpoint(
+  cp: MissionCheckpoint,
+): StoredMissionReport | null {
   if (!cp.report) return null
-  const completedTasks = cp.tasks.filter((task) => task.status === 'done' || task.status === 'completed').length
-  const failedTasks = cp.tasks.filter((task) => task.status === 'blocked' || task.status === 'failed').length
+  const completedTasks = cp.tasks.filter(
+    (task) => task.status === 'done' || task.status === 'completed',
+  ).length
+  const failedTasks = cp.tasks.filter(
+    (task) => task.status === 'blocked' || task.status === 'failed',
+  ).length
   const completedAt = cp.completedAt ?? cp.updatedAt
   return {
     id: cp.id,
     missionId: cp.id,
     name: cp.label,
     goal: cp.label,
-    teamName: cp.team.length > 0 ? `${cp.team.length}-agent team` : 'Archived Mission',
+    teamName:
+      cp.team.length > 0 ? `${cp.team.length}-agent team` : 'Archived Mission',
     agents: cp.team.map((member) => ({
       id: member.id,
       name: member.name,
@@ -502,7 +576,9 @@ export function loadStoredMissionReports(): Array<StoredMissionReport> {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
     return parsed
-      .filter((entry): entry is StoredMissionReport => Boolean(entry && typeof entry === 'object'))
+      .filter((entry): entry is StoredMissionReport =>
+        Boolean(entry && typeof entry === 'object'),
+      )
       .sort((left, right) => right.completedAt - left.completedAt)
       .slice(0, MAX_MISSION_REPORTS)
   } catch {
@@ -510,28 +586,44 @@ export function loadStoredMissionReports(): Array<StoredMissionReport> {
   }
 }
 
-export function saveStoredMissionReport(entry: StoredMissionReport): Array<StoredMissionReport> {
+export function saveStoredMissionReport(
+  entry: StoredMissionReport,
+): Array<StoredMissionReport> {
   if (typeof window === 'undefined') return [entry]
   const entryMissionId = getStoredMissionReportMissionId(entry)
-  const next = [entry, ...loadStoredMissionReports().filter((row) => getStoredMissionReportMissionId(row) !== entryMissionId)]
+  const next = [
+    entry,
+    ...loadStoredMissionReports().filter(
+      (row) => getStoredMissionReportMissionId(row) !== entryMissionId,
+    ),
+  ]
     .sort((left, right) => right.completedAt - left.completedAt)
     .slice(0, MAX_MISSION_REPORTS)
   try {
-    window.localStorage.setItem(MISSION_REPORTS_STORAGE_KEY, JSON.stringify(next))
+    window.localStorage.setItem(
+      MISSION_REPORTS_STORAGE_KEY,
+      JSON.stringify(next),
+    )
   } catch {
     // ignore quota/write errors
   }
   return next
 }
 
-export function classifyAgentTurnEnd(text: string | undefined | null): 'completed' | 'waiting_for_input' {
+export function classifyAgentTurnEnd(
+  text: string | undefined | null,
+): 'completed' | 'waiting_for_input' {
   if (!text) return 'completed'
   const trimmed = text.trim()
   if (!trimmed) return 'completed'
 
   const completionMarkers = [
-    '[TASK_COMPLETE]', '[DONE]', '[MISSION_COMPLETE]', '[COMPLETED]',
-    'TASK_COMPLETE', 'MISSION_COMPLETE',
+    '[TASK_COMPLETE]',
+    '[DONE]',
+    '[MISSION_COMPLETE]',
+    '[COMPLETED]',
+    'TASK_COMPLETE',
+    'MISSION_COMPLETE',
   ]
   const upper = trimmed.toUpperCase()
   for (const marker of completionMarkers) {
@@ -539,14 +631,19 @@ export function classifyAgentTurnEnd(text: string | undefined | null): 'complete
   }
 
   const waitingMarkers = [
-    '[WAITING_FOR_INPUT]', '[NEEDS_INPUT]', '[QUESTION]',
+    '[WAITING_FOR_INPUT]',
+    '[NEEDS_INPUT]',
+    '[QUESTION]',
     'APPROVAL_REQUIRED:',
   ]
   for (const marker of waitingMarkers) {
     if (upper.includes(marker.toUpperCase())) return 'waiting_for_input'
   }
 
-  const lines = trimmed.split('\n').map((line) => line.trim()).filter(Boolean)
+  const lines = trimmed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
   const lastLine = lines[lines.length - 1] ?? ''
   if (/\?\s*$/.test(lastLine)) return 'waiting_for_input'
   if (trimmed.length < 60) return 'waiting_for_input'

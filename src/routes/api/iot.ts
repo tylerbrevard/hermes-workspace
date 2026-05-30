@@ -14,7 +14,10 @@ export const Route = createFileRoute('/api/iot')({
         } catch (error) {
           return json(
             {
-              error: error instanceof Error ? error.message : 'Failed to fetch IoT devices',
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to fetch IoT devices',
             },
             { status: 500 },
           )
@@ -22,7 +25,10 @@ export const Route = createFileRoute('/api/iot')({
       },
       POST: async ({ request }) => {
         try {
-          const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
+          const body = (await request.json().catch(() => null)) as Record<
+            string,
+            unknown
+          > | null
           if (!body || typeof body !== 'object') {
             return json({ error: 'Invalid JSON body' }, { status: 400 })
           }
@@ -30,7 +36,10 @@ export const Route = createFileRoute('/api/iot')({
         } catch (error) {
           return json(
             {
-              error: error instanceof Error ? error.message : 'Failed to process IoT data',
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to process IoT data',
             },
             { status: 500 },
           )

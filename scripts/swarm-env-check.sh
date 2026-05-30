@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CANONICAL_REPO="/Users/aurora/hermes-workspace"
-FORBIDDEN_REPO="/Users/aurora/hermes-workspace"
+CANONICAL_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+export CANONICAL_REPO
+FORBIDDEN_REPOS=(
+  "/Users/aurora/hermes-workspace"
+  "/Users/aurora/.ocplatform/workspace"
+)
 
 CURRENT_DIR="$(pwd -P)"
 
-if [[ "$CURRENT_DIR" == "$FORBIDDEN_REPO" ]] || [[ "$CURRENT_DIR" == "$FORBIDDEN_REPO"/* ]]; then
-  echo "ERROR: wrong repo: $CURRENT_DIR"
-  echo "Use: $CANONICAL_REPO"
-  exit 1
-fi
+for forbidden in "${FORBIDDEN_REPOS[@]}"; do
+  if [[ "$CURRENT_DIR" == "$forbidden" ]] || [[ "$CURRENT_DIR" == "$forbidden"/* ]]; then
+    echo "ERROR: wrong repo: $CURRENT_DIR"
+    echo "Use: $CANONICAL_REPO"
+    exit 1
+  fi
+done
 
 if [[ "$CURRENT_DIR" != "$CANONICAL_REPO" ]] && [[ "$CURRENT_DIR" != "$CANONICAL_REPO"/* ]]; then
   echo "ERROR: non-canonical cwd: $CURRENT_DIR"
@@ -25,8 +31,9 @@ fi
 
 REPO_NAME="$(python3 - <<'PY'
 import json
+import os
 from pathlib import Path
-pkg = json.loads(Path('/Users/aurora/hermes-workspace/package.json').read_text())
+pkg = json.loads(Path(os.environ['CANONICAL_REPO'], 'package.json').read_text())
 print(pkg.get('name', ''))
 PY
 )"
